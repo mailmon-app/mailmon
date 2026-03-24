@@ -1,0 +1,22 @@
+{
+  "name": "@mailmon/core",
+  "private": true,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json .",
+    "lint:fix": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --fix .",
+    "typecheck": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --type-check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "oxfmt --config ../../.oxfmtrc.json .",
+    "format:check": "oxfmt --config ../../.oxfmtrc.json --check ."
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  }
+}
