@@ -14,11 +14,15 @@ export const forwardToOption = Options.text("forward-to").pipe(
 export const getListenMessage = (options: ListenCommandOptions) =>
   Effect.gen(function* () {
     const config = yield* MailmonCliConfig;
+    const transportDescription =
+      config.asyncTransportMode === "legacy_bullmq"
+        ? "legacy BullMQ async transport"
+        : `${config.asyncTransportMode} async transport`;
 
     return Option.match(options.forwardTo, {
-      onNone: () => `listening for local events with redis at ${config.redisUrl}`,
+      onNone: () => `listening for local events using ${transportDescription}`,
       onSome: (forwardTo) =>
-        `listening for local events with redis at ${config.redisUrl} and forwarding webhook deliveries to ${forwardTo}`,
+        `listening for local events using ${transportDescription} and forwarding webhook deliveries to ${forwardTo}`,
     });
   });
 

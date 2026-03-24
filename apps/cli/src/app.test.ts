@@ -5,11 +5,11 @@ import { Effect, Option } from "effect";
 import { getListenMessage } from "./app.js";
 
 describe("getListenMessage", () => {
-  it.effect("renders the redis endpoint from config", () =>
+  it.effect("renders the configured async transport mode", () =>
     Effect.gen(function* () {
       const message = yield* getListenMessage({ forwardTo: Option.none() });
 
-      expect(message).toBe("listening for local events with redis at redis://localhost:6379");
+      expect(message).toBe("listening for local events using local async transport");
     }).pipe(Effect.provide(CliConfig.testLayer)),
   );
 
