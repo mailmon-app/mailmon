@@ -33,10 +33,10 @@ The repo is organized as:
 - `packages/core`: mailbox-centric domain contracts, problem envelopes, Effect service tags, and use cases. This is the business-logic center.
 - `packages/db`: Drizzle schema and persistence-side bootstrap layers. `src/bootstrap.ts` is currently a bootstrap/dev adapter, not production persistence.
 - `packages/gmail`: Gmail provider adapter layers.
-- `packages/queue`: transitional async/runtime adapter package. Treat any Redis/BullMQ helpers here as scaffolding to replace with transport-neutral interfaces plus GCP adapters.
-- `packages/config`: shared environment/config layers.
+- `packages/queue`: async/runtime adapter package. It now contains local async transport layers and still retains Redis/BullMQ compatibility helpers as transitional scaffolding.
+- `packages/config`: shared environment/config layers. It now models async transport mode explicitly (`local`, `gcp`, `legacy_bullmq`) instead of treating Redis as part of common runtime config.
 - `apps/api`: thin Hono HTTP adapter. It should decode requests, call core use cases, and map failures to HTTP.
-- `apps/worker`: thin async execution adapter. It should accept mailbox wake-ups and delivery work from runtime boundaries and run core workflows.
+- `apps/worker`: thin async execution adapter. It now defaults to an internal HTTP runtime for `local`/`gcp` modes and only uses BullMQ in the explicit `legacy_bullmq` fallback mode.
 - `apps/cli`: Effect CLI for local development and operator flows.
 
 ## Architecture Rules
@@ -50,6 +50,8 @@ The repo is organized as:
 - Structured API problems live in core and should remain problem-details style.
 - Production async execution is GCP-first: Pub/Sub for wake-ups and mailbox dispatch, Cloud Tasks for directed webhook delivery, Cloud Run Jobs for scheduled control work.
 - Local development should use lightweight local adapters instead of requiring Pub/Sub, Cloud Tasks, or Cloud Scheduler emulation.
+- Worker runtime mode is chosen through `MAILMON_ASYNC_TRANSPORT_MODE`; prefer `local` or `gcp`, and treat `legacy_bullmq` as fallback scaffolding only.
+- Internal worker HTTP routes (`/health`, `/internal/sync`, `/internal/gmail-push`, `/internal/webhook-deliveries`) are transport/runtime interfaces, not domain logic boundaries.
 
 ## Terminology Rules
 
@@ -65,13 +67,16 @@ Start here when tracing behavior:
 
 - mailbox contracts and workflows: `packages/core/src/contracts.ts`, `packages/core/src/services.ts`, `packages/core/src/use-cases.ts`
 - API composition: `apps/api/src/runtime.ts`, `apps/api/src/server.ts`
-- worker composition: `apps/worker/src/runtime.ts`, `apps/worker/src/processor.ts`
+- worker composition: `apps/worker/src/runtime.ts`, `apps/worker/src/processor.ts`, `apps/worker/src/index.ts`, `apps/worker/src/server.ts`
+- local async transport adapters: `packages/queue/src/index.ts`
 - DB schema and bootstrap adapters: `packages/db/src/schema.ts`, `packages/db/src/bootstrap.ts`
+- runtime config model: `packages/config/src/index.ts`
 
 Current bootstrap note:
 
 - The repo still uses bootstrap fixture layers in `packages/db/src/bootstrap.ts` and a stub provider in `packages/gmail/src/index.ts`.
-- `packages/queue` and `apps/worker` may still contain BullMQ/Redis-era scaffolding.
+- `packages/queue` now contains usable local transport adapters, but BullMQ/Redis helpers are still present for compatibility.
+- `apps/worker` now defaults to HTTP runtime modes, but the BullMQ path is still present as `legacy_bullmq` scaffolding.
 - Treat all of those as scaffolding to replace, not as the final production design.
 
 Current planning note:
@@ -87,6 +92,7 @@ Current planning note:
 - Shared dependency versions live in `pnpm-workspace.yaml` catalogs.
 - Root scripts are delegators only; package tasks live in package-level `package.json` files.
 - When changing infra-facing code, check `packages/config` and the plan together so local adapters and GCP adapters stay aligned.
+- If builds appear to use stale workspace types after changing exported config/package interfaces, clear package-level `.tsbuildinfo` caches before assuming the type model is wrong.
 
 Useful commands:
 
