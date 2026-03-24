@@ -39,6 +39,7 @@
     "apps/api/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./apps/api/tsconfig.json --fix",
     "apps/worker/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./apps/worker/tsconfig.json --fix",
     "apps/cli/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./apps/cli/tsconfig.json --fix",
+    "packages/core/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/core/tsconfig.json --fix",
     "packages/config/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/config/tsconfig.json --fix",
     "packages/db/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/db/tsconfig.json --fix",
     "packages/gmail/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/gmail/tsconfig.json --fix",
