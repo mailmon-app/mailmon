@@ -1,21 +1,36 @@
-import { Command } from "@effect/cli";
+import { Command, Options } from "@effect/cli";
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
-import { Console, Effect } from "effect";
+import { Console, Effect, Option } from "effect";
 
-export const getListenMessage = Effect.gen(function* () {
-  const config = yield* MailmonCliConfig;
+export interface ListenCommandOptions {
+  readonly forwardTo: Option.Option<string>;
+}
 
-  return `listening for local events with redis at ${config.redisUrl}`;
-});
-
-export const runListen = Effect.gen(function* () {
-  const message = yield* getListenMessage;
-  yield* Console.log(message);
-});
-
-export const listenCommand = Command.make("listen", {}, () => runListen).pipe(
-  Command.withDescription("Listen for local mailmon events"),
+export const forwardToOption = Options.text("forward-to").pipe(
+  Options.optional,
+  Options.withDescription("Forward webhook deliveries to a local HTTP endpoint"),
 );
+
+export const getListenMessage = (options: ListenCommandOptions) =>
+  Effect.gen(function* () {
+    const config = yield* MailmonCliConfig;
+
+    return Option.match(options.forwardTo, {
+      onNone: () => `listening for local events with redis at ${config.redisUrl}`,
+      onSome: (forwardTo) =>
+        `listening for local events with redis at ${config.redisUrl} and forwarding webhook deliveries to ${forwardTo}`,
+    });
+  });
+
+export const runListen = (options: ListenCommandOptions) =>
+  Effect.gen(function* () {
+    const message = yield* getListenMessage(options);
+    yield* Console.log(message);
+  });
+
+export const listenCommand = Command.make("listen", { forwardTo: forwardToOption }, (options) =>
+  runListen(options),
+).pipe(Command.withDescription("Listen for local mailmon events"));
 
 export const appCommand = Command.make("mailmon", {}).pipe(
   Command.withDescription("Local mailmon development CLI"),
