@@ -1,3 +1,12 @@
+import {
+  ControlJobDispatcher,
+  MailboxSyncDispatcher,
+  WebhookDeliveryScheduler,
+  type ControlJobDispatchRequest,
+  type WebhookDeliveryScheduleRequest,
+} from "@mailmon/core";
+import { Context, Effect, Layer, Ref } from "effect";
+
 export { MailboxSyncJobDataSchema, type MailboxSyncJobData } from "@mailmon/core";
 
 export const SYNC_MAILBOX_QUEUE = "mailmon.sync-mailbox";
@@ -20,3 +29,63 @@ export const createRedisConnectionOptions = (redisUrl: string) => {
     port: Number(url.port || "6379"),
   };
 };
+
+export interface LocalAsyncTransportSnapshot {
+  readonly mailboxSyncMailboxIds: ReadonlyArray<string>;
+  readonly webhookDeliveries: ReadonlyArray<WebhookDeliveryScheduleRequest>;
+  readonly controlJobs: ReadonlyArray<ControlJobDispatchRequest>;
+}
+
+const emptyLocalAsyncTransportSnapshot = (): LocalAsyncTransportSnapshot => {
+  return {
+    mailboxSyncMailboxIds: [],
+    webhookDeliveries: [],
+    controlJobs: [],
+  };
+};
+
+export class LocalAsyncTransportProbe extends Context.Tag(
+  "@mailmon/queue/LocalAsyncTransportProbe",
+)<
+  LocalAsyncTransportProbe,
+  {
+    readonly getSnapshot: Effect.Effect<LocalAsyncTransportSnapshot>;
+    readonly reset: Effect.Effect<void>;
+  }
+>() {}
+
+export const createLocalAsyncTransportLayer = Layer.unwrapEffect(
+  Effect.gen(function* () {
+    const snapshotRef = yield* Ref.make<LocalAsyncTransportSnapshot>(
+      emptyLocalAsyncTransportSnapshot(),
+    );
+
+    return Layer.mergeAll(
+      Layer.succeed(MailboxSyncDispatcher, {
+        dispatchMailboxSync: (mailboxId: string) =>
+          Ref.update(snapshotRef, (snapshot) => ({
+            ...snapshot,
+            mailboxSyncMailboxIds: [...snapshot.mailboxSyncMailboxIds, mailboxId],
+          })),
+      }),
+      Layer.succeed(WebhookDeliveryScheduler, {
+        scheduleWebhookDelivery: (request: WebhookDeliveryScheduleRequest) =>
+          Ref.update(snapshotRef, (snapshot) => ({
+            ...snapshot,
+            webhookDeliveries: [...snapshot.webhookDeliveries, request],
+          })),
+      }),
+      Layer.succeed(ControlJobDispatcher, {
+        dispatchControlJob: (request: ControlJobDispatchRequest) =>
+          Ref.update(snapshotRef, (snapshot) => ({
+            ...snapshot,
+            controlJobs: [...snapshot.controlJobs, request],
+          })),
+      }),
+      Layer.succeed(LocalAsyncTransportProbe, {
+        getSnapshot: Ref.get(snapshotRef),
+        reset: Ref.set(snapshotRef, emptyLocalAsyncTransportSnapshot()),
+      }),
+    );
+  }),
+);
