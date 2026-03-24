@@ -15,5 +15,9 @@
     "test:watch": "vitest",
     "format": "oxfmt --config ../../.oxfmtrc.json .",
     "format:check": "oxfmt --config ../../.oxfmtrc.json --check ."
+  },
+  "dependencies": {
+    "@mailmon/core": "workspace:*",
+    "effect": "catalog:"
   }
 }

@@ -1,9 +1,13 @@
-export interface GmailClient {
-  watchMailbox(accountId: string): Promise<void>;
-}
+import { MailboxSyncProvider, type MailboxProviderSyncResult } from "@mailmon/core";
+import { Effect, Layer } from "effect";
 
-export const createStubGmailClient = (): GmailClient => {
-  return {
-    watchMailbox: async () => undefined,
-  };
-};
+export const createStubMailboxSyncProviderLayer = Layer.succeed(MailboxSyncProvider, {
+  syncMailbox: () => {
+    const result: MailboxProviderSyncResult = {
+      eventsEmitted: 1,
+      nextCursor: "hist_bootstrap",
+    };
+
+    return Effect.succeed(result);
+  },
+});

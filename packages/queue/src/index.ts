@@ -1,12 +1,12 @@
-import { Schema } from "effect";
+export { MailboxSyncJobDataSchema, type MailboxSyncJobData } from "@mailmon/core";
 
-export const SYNC_ACCOUNT_QUEUE = "mailmon.sync-account";
+export const SYNC_MAILBOX_QUEUE = "mailmon.sync-mailbox";
 
-export const SyncJobDataSchema = Schema.Struct({
-  accountId: Schema.String,
-});
-
-export type SyncJobData = Schema.Schema.Type<typeof SyncJobDataSchema>;
+export const createMailboxSyncJobData = (mailboxId: string) => {
+  return {
+    mailboxId,
+  };
+};
 
 export const createRedisConnectionOptions = (redisUrl: string) => {
   const url = new URL(redisUrl);

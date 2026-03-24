@@ -17,6 +17,7 @@
     "format:check": "oxfmt --config ../../.oxfmtrc.json --check ."
   },
   "dependencies": {
+    "@mailmon/core": "workspace:*",
     "effect": "catalog:"
   }
 }
