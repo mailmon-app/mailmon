@@ -1,0 +1,27 @@
+packages:
+  - apps/*
+  - packages/*
+
+catalog:
+  "@effect/cli": ^0.75.0
+  "@effect/language-service": ^0.83.1
+  "@effect/platform": ^0.96.0
+  "@effect/platform-node": ^0.106.0
+  "@types/node": ^25.5.0
+  effect: ^3.21.0
+  typescript: ^6.0.2
+
+engineStrict: true
+packageManagerStrictVersion: true
+verifyDepsBeforeRun: error
+enableGlobalVirtualStore: true
+
+onlyBuiltDependencies:
+  - "@parcel/watcher"
+  - esbuild
+  - msgpackr-extract
+
+packageExtensions:
+  drizzle-kit:
+    dependencies:
+      drizzle-orm: "*"

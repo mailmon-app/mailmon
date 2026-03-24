@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Effect-TS/language-service/refs/heads/main/schema.json",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/api/tsconfig.json"
+    },
+    {
+      "path": "./apps/worker/tsconfig.json"
+    },
+    {
+      "path": "./apps/cli/tsconfig.json"
+    },
+    {
+      "path": "./packages/config/tsconfig.json"
+    },
+    {
+      "path": "./packages/db/tsconfig.json"
+    },
+    {
+      "path": "./packages/gmail/tsconfig.json"
+    },
+    {
+      "path": "./packages/queue/tsconfig.json"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API Dev",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm --filter @mailmon/api dev"
+    },
+    {
+      "name": "Worker Dev",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm --filter @mailmon/worker dev"
+    },
+    {
+      "name": "CLI Listen",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm --filter @mailmon/cli dev listen"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "API + Worker",
+      "configurations": ["API Dev", "Worker Dev"]
+    }
+  ]
+}

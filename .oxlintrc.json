@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "oxc", "typescript", "unicorn", "import", "promise", "node", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "env": {
+    "node": true
+  },
+  "ignorePatterns": [
+    ".turbo/**",
+    "**/coverage/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "packages/db/drizzle/**"
+  ],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "import/no-cycle": "error",
+    "import/no-unassigned-import": "off",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "unicorn/prevent-abbreviations": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "env": {
+        "node": true
+      },
+      "rules": {
+        "vitest/expect-expect": "off"
+      }
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "mailmon-dev",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@mailmon/api --filter=@mailmon/worker",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "format": "turbo run format",
+    "format:check": "turbo run format:check",
+    "db:generate": "turbo run db:generate --filter=@mailmon/db",
+    "db:migrate": "turbo run db:migrate --filter=@mailmon/db",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "lint-staged": "lint-staged",
+    "prepare": "effect-language-service patch && husky"
+  },
+  "devDependencies": {
+    "@effect/language-service": "catalog:",
+    "@effect/vitest": "^0.29.0",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "effect-solutions": "^0.5.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "oxlint-tsgolint": "^0.17.3",
+    "tsx": "^4.21.0",
+    "turbo": "^2.8.20",
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  },
+  "lint-staged": {
+    "*.{json,md,yaml,yml}": "oxfmt --config ./.oxfmtrc.json --write --no-error-on-unmatched-pattern",
+    "apps/api/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./apps/api/tsconfig.json --fix",
+    "apps/worker/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./apps/worker/tsconfig.json --fix",
+    "apps/cli/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./apps/cli/tsconfig.json --fix",
+    "packages/config/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/config/tsconfig.json --fix",
+    "packages/db/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/db/tsconfig.json --fix",
+    "packages/gmail/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/gmail/tsconfig.json --fix",
+    "packages/queue/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/queue/tsconfig.json --fix"
+  },
+  "packageManager": "pnpm@10.32.1"
+}

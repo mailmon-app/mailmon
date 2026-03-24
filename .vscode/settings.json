@@ -1,0 +1,36 @@
+{
+  "editor.codeActionsOnSave": {
+    "source.fixAll.oxc": "always"
+  },
+  "editor.formatOnSave": true,
+  "files.insertFinalNewline": true,
+  "oxc.fmt.configPath": ".oxfmtrc.json",
+  "oxc.typeAware": true,
+  "search.exclude": {
+    "**/.turbo": true,
+    "**/coverage": true,
+    "**/dist": true,
+    "**/node_modules": true
+  },
+  "testing.automaticallyOpenPeekView": "never",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "[javascript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  }
+}
