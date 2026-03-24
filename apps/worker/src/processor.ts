@@ -1,5 +1,8 @@
-import type { SyncJobData } from "@mailmon/queue";
+import { type MailboxSyncJobData, runMailboxSync } from "@mailmon/core";
+import { Effect } from "effect";
 
-export const processSyncJob = async (job: SyncJobData): Promise<SyncJobData> => {
-  return job;
+import { workerRuntimeLayer } from "./runtime.js";
+
+export const processSyncJob = (job: MailboxSyncJobData) => {
+  return Effect.runPromise(runMailboxSync(job.mailboxId).pipe(Effect.provide(workerRuntimeLayer)));
 };

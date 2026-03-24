@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import { processSyncJob } from "./processor.js";
 
 describe("processSyncJob", () => {
-  it("returns the placeholder payload", async () => {
-    await expect(processSyncJob({ accountId: "acct_123" })).resolves.toEqual({
-      accountId: "acct_123",
+  it("runs the mailbox-scoped sync workflow", async () => {
+    await expect(processSyncJob({ mailboxId: "mbx_demo" })).resolves.toMatchObject({
+      mailboxId: "mbx_demo",
+      syncRunId: "sr_1",
+      eventsEmitted: 1,
+      nextCursor: "hist_bootstrap",
     });
   });
 });

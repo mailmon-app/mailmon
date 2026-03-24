@@ -1,5 +1,5 @@
 import { loadWorkerEnv } from "@mailmon/config";
-import { createRedisConnectionOptions, SYNC_ACCOUNT_QUEUE } from "@mailmon/queue";
+import { createRedisConnectionOptions, SYNC_MAILBOX_QUEUE } from "@mailmon/queue";
 import { Worker } from "bullmq";
 
 import { processSyncJob } from "./processor.js";
@@ -8,7 +8,7 @@ const env = loadWorkerEnv();
 const connection = createRedisConnectionOptions(env.redisUrl);
 
 const worker = new Worker(
-  SYNC_ACCOUNT_QUEUE,
+  SYNC_MAILBOX_QUEUE,
   async (job) => {
     await processSyncJob(job.data);
   },

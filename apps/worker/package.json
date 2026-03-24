@@ -16,7 +16,11 @@
   },
   "dependencies": {
     "@mailmon/config": "workspace:*",
+    "@mailmon/core": "workspace:*",
+    "@mailmon/db": "workspace:*",
+    "@mailmon/gmail": "workspace:*",
     "@mailmon/queue": "workspace:*",
-    "bullmq": "^5.71.0"
+    "bullmq": "^5.71.0",
+    "effect": "catalog:"
   }
 }
