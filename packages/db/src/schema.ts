@@ -12,6 +12,11 @@ export const mailboxes = pgTable("mailboxes", {
   status: text("status").notNull(),
   syncState: text("sync_state").notNull(),
   watchState: text("watch_state").notNull(),
+  activeSyncLeaseOwner: text("active_sync_lease_owner"),
+  activeSyncLeaseAcquiredAt: timestamp("active_sync_lease_acquired_at", { withTimezone: true }),
+  activeSyncLeaseHeartbeatAt: timestamp("active_sync_lease_heartbeat_at", { withTimezone: true }),
+  activeSyncLeaseExpiresAt: timestamp("active_sync_lease_expires_at", { withTimezone: true }),
+  activeSyncRunId: text("active_sync_run_id"),
   initializedAt: timestamp("initialized_at", { withTimezone: true }),
   lastSuccessfulSyncAt: timestamp("last_successful_sync_at", { withTimezone: true }),
   lastErrorCode: text("last_error_code"),
@@ -28,8 +33,12 @@ export const syncRuns = pgTable("sync_runs", {
     .notNull()
     .references(() => mailboxes.id),
   status: text("status").notNull(),
+  leaseOwnerId: text("lease_owner_id"),
   startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  eventsEmitted: text("events_emitted"),
+  nextCursor: text("next_cursor"),
+  detail: text("detail"),
 });
 
 export const mailboxEvents = pgTable("mailbox_events", {

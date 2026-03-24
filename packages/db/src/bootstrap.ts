@@ -1,4 +1,11 @@
-import { MailboxCatalog, SyncRunStore, type MailboxResource } from "@mailmon/core";
+import {
+  MailboxCatalog,
+  MailboxSyncCoordinator,
+  SyncRunStore,
+  type MailboxResource,
+  type MailboxSyncLeaseAcquisition,
+  type MailboxSyncLeaseRenewal,
+} from "@mailmon/core";
 import { Effect, Layer, Option, Ref } from "effect";
 
 export const defaultBootstrapMailbox: MailboxResource = {
@@ -37,6 +44,126 @@ export const createBootstrapSyncRunStoreLayer = Layer.effect(
           })),
         ),
       completeSyncRun: () => Effect.void,
+    };
+  }),
+);
+
+interface BootstrapMailboxLease {
+  readonly leaseOwnerId: string;
+  readonly expiresAt: string;
+}
+
+export const createBootstrapMailboxSyncCoordinatorLayer = Layer.effect(
+  MailboxSyncCoordinator,
+  Effect.gen(function* () {
+    const leases = yield* Ref.make(new Map<string, BootstrapMailboxLease>());
+
+    return {
+      acquireMailboxSyncLease: ({
+        mailboxId,
+        leaseOwnerId,
+        expiresAt,
+        acquiredAt,
+      }: {
+        readonly mailboxId: string;
+        readonly syncRunId: string;
+        readonly leaseOwnerId: string;
+        readonly acquiredAt: string;
+        readonly expiresAt: string;
+      }) =>
+        Ref.modify(
+          leases,
+          (
+            currentLeases,
+          ): readonly [MailboxSyncLeaseAcquisition, Map<string, BootstrapMailboxLease>] => {
+            const nextLeases = new Map(currentLeases);
+            const existing = nextLeases.get(mailboxId);
+            const hasLiveLease =
+              existing !== undefined && Date.parse(existing.expiresAt) > Date.parse(acquiredAt);
+
+            if (hasLiveLease) {
+              return [
+                {
+                  acquired: false,
+                  expiresAt: existing.expiresAt,
+                },
+                currentLeases,
+              ] as const;
+            }
+
+            nextLeases.set(mailboxId, {
+              leaseOwnerId,
+              expiresAt,
+            });
+
+            return [
+              {
+                acquired: true,
+                expiresAt,
+              },
+              nextLeases,
+            ] as const;
+          },
+        ),
+      renewMailboxSyncLease: ({
+        mailboxId,
+        leaseOwnerId,
+        expiresAt,
+      }: {
+        readonly mailboxId: string;
+        readonly leaseOwnerId: string;
+        readonly heartbeatAt: string;
+        readonly expiresAt: string;
+      }) =>
+        Ref.modify(
+          leases,
+          (
+            currentLeases,
+          ): readonly [MailboxSyncLeaseRenewal, Map<string, BootstrapMailboxLease>] => {
+            const nextLeases = new Map(currentLeases);
+            const existing = nextLeases.get(mailboxId);
+
+            if (existing?.leaseOwnerId !== leaseOwnerId) {
+              return [
+                {
+                  renewed: false,
+                  expiresAt: existing?.expiresAt ?? null,
+                },
+                currentLeases,
+              ] as const;
+            }
+
+            nextLeases.set(mailboxId, {
+              leaseOwnerId,
+              expiresAt,
+            });
+
+            return [
+              {
+                renewed: true,
+                expiresAt,
+              },
+              nextLeases,
+            ] as const;
+          },
+        ),
+      releaseMailboxSyncLease: ({
+        mailboxId,
+        leaseOwnerId,
+      }: {
+        readonly mailboxId: string;
+        readonly leaseOwnerId: string;
+      }) =>
+        Ref.update(leases, (currentLeases) => {
+          const nextLeases = new Map(currentLeases);
+          const existing = nextLeases.get(mailboxId);
+
+          if (existing?.leaseOwnerId === leaseOwnerId) {
+            nextLeases.delete(mailboxId);
+          }
+
+          return nextLeases;
+        }),
     };
   }),
 );

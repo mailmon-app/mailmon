@@ -15,15 +15,39 @@ export const ReplayStatusSchema = Schema.Literal(
   "failed",
   "cancelled",
 );
+export const SyncRunOutcomeSchema = Schema.Literal(
+  "completed",
+  "skipped_due_to_active_lease",
+  "failed_after_lease_acquired",
+  "lease_lost",
+);
+export const ControlJobKindSchema = Schema.Literal(
+  "renew_watches",
+  "dispatch_replays",
+  "repair_mailboxes",
+  "cleanup",
+);
 export const MailboxSyncJobDataSchema = Schema.Struct({
   mailboxId: Schema.NonEmptyString,
+});
+export const WebhookDeliveryScheduleRequestSchema = Schema.Struct({
+  deliveryId: Schema.NonEmptyString,
+});
+export const ControlJobDispatchRequestSchema = Schema.Struct({
+  kind: ControlJobKindSchema,
 });
 
 export type MailboxStatus = Schema.Schema.Type<typeof MailboxStatusSchema>;
 export type MailboxSyncState = Schema.Schema.Type<typeof MailboxSyncStateSchema>;
 export type MailboxWatchState = Schema.Schema.Type<typeof MailboxWatchStateSchema>;
 export type ReplayStatus = Schema.Schema.Type<typeof ReplayStatusSchema>;
+export type SyncRunOutcome = Schema.Schema.Type<typeof SyncRunOutcomeSchema>;
+export type ControlJobKind = Schema.Schema.Type<typeof ControlJobKindSchema>;
 export type MailboxSyncJobData = Schema.Schema.Type<typeof MailboxSyncJobDataSchema>;
+export type WebhookDeliveryScheduleRequest = Schema.Schema.Type<
+  typeof WebhookDeliveryScheduleRequestSchema
+>;
+export type ControlJobDispatchRequest = Schema.Schema.Type<typeof ControlJobDispatchRequestSchema>;
 
 export interface MailboxOperationalError {
   readonly code: string;
@@ -82,13 +106,43 @@ export interface StartedSyncRun {
   readonly startedAt: string;
 }
 
+export interface CompletedSyncRun {
+  readonly syncRunId: string;
+  readonly mailboxId: string;
+  readonly completedAt: string;
+  readonly status: SyncRunOutcome;
+  readonly eventsEmitted: number;
+  readonly nextCursor: string | null;
+  readonly detail: string | null;
+}
+
 export interface MailboxProviderSyncResult {
   readonly eventsEmitted: number;
   readonly nextCursor: string | null;
 }
 
-export interface SyncMailboxResult extends StartedSyncRun {
+export interface MailboxSyncLeaseAcquisition {
+  readonly acquired: boolean;
+  readonly expiresAt: string | null;
+}
+
+export interface MailboxSyncLeaseRenewal {
+  readonly renewed: boolean;
+  readonly expiresAt: string | null;
+}
+
+export interface CompletedSyncMailboxResult extends StartedSyncRun {
+  readonly status: "completed";
   readonly completedAt: string;
   readonly eventsEmitted: number;
   readonly nextCursor: string | null;
 }
+
+export interface SkippedSyncMailboxResult extends StartedSyncRun {
+  readonly status: "skipped_due_to_active_lease";
+  readonly completedAt: string;
+  readonly eventsEmitted: 0;
+  readonly nextCursor: null;
+}
+
+export type SyncMailboxResult = CompletedSyncMailboxResult | SkippedSyncMailboxResult;

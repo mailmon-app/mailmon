@@ -1,10 +1,15 @@
 import { Context, Effect, Option } from "effect";
 
 import type {
+  CompletedSyncRun,
+  ControlJobDispatchRequest,
+  MailboxSyncLeaseAcquisition,
+  MailboxSyncLeaseRenewal,
   MailboxProviderSyncResult,
   MailboxResource,
   ProblemDetails,
   StartedSyncRun,
+  WebhookDeliveryScheduleRequest,
 } from "./contracts.js";
 
 export class MailboxCatalog extends Context.Tag("@mailmon/core/MailboxCatalog")<
@@ -18,12 +23,34 @@ export class SyncRunStore extends Context.Tag("@mailmon/core/SyncRunStore")<
   SyncRunStore,
   {
     readonly startSyncRun: (mailboxId: string) => Effect.Effect<StartedSyncRun>;
-    readonly completeSyncRun: (
-      result: Readonly<{
-        syncRunId: string;
+    readonly completeSyncRun: (result: CompletedSyncRun) => Effect.Effect<void>;
+  }
+>() {}
+
+export class MailboxSyncCoordinator extends Context.Tag("@mailmon/core/MailboxSyncCoordinator")<
+  MailboxSyncCoordinator,
+  {
+    readonly acquireMailboxSyncLease: (
+      lease: Readonly<{
         mailboxId: string;
-        completedAt: string;
-        eventsEmitted: number;
+        syncRunId: string;
+        leaseOwnerId: string;
+        acquiredAt: string;
+        expiresAt: string;
+      }>,
+    ) => Effect.Effect<MailboxSyncLeaseAcquisition>;
+    readonly renewMailboxSyncLease: (
+      lease: Readonly<{
+        mailboxId: string;
+        leaseOwnerId: string;
+        heartbeatAt: string;
+        expiresAt: string;
+      }>,
+    ) => Effect.Effect<MailboxSyncLeaseRenewal>;
+    readonly releaseMailboxSyncLease: (
+      lease: Readonly<{
+        mailboxId: string;
+        leaseOwnerId: string;
       }>,
     ) => Effect.Effect<void>;
   }
@@ -35,5 +62,28 @@ export class MailboxSyncProvider extends Context.Tag("@mailmon/core/MailboxSyncP
     readonly syncMailbox: (
       mailbox: MailboxResource,
     ) => Effect.Effect<MailboxProviderSyncResult, ProblemDetails>;
+  }
+>() {}
+
+export class MailboxSyncDispatcher extends Context.Tag("@mailmon/core/MailboxSyncDispatcher")<
+  MailboxSyncDispatcher,
+  {
+    readonly dispatchMailboxSync: (mailboxId: string) => Effect.Effect<void>;
+  }
+>() {}
+
+export class WebhookDeliveryScheduler extends Context.Tag("@mailmon/core/WebhookDeliveryScheduler")<
+  WebhookDeliveryScheduler,
+  {
+    readonly scheduleWebhookDelivery: (
+      request: WebhookDeliveryScheduleRequest,
+    ) => Effect.Effect<void>;
+  }
+>() {}
+
+export class ControlJobDispatcher extends Context.Tag("@mailmon/core/ControlJobDispatcher")<
+  ControlJobDispatcher,
+  {
+    readonly dispatchControlJob: (request: ControlJobDispatchRequest) => Effect.Effect<void>;
   }
 >() {}

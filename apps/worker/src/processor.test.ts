@@ -7,6 +7,7 @@ describe("processSyncJob", () => {
     await expect(processSyncJob({ mailboxId: "mbx_demo" })).resolves.toMatchObject({
       mailboxId: "mbx_demo",
       syncRunId: "sr_1",
+      status: "completed",
       eventsEmitted: 1,
       nextCursor: "hist_bootstrap",
     });
