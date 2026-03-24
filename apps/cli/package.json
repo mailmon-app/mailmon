@@ -1,0 +1,26 @@
+{
+  "name": "@mailmon/cli",
+  "private": true,
+  "bin": {
+    "mailmon": "./dist/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json .",
+    "lint:fix": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --fix .",
+    "typecheck": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --type-check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "oxfmt --config ../../.oxfmtrc.json .",
+    "format:check": "oxfmt --config ../../.oxfmtrc.json --check ."
+  },
+  "dependencies": {
+    "@effect/cli": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@mailmon/config": "workspace:*",
+    "effect": "catalog:"
+  }
+}
