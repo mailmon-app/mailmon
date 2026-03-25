@@ -1,20 +1,15 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-
 import * as bootstrap from "./bootstrap.js";
+import * as client from "./client.js";
+import * as persistence from "./persistence.js";
 import * as schema from "./schema.js";
 
-export { bootstrap, schema };
-
-export const createSqlClient = (connectionString: string) => {
-  return postgres(connectionString);
-};
-
-export const createDb = (connectionString: string) => {
-  const client = createSqlClient(connectionString);
-
-  return {
-    client,
-    db: drizzle(client, { schema }),
-  };
-};
+export { bootstrap, client, persistence, schema };
+export { createDb, createSqlClient } from "./client.js";
+export {
+  createCorePersistenceLayer,
+  createDatabaseLayer,
+  createMailboxCatalogLayer,
+  createMailboxSyncCoordinatorLayer,
+  createSyncRunStoreLayer,
+  MailmonDatabase,
+} from "./persistence.js";

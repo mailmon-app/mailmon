@@ -1,8 +1,25 @@
-import { type MailboxSyncJobData, runMailboxSync } from "@mailmon/core";
-import { Effect } from "effect";
+import {
+  MailboxCatalog,
+  MailboxSyncCoordinator,
+  MailboxSyncProvider,
+  SyncRunStore,
+  type MailboxSyncJobData,
+  runMailboxSync,
+} from "@mailmon/core";
 
-import { workerRuntimeLayer } from "./runtime.js";
+export interface WorkerSyncProcessorRuntime {
+  readonly runPromise: <A, E>(
+    effect: import("effect").Effect.Effect<
+      A,
+      E,
+      MailboxCatalog | MailboxSyncCoordinator | MailboxSyncProvider | SyncRunStore
+    >,
+    options?: {
+      readonly signal?: AbortSignal;
+    },
+  ) => Promise<A>;
+}
 
-export const processSyncJob = (job: MailboxSyncJobData) => {
-  return Effect.runPromise(runMailboxSync(job.mailboxId).pipe(Effect.provide(workerRuntimeLayer)));
+export const createProcessSyncJob = (runtime: WorkerSyncProcessorRuntime) => {
+  return (job: MailboxSyncJobData) => runtime.runPromise(runMailboxSync(job.mailboxId));
 };

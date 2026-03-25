@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bootstrap, schema } from "./index.js";
+import { bootstrap, createCorePersistenceLayer, MailmonDatabase, schema } from "./index.js";
 
 describe("schema", () => {
   it("exports the bootstrap and mailbox tables", () => {
@@ -11,6 +11,11 @@ describe("schema", () => {
     expect(schema.mailboxes.activeSyncLeaseOwner).toBeDefined();
     expect(schema.mailboxes.activeSyncLeaseExpiresAt).toBeDefined();
     expect(schema.syncRuns.leaseOwnerId).toBeDefined();
+  });
+
+  it("exports DB-backed core persistence helpers", () => {
+    expect(createCorePersistenceLayer).toBeDefined();
+    expect(MailmonDatabase).toBeDefined();
   });
 });
 

@@ -3,7 +3,8 @@ import { pathToFileURL } from "node:url";
 import type { WorkerEnv } from "@mailmon/config";
 import { loadWorkerEnv } from "@mailmon/config";
 
-import { processSyncJob } from "./processor.js";
+import { createProcessSyncJob } from "./processor.js";
+import { createWorkerRuntime } from "./runtime.js";
 import { startWorkerHttpRuntime } from "./server.js";
 
 export interface WorkerRuntimeHandle {
@@ -16,6 +17,8 @@ const startLegacyBullmqWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRun
     throw new Error("REDIS_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq");
   }
 
+  const runtime = createWorkerRuntime(env);
+  const processSyncJob = createProcessSyncJob(runtime);
   const [{ Worker }, { createRedisConnectionOptions, SYNC_MAILBOX_QUEUE }] = await Promise.all([
     import("bullmq"),
     import("@mailmon/queue"),
@@ -41,25 +44,32 @@ const startLegacyBullmqWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRun
   });
 
   return {
-    close: () => worker.close(),
+    close: async () => {
+      await worker.close();
+      await runtime.dispose();
+    },
     kind: "legacy_bullmq",
   };
 };
 
 const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHandle> => {
-  const runtime = await startWorkerHttpRuntime({
+  const effectRuntime = createWorkerRuntime(env);
+  const httpRuntime = await startWorkerHttpRuntime({
     asyncTransportMode: env.asyncTransportMode,
     host: env.host,
     port: env.port,
-    processSyncJob,
+    processSyncJob: createProcessSyncJob(effectRuntime),
   });
 
   console.log(
-    `worker listening on http://${runtime.host}:${runtime.port} using ${env.asyncTransportMode} async transport`,
+    `worker listening on http://${httpRuntime.host}:${httpRuntime.port} using ${env.asyncTransportMode} async transport`,
   );
 
   return {
-    close: runtime.close,
+    close: async () => {
+      await httpRuntime.close();
+      await effectRuntime.dispose();
+    },
     kind: "http",
   };
 };

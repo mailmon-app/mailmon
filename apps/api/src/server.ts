@@ -1,10 +1,17 @@
-import { getMailboxOrFail } from "@mailmon/core";
+import { MailboxCatalog, getMailboxOrFail } from "@mailmon/core";
 import { Effect } from "effect";
 import { Hono } from "hono";
 
-import { apiRuntimeLayer } from "./runtime.js";
+export interface ApiServerRuntime {
+  readonly runPromise: <A, E>(
+    effect: Effect.Effect<A, E, MailboxCatalog>,
+    options?: {
+      readonly signal?: AbortSignal;
+    },
+  ) => Promise<A>;
+}
 
-export const createApp = () => {
+export const createApp = (runtime: ApiServerRuntime) => {
   const app = new Hono();
 
   app.get("/health", (context) => {
@@ -12,13 +19,12 @@ export const createApp = () => {
   });
 
   app.get("/v1/mailboxes/:mailboxId", async (context) => {
-    const result = await Effect.runPromise(
+    const result = await runtime.runPromise(
       getMailboxOrFail(context.req.param("mailboxId")).pipe(
         Effect.match({
           onFailure: (problem) => ({ _tag: "failure" as const, problem }),
           onSuccess: (mailbox) => ({ _tag: "success" as const, mailbox }),
         }),
-        Effect.provide(apiRuntimeLayer),
       ),
     );
 

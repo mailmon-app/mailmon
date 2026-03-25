@@ -10,6 +10,7 @@ import { mailboxNotFound, mailboxSyncLeaseLost } from "./problems.js";
 import {
   MailboxCatalog,
   MailboxSyncCoordinator,
+  MailboxSyncDispatcher,
   MailboxSyncProvider,
   SyncRunStore,
 } from "./services.js";
@@ -167,6 +168,16 @@ export const runMailboxSync = (mailboxId: string) =>
         }),
       ),
     );
+  });
+
+export const dispatchMailboxSync = (mailboxId: string) =>
+  Effect.gen(function* () {
+    const mailbox = yield* getMailboxOrFail(mailboxId);
+    const dispatcher = yield* MailboxSyncDispatcher;
+
+    yield* dispatcher.dispatchMailboxSync(mailbox.id);
+
+    return mailbox;
   });
 
 export const createHealthyMailboxSnapshot = (

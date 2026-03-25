@@ -1,10 +1,19 @@
 import { serve } from "@hono/node-server";
 import { loadApiEnv } from "@mailmon/config";
 
+import { createApiRuntime } from "./runtime.js";
 import { createApp } from "./server.js";
 
 const env = loadApiEnv();
-const app = createApp();
+const runtime = createApiRuntime(env);
+const app = createApp(runtime);
+
+const shutdown = () => {
+  void runtime.dispose();
+};
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
 
 serve(
   {

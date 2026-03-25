@@ -5,10 +5,11 @@ import type { MailboxResource } from "./contracts.js";
 import {
   MailboxCatalog,
   MailboxSyncCoordinator,
+  MailboxSyncDispatcher,
   MailboxSyncProvider,
   SyncRunStore,
 } from "./services.js";
-import { getMailboxOrFail, runMailboxSync } from "./use-cases.js";
+import { dispatchMailboxSync, getMailboxOrFail, runMailboxSync } from "./use-cases.js";
 
 const mailboxFixture: MailboxResource = {
   id: "mbx_demo",
@@ -74,6 +75,15 @@ const syncProviderLayer = Layer.succeed(MailboxSyncProvider, {
     }),
 });
 
+const dispatchedMailboxIds: Array<string> = [];
+
+const syncDispatcherLayer = Layer.succeed(MailboxSyncDispatcher, {
+  dispatchMailboxSync: (mailboxId: string) =>
+    Effect.sync(() => {
+      dispatchedMailboxIds.push(mailboxId);
+    }),
+});
+
 const runtimeLayer = Layer.mergeAll(
   catalogLayer,
   syncRunStoreLayer,
@@ -95,6 +105,21 @@ describe("getMailboxOrFail", () => {
       }),
       Effect.provide(catalogLayer),
     ),
+  );
+});
+
+describe("dispatchMailboxSync", () => {
+  it.effect(
+    "verifies the mailbox exists before dispatching it through the shared transport boundary",
+    () =>
+      dispatchMailboxSync(mailboxFixture.id).pipe(
+        Effect.map((mailbox) => {
+          expect(mailbox.id).toBe(mailboxFixture.id);
+          expect(dispatchedMailboxIds).toEqual([mailboxFixture.id]);
+        }),
+        Effect.tap(() => Effect.sync(() => dispatchedMailboxIds.splice(0))),
+        Effect.provide(Layer.mergeAll(catalogLayer, syncDispatcherLayer)),
+      ),
   );
 });
 
