@@ -25,3 +25,4 @@ packageExtensions:
   drizzle-kit:
     dependencies:
       drizzle-orm: "*"
+      postgres: "*"

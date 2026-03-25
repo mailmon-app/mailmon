@@ -15,6 +15,13 @@
       "when": 1774361107384,
       "tag": "0001_special_reptil",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774380199466,
+      "tag": "0002_shocking_payback",
+      "breakpoints": true
     }
   ]
 }

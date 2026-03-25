@@ -28,7 +28,7 @@ catalogs:
       specifier: ^6.0.2
       version: 6.0.2
 
-packageExtensionsChecksum: sha256-CqirbJjclg5Z9LtbhINQDYA8QwmP1zijhKhrLxdPxIs=
+packageExtensionsChecksum: sha256-0kyTNkcRcFDQqWrPqMmYao3OK7ArhPUDqpKQ9cZErUA=
 
 importers:
 
@@ -115,6 +115,15 @@ importers:
       '@mailmon/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@mailmon/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mailmon/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@mailmon/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
       effect:
         specifier: 'catalog:'
         version: 3.21.0
@@ -172,7 +181,7 @@ importers:
     devDependencies:
       drizzle-kit:
         specifier: ^0.31.10
-        version: 0.31.10(postgres@3.4.8)
+        version: 0.31.10
 
   packages/gmail:
     dependencies:
@@ -2949,12 +2958,13 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  drizzle-kit@0.31.10(postgres@3.4.8):
+  drizzle-kit@0.31.10:
     dependencies:
       '@drizzle-team/brocli': 0.10.2
       '@esbuild-kit/esm-loader': 2.6.5
       drizzle-orm: 0.45.1(postgres@3.4.8)
       esbuild: 0.25.12
+      postgres: 3.4.8
       tsx: 4.21.0
     transitivePeerDependencies:
       - '@aws-sdk/client-rds-data'
@@ -2982,7 +2992,6 @@ snapshots:
       - kysely
       - mysql2
       - pg
-      - postgres
       - prisma
       - sql.js
       - sqlite3
