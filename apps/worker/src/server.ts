@@ -65,6 +65,11 @@ const closeServer = (server: Server) => {
   return new Promise<void>((resolve, reject) => {
     server.close((error) => {
       if (error) {
+        if ("code" in error && error.code === "ERR_SERVER_NOT_RUNNING") {
+          resolve();
+          return;
+        }
+
         reject(error);
         return;
       }

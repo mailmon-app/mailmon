@@ -114,4 +114,24 @@ describe("startWorkerHttpRuntime", () => {
       code: "invalid_mailbox_sync_request",
     });
   });
+
+  it("allows the runtime to close more than once", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+    });
+
+    await expect(runtime.close()).resolves.toBeUndefined();
+    await expect(runtime.close()).resolves.toBeUndefined();
+  });
 });
