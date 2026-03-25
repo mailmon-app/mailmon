@@ -1,6 +1,9 @@
-import { Command, Options } from "@effect/cli";
+import { Args, Command, Options } from "@effect/cli";
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
-import { Console, Effect, Option } from "effect";
+import { dispatchMailboxSync } from "@mailmon/core";
+import { createCorePersistenceLayer } from "@mailmon/db";
+import { createLocalAsyncTransportLayer } from "@mailmon/queue";
+import { Console, Effect, Layer, ManagedRuntime, Option } from "effect";
 
 export interface ListenCommandOptions {
   readonly forwardTo: Option.Option<string>;
@@ -32,11 +35,60 @@ export const runListen = (options: ListenCommandOptions) =>
     yield* Console.log(message);
   });
 
+export interface SyncMailboxCommandOptions {
+  readonly mailboxId: string;
+}
+
+export const runSyncMailbox = (options: SyncMailboxCommandOptions) =>
+  Effect.gen(function* () {
+    const config = yield* MailmonCliConfig;
+
+    if (config.asyncTransportMode !== "local") {
+      yield* Console.error(
+        `mailbox sync dispatch is only implemented for local async transport; received ${config.asyncTransportMode}`,
+      );
+      return;
+    }
+
+    if (config.databaseUrl === null) {
+      yield* Console.error("DATABASE_URL is required to dispatch mailbox sync from the CLI");
+      return;
+    }
+
+    const databaseUrl = config.databaseUrl;
+    const dispatchRuntime = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        ManagedRuntime.make(
+          Layer.mergeAll(
+            createCorePersistenceLayer(databaseUrl),
+            createLocalAsyncTransportLayer({
+              workerBaseUrl: config.workerBaseUrl,
+            }),
+          ),
+        ),
+      ),
+      (runtime) => Effect.promise(() => runtime.dispose()),
+    );
+
+    yield* Effect.promise(() => dispatchRuntime.runPromise(dispatchMailboxSync(options.mailboxId)));
+    yield* Console.log(`dispatched mailbox sync for ${options.mailboxId}`);
+  });
+
 export const listenCommand = Command.make("listen", { forwardTo: forwardToOption }, (options) =>
   runListen(options),
 ).pipe(Command.withDescription("Listen for local mailmon events"));
 
+export const syncMailboxCommand = Command.make(
+  "sync-mailbox",
+  {
+    mailboxId: Args.text({
+      name: "mailbox-id",
+    }),
+  },
+  (options) => runSyncMailbox(options),
+).pipe(Command.withDescription("Dispatch mailbox sync through the local worker runtime"));
+
 export const appCommand = Command.make("mailmon", {}).pipe(
   Command.withDescription("Local mailmon development CLI"),
-  Command.withSubcommands([listenCommand]),
+  Command.withSubcommands([listenCommand, syncMailboxCommand]),
 );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 
-import { ApiConfig, WorkerConfig } from "./index.js";
+import { ApiConfig, CliConfig, WorkerConfig } from "./index.js";
 
 describe("ApiConfig", () => {
   it.effect("loads config from a provider and applies defaults", () =>
@@ -66,6 +66,28 @@ describe("WorkerConfig", () => {
           MAILMON_ASYNC_TRANSPORT_MODE: "legacy_bullmq",
           NODE_ENV: "test",
           REDIS_URL: "redis://localhost:6379",
+        }),
+      ),
+    ),
+  );
+});
+
+describe("CliConfig", () => {
+  it.effect("defaults optional local mailbox dispatch settings", () =>
+    Effect.gen(function* () {
+      const config = yield* CliConfig;
+
+      expect(config).toEqual({
+        asyncTransportMode: "local",
+        databaseUrl: null,
+        nodeEnv: "test",
+        workerBaseUrl: "http://127.0.0.1:3001",
+      });
+    }).pipe(
+      Effect.provide(CliConfig.layer),
+      Effect.withConfigProvider(
+        ConfigProvider.fromJson({
+          NODE_ENV: "test",
         }),
       ),
     ),

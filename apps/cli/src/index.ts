@@ -13,4 +13,4 @@ const cli = Command.run(appCommand, {
 
 const runtimeLayer = Layer.mergeAll(CliConfig.layer, NodeContext.layer);
 
-cli(process.argv).pipe(Effect.provide(runtimeLayer), NodeRuntime.runMain);
+cli(process.argv).pipe(Effect.provide(runtimeLayer), Effect.scoped, NodeRuntime.runMain);

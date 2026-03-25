@@ -21,6 +21,9 @@
     "@effect/cli": "catalog:",
     "@effect/platform-node": "catalog:",
     "@mailmon/config": "workspace:*",
+    "@mailmon/core": "workspace:*",
+    "@mailmon/db": "workspace:*",
+    "@mailmon/queue": "workspace:*",
     "effect": "catalog:"
   }
 }

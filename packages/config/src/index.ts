@@ -23,6 +23,9 @@ const loadPort = (fallbackPort: number) =>
 const loadHost = Config.option(nonEmptyString("HOST"));
 const loadGcpProjectId = Config.option(nonEmptyString("GCP_PROJECT_ID"));
 const loadGcpRegion = Config.option(nonEmptyString("GCP_REGION"));
+const loadMailboxWorkerBaseUrl = nonEmptyString("MAILMON_WORKER_BASE_URL").pipe(
+  Config.orElse(() => Config.succeed("http://127.0.0.1:3001")),
+);
 const loadRedisUrl = Config.option(nonEmptyString("REDIS_URL"));
 const loadAsyncTransportMode: Config.Config<AsyncTransportMode> = Config.literal(
   "local",
@@ -55,6 +58,8 @@ export interface WorkerEnv extends CommonEnv {
 
 export interface CliEnv extends CommonEnv {
   readonly asyncTransportMode: AsyncTransportMode;
+  readonly databaseUrl: string | null;
+  readonly workerBaseUrl: string;
 }
 
 export class CommonConfig extends Context.Tag("@mailmon/config/CommonConfig")<
@@ -139,13 +144,24 @@ export class CliConfig extends Context.Tag("@mailmon/config/CliConfig")<CliConfi
     this,
     Effect.all({
       asyncTransportMode: loadAsyncTransportMode,
+      databaseUrl: Config.option(loadDatabaseUrl),
       nodeEnv: loadNodeEnv,
-    }),
+      workerBaseUrl: loadMailboxWorkerBaseUrl,
+    }).pipe(
+      Effect.map((config) => ({
+        asyncTransportMode: config.asyncTransportMode,
+        databaseUrl: normalizeOptional(config.databaseUrl),
+        nodeEnv: config.nodeEnv,
+        workerBaseUrl: config.workerBaseUrl,
+      })),
+    ),
   );
 
   static readonly testLayer = Layer.succeed(this, {
     asyncTransportMode: "local",
+    databaseUrl: null,
     nodeEnv: "test",
+    workerBaseUrl: "http://127.0.0.1:3001",
   } satisfies CliEnv);
 }
 
