@@ -29,6 +29,13 @@
       "when": 1774765205436,
       "tag": "0003_blue_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1774766118254,
+      "tag": "0004_loose_cammi",
+      "breakpoints": true
     }
   ]
 }

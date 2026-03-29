@@ -68,54 +68,63 @@ const busySyncCoordinatorLayer = Layer.succeed(MailboxSyncCoordinator, {
   releaseMailboxSyncLease: () => Effect.void,
 });
 
-const syncProviderLayer = Layer.succeed(MailboxSyncProvider, {
-  syncMailbox: () =>
-    Effect.succeed({
-      snapshot: {
-        threads: [
-          {
-            id: "thr_demo",
-            providerThreadId: "gmail_thr_demo",
-            subject: "Demo thread",
-            lastMessageAt: "2026-03-24T00:00:00.000Z",
+const createSyncProviderTestLayer = (observedCursors: Array<string | null>) =>
+  Layer.succeed(MailboxSyncProvider, {
+    syncMailbox: ({ cursor }) =>
+      Effect.sync(() => {
+        observedCursors.push(cursor);
+
+        return {
+          snapshot: {
+            threads: [
+              {
+                id: "thr_demo",
+                providerThreadId: "gmail_thr_demo",
+                subject: "Demo thread",
+                lastMessageAt: "2026-03-24T00:00:00.000Z",
+              },
+            ],
+            messages: [
+              {
+                id: "msg_demo",
+                threadId: "thr_demo",
+                providerMessageId: "gmail_msg_demo",
+                providerThreadId: "gmail_thr_demo",
+                subject: "Demo thread",
+                from: {
+                  name: "Mailmon",
+                  email: "hello@mailmon.dev",
+                },
+                snippet: "Baseline sync fixture",
+                receivedAt: "2026-03-24T00:00:00.000Z",
+                labelIds: ["INBOX"],
+              },
+            ],
           },
-        ],
-        messages: [
-          {
-            id: "msg_demo",
-            threadId: "thr_demo",
-            providerMessageId: "gmail_msg_demo",
-            providerThreadId: "gmail_thr_demo",
-            subject: "Demo thread",
-            from: {
-              name: "Mailmon",
-              email: "hello@mailmon.dev",
-            },
-            snippet: "Baseline sync fixture",
-            receivedAt: "2026-03-24T00:00:00.000Z",
-            labelIds: ["INBOX"],
-          },
-        ],
-      },
-      eventsEmitted: 2,
-      nextCursor: "hist_2",
-    }),
-});
+          eventsEmitted: 2,
+          nextCursor: "hist_2",
+        };
+      }),
+  });
 
 const createMailboxStateStoreTestLayer = (
+  currentCursor: string | null,
   appliedSnapshots: Array<{
     mailboxId: string;
     threadCount: number;
     messageCount: number;
+    nextCursor: string | null;
   }>,
 ) =>
   Layer.succeed(MailboxStateStore, {
-    applySyncSnapshot: ({ mailboxId, snapshot }) =>
+    getMailboxCursor: () => Effect.succeed(currentCursor),
+    applySyncResult: ({ mailboxId, nextCursor, snapshot }) =>
       Effect.sync(() => {
         appliedSnapshots.push({
           mailboxId,
           threadCount: snapshot.threads.length,
           messageCount: snapshot.messages.length,
+          nextCursor,
         });
       }),
   });
@@ -168,7 +177,9 @@ describe("runMailboxSync", () => {
         mailboxId: string;
         threadCount: number;
         messageCount: number;
+        nextCursor: string | null;
       }> = [];
+      const observedCursors: Array<string | null> = [];
 
       return runMailboxSync(mailboxFixture.id).pipe(
         Effect.map((result) => {
@@ -176,21 +187,60 @@ describe("runMailboxSync", () => {
           expect(result.syncRunId).toBe("sr_mbx_demo");
           expect(result.eventsEmitted).toBe(2);
           expect(result.nextCursor).toBe("hist_2");
+          expect(observedCursors).toEqual([null]);
           expect(appliedSnapshots).toEqual([
             {
               mailboxId: mailboxFixture.id,
               threadCount: 1,
               messageCount: 1,
+              nextCursor: "hist_2",
             },
           ]);
         }),
         Effect.provide(
           Layer.mergeAll(
             catalogLayer,
-            createMailboxStateStoreTestLayer(appliedSnapshots),
+            createMailboxStateStoreTestLayer(null, appliedSnapshots),
             syncRunStoreLayer,
             syncCoordinatorLayer,
-            syncProviderLayer,
+            createSyncProviderTestLayer(observedCursors),
+          ),
+        ),
+      );
+    }).pipe(Effect.flatten),
+  );
+
+  it.effect("passes the stored cursor into the provider for incremental sync", () =>
+    Effect.sync(() => {
+      const appliedSnapshots: Array<{
+        mailboxId: string;
+        threadCount: number;
+        messageCount: number;
+        nextCursor: string | null;
+      }> = [];
+      const observedCursors: Array<string | null> = [];
+
+      return runMailboxSync(mailboxFixture.id).pipe(
+        Effect.map((result) => {
+          expect(result.status).toBe("completed");
+          expect(result.nextCursor).toBe("hist_2");
+          expect(observedCursors).toEqual(["hist_1"]);
+          expect(appliedSnapshots).toEqual([
+            {
+              mailboxId: mailboxFixture.id,
+              threadCount: 1,
+              messageCount: 1,
+              nextCursor: "hist_2",
+            },
+          ]);
+        }),
+        Effect.provide(
+          Layer.mergeAll(
+            catalogLayer,
+            createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
+            syncRunStoreLayer,
+            syncCoordinatorLayer,
+            createSyncProviderTestLayer(observedCursors),
           ),
         ),
       );
@@ -203,7 +253,9 @@ describe("runMailboxSync", () => {
         mailboxId: string;
         threadCount: number;
         messageCount: number;
+        nextCursor: string | null;
       }> = [];
+      const observedCursors: Array<string | null> = [];
 
       return runMailboxSync(mailboxFixture.id).pipe(
         Effect.map((result) => {
@@ -212,15 +264,16 @@ describe("runMailboxSync", () => {
           expect(result.status).toBe("skipped_due_to_active_lease");
           expect(result.eventsEmitted).toBe(0);
           expect(result.nextCursor).toBeNull();
+          expect(observedCursors).toEqual([]);
           expect(appliedSnapshots).toEqual([]);
         }),
         Effect.provide(
           Layer.mergeAll(
             catalogLayer,
-            createMailboxStateStoreTestLayer(appliedSnapshots),
+            createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
             syncRunStoreLayer,
             busySyncCoordinatorLayer,
-            syncProviderLayer,
+            createSyncProviderTestLayer(observedCursors),
           ),
         ),
       );

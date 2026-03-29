@@ -230,8 +230,22 @@ export const createMailboxStateStoreLayer = Layer.effect(
     const database = yield* MailmonDatabase;
 
     return {
-      applySyncSnapshot: ({ mailboxId, snapshot }) =>
+      getMailboxCursor: (mailboxId: string) =>
         Effect.promise(async () => {
+          const [row] = await database.db
+            .select({
+              cursor: mailboxes.cursor,
+            })
+            .from(mailboxes)
+            .where(eq(mailboxes.id, mailboxId))
+            .limit(1);
+
+          return row?.cursor ?? null;
+        }),
+      applySyncResult: ({ mailboxId, nextCursor, snapshot, syncedAt }) =>
+        Effect.promise(async () => {
+          const syncedAtDate = toDate(syncedAt);
+
           await database.db.transaction(async (transaction) => {
             for (const thread of snapshot.threads) {
               await transaction
@@ -252,6 +266,29 @@ export const createMailboxStateStoreLayer = Layer.effect(
                   set: toMessageUpdateSet(message),
                 });
             }
+
+            const [row] = await transaction
+              .select({
+                initializedAt: mailboxes.initializedAt,
+              })
+              .from(mailboxes)
+              .where(eq(mailboxes.id, mailboxId))
+              .limit(1);
+
+            await transaction
+              .update(mailboxes)
+              .set({
+                cursor: nextCursor,
+                initializedAt: row?.initializedAt ?? syncedAtDate,
+                lastErrorCode: null,
+                lastErrorMessage: null,
+                lastErrorOccurredAt: null,
+                lastErrorRetryable: null,
+                lastSuccessfulSyncAt: syncedAtDate,
+                syncState: "healthy",
+                updatedAt: syncedAtDate,
+              })
+              .where(eq(mailboxes.id, mailboxId));
           });
         }),
     };
@@ -295,32 +332,6 @@ export const createSyncRunStoreLayer = Layer.effect(
               .where(eq(syncRuns.id, result.syncRunId));
 
             if (result.status === "skipped_due_to_active_lease") {
-              return;
-            }
-
-            if (result.status === "completed") {
-              const [row] = await transaction
-                .select({
-                  initializedAt: mailboxes.initializedAt,
-                })
-                .from(mailboxes)
-                .where(eq(mailboxes.id, result.mailboxId))
-                .limit(1);
-
-              await transaction
-                .update(mailboxes)
-                .set({
-                  initializedAt: row?.initializedAt ?? completedAt,
-                  lastErrorCode: null,
-                  lastErrorMessage: null,
-                  lastErrorOccurredAt: null,
-                  lastErrorRetryable: null,
-                  lastSuccessfulSyncAt: completedAt,
-                  syncState: "healthy",
-                  updatedAt: completedAt,
-                })
-                .where(eq(mailboxes.id, result.mailboxId));
-
               return;
             }
 

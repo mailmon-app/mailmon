@@ -2,11 +2,44 @@ import { MailboxSyncProvider, type MailboxProviderSyncResult } from "@mailmon/co
 import { Effect, Layer } from "effect";
 
 export const createStubMailboxSyncProviderLayer = Layer.succeed(MailboxSyncProvider, {
-  syncMailbox: (mailbox) => {
-    const providerThreadId = `gmail_thr_${mailbox.id}_bootstrap`;
+  syncMailbox: ({ cursor, mailbox }) => {
     const threadId = `thr_${mailbox.id}_bootstrap`;
-    const providerMessageId = `gmail_msg_${mailbox.id}_bootstrap_1`;
-    const messageId = `msg_${mailbox.id}_bootstrap_1`;
+    const providerThreadId = `gmail_thr_${mailbox.id}_bootstrap`;
+
+    if (cursor === null) {
+      const result: MailboxProviderSyncResult = {
+        snapshot: {
+          threads: [
+            {
+              id: threadId,
+              providerThreadId,
+              subject: "Welcome to Mailmon",
+              lastMessageAt: "2026-03-29T09:30:00.000Z",
+            },
+          ],
+          messages: [
+            {
+              id: `msg_${mailbox.id}_bootstrap_1`,
+              threadId,
+              providerMessageId: `gmail_msg_${mailbox.id}_bootstrap_1`,
+              providerThreadId,
+              subject: "Welcome to Mailmon",
+              from: {
+                name: "Mailmon",
+                email: "hello@mailmon.dev",
+              },
+              snippet: "Your mailbox baseline sync is now persisted locally.",
+              receivedAt: "2026-03-29T09:30:00.000Z",
+              labelIds: ["INBOX"],
+            },
+          ],
+        },
+        eventsEmitted: 1,
+        nextCursor: "hist_bootstrap",
+      };
+
+      return Effect.succeed(result);
+    }
 
     const result: MailboxProviderSyncResult = {
       snapshot: {
@@ -15,28 +48,28 @@ export const createStubMailboxSyncProviderLayer = Layer.succeed(MailboxSyncProvi
             id: threadId,
             providerThreadId,
             subject: "Welcome to Mailmon",
-            lastMessageAt: "2026-03-29T09:30:00.000Z",
+            lastMessageAt: "2026-03-29T10:00:00.000Z",
           },
         ],
         messages: [
           {
-            id: messageId,
+            id: `msg_${mailbox.id}_bootstrap_2`,
             threadId,
-            providerMessageId,
+            providerMessageId: `gmail_msg_${mailbox.id}_bootstrap_2`,
             providerThreadId,
-            subject: "Welcome to Mailmon",
+            subject: "Re: Welcome to Mailmon",
             from: {
               name: "Mailmon",
               email: "hello@mailmon.dev",
             },
-            snippet: "Your mailbox baseline sync is now persisted locally.",
-            receivedAt: "2026-03-29T09:30:00.000Z",
-            labelIds: ["INBOX"],
+            snippet: "This incremental sync proves cursor-based mailbox updates.",
+            receivedAt: "2026-03-29T10:00:00.000Z",
+            labelIds: ["INBOX", "UNREAD"],
           },
         ],
       },
       eventsEmitted: 1,
-      nextCursor: "hist_bootstrap",
+      nextCursor: "hist_incremental_2",
     };
 
     return Effect.succeed(result);

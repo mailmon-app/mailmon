@@ -12,6 +12,7 @@ export const mailboxes = pgTable("mailboxes", {
   status: text("status").notNull(),
   syncState: text("sync_state").notNull(),
   watchState: text("watch_state").notNull(),
+  cursor: text("cursor"),
   activeSyncLeaseOwner: text("active_sync_lease_owner"),
   activeSyncLeaseAcquiredAt: timestamp("active_sync_lease_acquired_at", { withTimezone: true }),
   activeSyncLeaseHeartbeatAt: timestamp("active_sync_lease_heartbeat_at", { withTimezone: true }),

@@ -69,6 +69,7 @@ export const runMailboxSync = (mailboxId: string) =>
     const syncCoordinator = yield* MailboxSyncCoordinator;
     const mailboxProvider = yield* MailboxSyncProvider;
     const mailboxStateStore = yield* MailboxStateStore;
+    const cursor = yield* mailboxStateStore.getMailboxCursor(mailbox.id);
     const syncRun = yield* syncRunStore.startSyncRun(mailbox.id);
     const leaseOwnerId = globalThis.crypto.randomUUID();
     const acquisition = yield* syncCoordinator.acquireMailboxSyncLease({
@@ -125,7 +126,10 @@ export const runMailboxSync = (mailboxId: string) =>
       ),
     );
 
-    return yield* Effect.raceFirst(mailboxProvider.syncMailbox(mailbox), heartbeat).pipe(
+    return yield* Effect.raceFirst(
+      mailboxProvider.syncMailbox({ mailbox, cursor }),
+      heartbeat,
+    ).pipe(
       Effect.flatMap((providerResult) => {
         const completedAt = new Date().toISOString();
         const completion = createSyncRunCompletion({
@@ -145,9 +149,11 @@ export const runMailboxSync = (mailboxId: string) =>
         };
 
         return mailboxStateStore
-          .applySyncSnapshot({
+          .applySyncResult({
             mailboxId: mailbox.id,
             snapshot: providerResult.snapshot,
+            nextCursor: providerResult.nextCursor,
+            syncedAt: completedAt,
           })
           .pipe(Effect.zipRight(syncRunStore.completeSyncRun(completion)), Effect.as(result));
       }),

@@ -143,6 +143,11 @@ export interface MailboxSyncSnapshot {
   readonly messages: ReadonlyArray<CanonicalMessageRecord>;
 }
 
+export interface MailboxSyncRequest {
+  readonly mailbox: MailboxResource;
+  readonly cursor: string | null;
+}
+
 export interface MailboxProviderSyncResult {
   readonly snapshot: MailboxSyncSnapshot;
   readonly eventsEmitted: number;

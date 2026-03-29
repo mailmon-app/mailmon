@@ -10,6 +10,7 @@ describe("schema", () => {
     expect(schema.messages).toBeDefined();
     expect(schema.syncRuns).toBeDefined();
     expect(schema.mailboxEvents).toBeDefined();
+    expect(schema.mailboxes.cursor).toBeDefined();
     expect(schema.mailboxes.activeSyncLeaseOwner).toBeDefined();
     expect(schema.mailboxes.activeSyncLeaseExpiresAt).toBeDefined();
     expect(schema.syncRuns.leaseOwnerId).toBeDefined();
