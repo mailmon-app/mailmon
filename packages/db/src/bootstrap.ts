@@ -1,6 +1,7 @@
 import {
   MailboxCatalog,
   MailboxSyncCoordinator,
+  MailboxStateStore,
   SyncRunStore,
   type MailboxResource,
   type MailboxSyncLeaseAcquisition,
@@ -47,6 +48,10 @@ export const createBootstrapSyncRunStoreLayer = Layer.effect(
     };
   }),
 );
+
+export const createBootstrapMailboxStateStoreLayer = Layer.succeed(MailboxStateStore, {
+  applySyncSnapshot: () => Effect.void,
+});
 
 interface BootstrapMailboxLease {
   readonly leaseOwnerId: string;

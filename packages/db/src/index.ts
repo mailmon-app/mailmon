@@ -10,6 +10,7 @@ export {
   createDatabaseLayer,
   createMailboxCatalogLayer,
   createMailboxSyncCoordinatorLayer,
+  createMailboxStateStoreLayer,
   createSyncRunStoreLayer,
   MailmonDatabase,
 } from "./persistence.js";

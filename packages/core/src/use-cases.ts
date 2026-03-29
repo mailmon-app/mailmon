@@ -12,6 +12,7 @@ import {
   MailboxSyncCoordinator,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
+  MailboxStateStore,
   SyncRunStore,
 } from "./services.js";
 
@@ -67,6 +68,7 @@ export const runMailboxSync = (mailboxId: string) =>
     const syncRunStore = yield* SyncRunStore;
     const syncCoordinator = yield* MailboxSyncCoordinator;
     const mailboxProvider = yield* MailboxSyncProvider;
+    const mailboxStateStore = yield* MailboxStateStore;
     const syncRun = yield* syncRunStore.startSyncRun(mailbox.id);
     const leaseOwnerId = globalThis.crypto.randomUUID();
     const acquisition = yield* syncCoordinator.acquireMailboxSyncLease({
@@ -142,7 +144,12 @@ export const runMailboxSync = (mailboxId: string) =>
           nextCursor: providerResult.nextCursor,
         };
 
-        return syncRunStore.completeSyncRun(completion).pipe(Effect.as(result));
+        return mailboxStateStore
+          .applySyncSnapshot({
+            mailboxId: mailbox.id,
+            snapshot: providerResult.snapshot,
+          })
+          .pipe(Effect.zipRight(syncRunStore.completeSyncRun(completion)), Effect.as(result));
       }),
       Effect.catchAll((problem) => {
         const completedAt = new Date().toISOString();

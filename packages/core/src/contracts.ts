@@ -116,7 +116,35 @@ export interface CompletedSyncRun {
   readonly detail: string | null;
 }
 
+export interface CanonicalThreadRecord {
+  readonly id: string;
+  readonly providerThreadId: string;
+  readonly subject: string;
+  readonly lastMessageAt: string;
+}
+
+export interface CanonicalMessageRecord {
+  readonly id: string;
+  readonly threadId: string;
+  readonly providerMessageId: string;
+  readonly providerThreadId: string;
+  readonly subject: string;
+  readonly from: Readonly<{
+    readonly name: string | null;
+    readonly email: string;
+  }>;
+  readonly snippet: string;
+  readonly receivedAt: string;
+  readonly labelIds: ReadonlyArray<string>;
+}
+
+export interface MailboxSyncSnapshot {
+  readonly threads: ReadonlyArray<CanonicalThreadRecord>;
+  readonly messages: ReadonlyArray<CanonicalMessageRecord>;
+}
+
 export interface MailboxProviderSyncResult {
+  readonly snapshot: MailboxSyncSnapshot;
   readonly eventsEmitted: number;
   readonly nextCursor: string | null;
 }

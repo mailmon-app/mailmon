@@ -6,6 +6,8 @@ describe("schema", () => {
   it("exports the bootstrap and mailbox tables", () => {
     expect(schema.bootstrapState).toBeDefined();
     expect(schema.mailboxes).toBeDefined();
+    expect(schema.threads).toBeDefined();
+    expect(schema.messages).toBeDefined();
     expect(schema.syncRuns).toBeDefined();
     expect(schema.mailboxEvents).toBeDefined();
     expect(schema.mailboxes.activeSyncLeaseOwner).toBeDefined();

@@ -1,7 +1,10 @@
 import {
   MailboxCatalog,
   MailboxSyncCoordinator,
+  MailboxStateStore,
   SyncRunStore,
+  type CanonicalMessageRecord,
+  type CanonicalThreadRecord,
   type CompletedSyncRun,
   type MailboxOperationalError,
   type MailboxResource,
@@ -13,7 +16,7 @@ import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { createDb } from "./client.js";
-import { mailboxes, syncRuns } from "./schema.js";
+import { mailboxes, messages, syncRuns, threads } from "./schema.js";
 
 type DatabaseHandle = ReturnType<typeof createDb>;
 type MailboxRow = typeof mailboxes.$inferSelect;
@@ -111,6 +114,60 @@ const createStartedSyncRun = (mailboxId: string): StartedSyncRun => {
   };
 };
 
+const toThreadInsert = (mailboxId: string, thread: CanonicalThreadRecord) => {
+  const timestamp = new Date();
+
+  return {
+    id: thread.id,
+    mailboxId,
+    providerThreadId: thread.providerThreadId,
+    subject: thread.subject,
+    lastMessageAt: toDate(thread.lastMessageAt),
+    updatedAt: timestamp,
+  };
+};
+
+const toThreadUpdateSet = (thread: CanonicalThreadRecord) => {
+  return {
+    subject: thread.subject,
+    lastMessageAt: toDate(thread.lastMessageAt),
+    updatedAt: new Date(),
+  };
+};
+
+const toMessageInsert = (mailboxId: string, message: CanonicalMessageRecord) => {
+  const timestamp = new Date();
+
+  return {
+    id: message.id,
+    mailboxId,
+    threadId: message.threadId,
+    providerMessageId: message.providerMessageId,
+    providerThreadId: message.providerThreadId,
+    subject: message.subject,
+    fromName: message.from.name,
+    fromEmail: message.from.email,
+    snippet: message.snippet,
+    receivedAt: toDate(message.receivedAt),
+    labelIds: [...message.labelIds],
+    updatedAt: timestamp,
+  };
+};
+
+const toMessageUpdateSet = (message: CanonicalMessageRecord) => {
+  return {
+    threadId: message.threadId,
+    providerThreadId: message.providerThreadId,
+    subject: message.subject,
+    fromName: message.from.name,
+    fromEmail: message.from.email,
+    snippet: message.snippet,
+    receivedAt: toDate(message.receivedAt),
+    labelIds: [...message.labelIds],
+    updatedAt: new Date(),
+  };
+};
+
 const getMailboxSyncFailureState = (
   result: CompletedSyncRun,
 ): Pick<
@@ -162,6 +219,40 @@ export const createMailboxCatalogLayer = Layer.effect(
             .limit(1);
 
           return Option.fromNullable(row).pipe(Option.map(toMailboxResource));
+        }),
+    };
+  }),
+);
+
+export const createMailboxStateStoreLayer = Layer.effect(
+  MailboxStateStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      applySyncSnapshot: ({ mailboxId, snapshot }) =>
+        Effect.promise(async () => {
+          await database.db.transaction(async (transaction) => {
+            for (const thread of snapshot.threads) {
+              await transaction
+                .insert(threads)
+                .values(toThreadInsert(mailboxId, thread))
+                .onConflictDoUpdate({
+                  target: [threads.mailboxId, threads.providerThreadId],
+                  set: toThreadUpdateSet(thread),
+                });
+            }
+
+            for (const message of snapshot.messages) {
+              await transaction
+                .insert(messages)
+                .values(toMessageInsert(mailboxId, message))
+                .onConflictDoUpdate({
+                  target: [messages.mailboxId, messages.providerMessageId],
+                  set: toMessageUpdateSet(message),
+                });
+            }
+          });
         }),
     };
   }),
@@ -388,6 +479,7 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
 export const createCorePersistenceLayer = (connectionString: string) =>
   Layer.mergeAll(
     createMailboxCatalogLayer,
+    createMailboxStateStoreLayer,
     createMailboxSyncCoordinatorLayer,
     createSyncRunStoreLayer,
   ).pipe(Layer.provide(createDatabaseLayer(connectionString)));

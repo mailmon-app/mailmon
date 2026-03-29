@@ -1,4 +1,4 @@
-import { boolean, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const bootstrapState = pgTable("bootstrap_state", {
   name: text("name").primaryKey(),
@@ -26,6 +26,56 @@ export const mailboxes = pgTable("mailboxes", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const threads = pgTable(
+  "threads",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailbox_id")
+      .notNull()
+      .references(() => mailboxes.id),
+    providerThreadId: text("provider_thread_id").notNull(),
+    subject: text("subject").notNull(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    mailboxProviderThreadIdUnique: unique("threads_mailbox_provider_thread_id_unique").on(
+      table.mailboxId,
+      table.providerThreadId,
+    ),
+  }),
+);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailbox_id")
+      .notNull()
+      .references(() => mailboxes.id),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id),
+    providerMessageId: text("provider_message_id").notNull(),
+    providerThreadId: text("provider_thread_id").notNull(),
+    subject: text("subject").notNull(),
+    fromName: text("from_name"),
+    fromEmail: text("from_email").notNull(),
+    snippet: text("snippet").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
+    labelIds: jsonb("label_ids").$type<string[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    mailboxProviderMessageIdUnique: unique("messages_mailbox_provider_message_id_unique").on(
+      table.mailboxId,
+      table.providerMessageId,
+    ),
+  }),
+);
 
 export const syncRuns = pgTable("sync_runs", {
   id: text("id").primaryKey(),

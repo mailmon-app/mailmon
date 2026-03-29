@@ -7,6 +7,7 @@ import {
   MailboxSyncCoordinator,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
+  MailboxStateStore,
   SyncRunStore,
 } from "./services.js";
 import { dispatchMailboxSync, getMailboxOrFail, runMailboxSync } from "./use-cases.js";
@@ -70,10 +71,54 @@ const busySyncCoordinatorLayer = Layer.succeed(MailboxSyncCoordinator, {
 const syncProviderLayer = Layer.succeed(MailboxSyncProvider, {
   syncMailbox: () =>
     Effect.succeed({
+      snapshot: {
+        threads: [
+          {
+            id: "thr_demo",
+            providerThreadId: "gmail_thr_demo",
+            subject: "Demo thread",
+            lastMessageAt: "2026-03-24T00:00:00.000Z",
+          },
+        ],
+        messages: [
+          {
+            id: "msg_demo",
+            threadId: "thr_demo",
+            providerMessageId: "gmail_msg_demo",
+            providerThreadId: "gmail_thr_demo",
+            subject: "Demo thread",
+            from: {
+              name: "Mailmon",
+              email: "hello@mailmon.dev",
+            },
+            snippet: "Baseline sync fixture",
+            receivedAt: "2026-03-24T00:00:00.000Z",
+            labelIds: ["INBOX"],
+          },
+        ],
+      },
       eventsEmitted: 2,
       nextCursor: "hist_2",
     }),
 });
+
+const createMailboxStateStoreTestLayer = (
+  appliedSnapshots: Array<{
+    mailboxId: string;
+    threadCount: number;
+    messageCount: number;
+  }>,
+) =>
+  Layer.succeed(MailboxStateStore, {
+    applySyncSnapshot: ({ mailboxId, snapshot }) =>
+      Effect.sync(() => {
+        appliedSnapshots.push({
+          mailboxId,
+          threadCount: snapshot.threads.length,
+          messageCount: snapshot.messages.length,
+        });
+      }),
+  });
 
 const dispatchedMailboxIds: Array<string> = [];
 
@@ -83,13 +128,6 @@ const syncDispatcherLayer = Layer.succeed(MailboxSyncDispatcher, {
       dispatchedMailboxIds.push(mailboxId);
     }),
 });
-
-const runtimeLayer = Layer.mergeAll(
-  catalogLayer,
-  syncRunStoreLayer,
-  syncCoordinatorLayer,
-  syncProviderLayer,
-);
 
 describe("getMailboxOrFail", () => {
   it.effect("fails with a structured problem when the mailbox is missing", () =>
@@ -125,34 +163,67 @@ describe("dispatchMailboxSync", () => {
 
 describe("runMailboxSync", () => {
   it.effect("coordinates mailbox lookup, provider sync, and sync run completion", () =>
-    runMailboxSync(mailboxFixture.id).pipe(
-      Effect.map((result) => {
-        expect(result.mailboxId).toBe(mailboxFixture.id);
-        expect(result.syncRunId).toBe("sr_mbx_demo");
-        expect(result.eventsEmitted).toBe(2);
-        expect(result.nextCursor).toBe("hist_2");
-      }),
-      Effect.provide(runtimeLayer),
-    ),
+    Effect.sync(() => {
+      const appliedSnapshots: Array<{
+        mailboxId: string;
+        threadCount: number;
+        messageCount: number;
+      }> = [];
+
+      return runMailboxSync(mailboxFixture.id).pipe(
+        Effect.map((result) => {
+          expect(result.mailboxId).toBe(mailboxFixture.id);
+          expect(result.syncRunId).toBe("sr_mbx_demo");
+          expect(result.eventsEmitted).toBe(2);
+          expect(result.nextCursor).toBe("hist_2");
+          expect(appliedSnapshots).toEqual([
+            {
+              mailboxId: mailboxFixture.id,
+              threadCount: 1,
+              messageCount: 1,
+            },
+          ]);
+        }),
+        Effect.provide(
+          Layer.mergeAll(
+            catalogLayer,
+            createMailboxStateStoreTestLayer(appliedSnapshots),
+            syncRunStoreLayer,
+            syncCoordinatorLayer,
+            syncProviderLayer,
+          ),
+        ),
+      );
+    }).pipe(Effect.flatten),
   );
 
   it.effect("returns a skipped result when another worker holds the mailbox lease", () =>
-    runMailboxSync(mailboxFixture.id).pipe(
-      Effect.map((result) => {
-        expect(result.mailboxId).toBe(mailboxFixture.id);
-        expect(result.syncRunId).toBe("sr_mbx_demo");
-        expect(result.status).toBe("skipped_due_to_active_lease");
-        expect(result.eventsEmitted).toBe(0);
-        expect(result.nextCursor).toBeNull();
-      }),
-      Effect.provide(
-        Layer.mergeAll(
-          catalogLayer,
-          syncRunStoreLayer,
-          busySyncCoordinatorLayer,
-          syncProviderLayer,
+    Effect.sync(() => {
+      const appliedSnapshots: Array<{
+        mailboxId: string;
+        threadCount: number;
+        messageCount: number;
+      }> = [];
+
+      return runMailboxSync(mailboxFixture.id).pipe(
+        Effect.map((result) => {
+          expect(result.mailboxId).toBe(mailboxFixture.id);
+          expect(result.syncRunId).toBe("sr_mbx_demo");
+          expect(result.status).toBe("skipped_due_to_active_lease");
+          expect(result.eventsEmitted).toBe(0);
+          expect(result.nextCursor).toBeNull();
+          expect(appliedSnapshots).toEqual([]);
+        }),
+        Effect.provide(
+          Layer.mergeAll(
+            catalogLayer,
+            createMailboxStateStoreTestLayer(appliedSnapshots),
+            syncRunStoreLayer,
+            busySyncCoordinatorLayer,
+            syncProviderLayer,
+          ),
         ),
-      ),
-    ),
+      );
+    }).pipe(Effect.flatten),
   );
 });

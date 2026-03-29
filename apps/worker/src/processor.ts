@@ -2,6 +2,7 @@ import {
   MailboxCatalog,
   MailboxSyncCoordinator,
   MailboxSyncProvider,
+  MailboxStateStore,
   SyncRunStore,
   type MailboxSyncJobData,
   runMailboxSync,
@@ -12,7 +13,11 @@ export interface WorkerSyncProcessorRuntime {
     effect: import("effect").Effect.Effect<
       A,
       E,
-      MailboxCatalog | MailboxSyncCoordinator | MailboxSyncProvider | SyncRunStore
+      | MailboxCatalog
+      | MailboxSyncCoordinator
+      | MailboxSyncProvider
+      | MailboxStateStore
+      | SyncRunStore
     >,
     options?: {
       readonly signal?: AbortSignal;

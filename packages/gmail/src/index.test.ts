@@ -22,6 +22,32 @@ describe("createStubMailboxSyncProviderLayer", () => {
       });
 
       expect(result).toEqual({
+        snapshot: {
+          threads: [
+            {
+              id: "thr_mbx_123_bootstrap",
+              providerThreadId: "gmail_thr_mbx_123_bootstrap",
+              subject: "Welcome to Mailmon",
+              lastMessageAt: "2026-03-29T09:30:00.000Z",
+            },
+          ],
+          messages: [
+            {
+              id: "msg_mbx_123_bootstrap_1",
+              threadId: "thr_mbx_123_bootstrap",
+              providerMessageId: "gmail_msg_mbx_123_bootstrap_1",
+              providerThreadId: "gmail_thr_mbx_123_bootstrap",
+              subject: "Welcome to Mailmon",
+              from: {
+                name: "Mailmon",
+                email: "hello@mailmon.dev",
+              },
+              snippet: "Your mailbox baseline sync is now persisted locally.",
+              receivedAt: "2026-03-29T09:30:00.000Z",
+              labelIds: ["INBOX"],
+            },
+          ],
+        },
         eventsEmitted: 1,
         nextCursor: "hist_bootstrap",
       });

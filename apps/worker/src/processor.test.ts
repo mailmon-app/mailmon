@@ -11,6 +11,7 @@ describe("processSyncJob", () => {
       Layer.mergeAll(
         bootstrap.createBootstrapMailboxCatalogLayer(),
         bootstrap.createBootstrapMailboxSyncCoordinatorLayer,
+        bootstrap.createBootstrapMailboxStateStoreLayer,
         bootstrap.createBootstrapSyncRunStoreLayer,
         createStubMailboxSyncProviderLayer,
       ),

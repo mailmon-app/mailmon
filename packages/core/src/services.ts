@@ -1,6 +1,7 @@
 import { Context, Effect, Option } from "effect";
 
 import type {
+  MailboxSyncSnapshot,
   CompletedSyncRun,
   ControlJobDispatchRequest,
   MailboxSyncLeaseAcquisition,
@@ -62,6 +63,18 @@ export class MailboxSyncProvider extends Context.Tag("@mailmon/core/MailboxSyncP
     readonly syncMailbox: (
       mailbox: MailboxResource,
     ) => Effect.Effect<MailboxProviderSyncResult, ProblemDetails>;
+  }
+>() {}
+
+export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateStore")<
+  MailboxStateStore,
+  {
+    readonly applySyncSnapshot: (
+      params: Readonly<{
+        mailboxId: string;
+        snapshot: MailboxSyncSnapshot;
+      }>,
+    ) => Effect.Effect<void>;
   }
 >() {}
 
