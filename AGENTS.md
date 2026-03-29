@@ -69,13 +69,13 @@ Start here when tracing behavior:
 - API composition: `apps/api/src/runtime.ts`, `apps/api/src/server.ts`
 - worker composition: `apps/worker/src/runtime.ts`, `apps/worker/src/processor.ts`, `apps/worker/src/index.ts`, `apps/worker/src/server.ts`
 - local async transport adapters: `packages/queue/src/index.ts`
-- DB schema and bootstrap adapters: `packages/db/src/schema.ts`, `packages/db/src/bootstrap.ts`
+- DB schema, persistence, and bootstrap adapters: `packages/db/src/schema.ts`, `packages/db/src/persistence.ts`, `packages/db/src/bootstrap.ts`
 - runtime config model: `packages/config/src/index.ts`
 
 Current bootstrap note:
 
 - The repo still contains bootstrap/dev scaffolding in `packages/db/src/bootstrap.ts`, but mailbox reads, sync runs, and mailbox lease coordination now have DB-backed implementations in `packages/db/src/persistence.ts`.
-- Gmail sync execution still uses the stub provider in `packages/gmail/src/index.ts`; canonical message/thread persistence remains future work.
+- Gmail sync execution still uses the stub provider in `packages/gmail/src/index.ts`; canonical baseline `messages` / `threads` persistence now exists, but real Gmail history-based incremental sync remains future work.
 - `packages/queue` now contains usable local transport adapters, but BullMQ/Redis helpers are still present for compatibility.
 - `apps/worker` now defaults to HTTP runtime modes, but the BullMQ path is still present as `legacy_bullmq` scaffolding.
 - Treat all of those as scaffolding to replace, not as the final production design.

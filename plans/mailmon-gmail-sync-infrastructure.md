@@ -110,7 +110,7 @@ Implement the first narrow but real sync path: one connected mailbox can be sche
 - [x] A mailbox can transition into `initializing`, be scheduled through the shared mailbox dispatch interface, and complete an initial sync
 - [x] The worker acquires a mailbox lease before doing initial sync work
 - [x] `sync_runs` records the run lifecycle for the initial sync
-- [ ] Canonical message/thread baseline data is written durably
+- [x] Canonical message/thread baseline data is written durably
 - [x] Mailbox state transitions to `healthy` after a successful initial sync
 - [x] The initial sync path works with local dispatch adapters in local development and Pub/Sub-backed dispatch in staging/production without changing core workflow code
 - [x] Duplicate initial-sync dispatches are safe and become normal skipped attempts when another lease holder is active
