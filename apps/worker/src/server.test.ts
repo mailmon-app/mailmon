@@ -12,6 +12,10 @@ afterEach(async () => {
 const workerEnvFixture: WorkerEnv = {
   asyncTransportMode: "local",
   databaseUrl: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+  gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
+  gmailOauthClientId: null,
+  gmailOauthClientSecret: null,
+  gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
   gcpProjectId: null,
   gcpRegion: null,
   host: "127.0.0.1",

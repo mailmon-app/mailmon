@@ -28,6 +28,15 @@ export const mailboxes = pgTable("mailboxes", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const gmailMailboxCredentials = pgTable("gmail_mailbox_credentials", {
+  mailboxId: text("mailbox_id")
+    .primaryKey()
+    .references(() => mailboxes.id),
+  refreshToken: text("refresh_token").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const threads = pgTable(
   "threads",
   {

@@ -141,6 +141,7 @@ export interface CanonicalMessageRecord {
 export interface MailboxSyncSnapshot {
   readonly threads: ReadonlyArray<CanonicalThreadRecord>;
   readonly messages: ReadonlyArray<CanonicalMessageRecord>;
+  readonly deletedProviderMessageIds: ReadonlyArray<string>;
 }
 
 export interface MailboxSyncRequest {

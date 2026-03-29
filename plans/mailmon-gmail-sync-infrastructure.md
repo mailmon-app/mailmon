@@ -127,14 +127,14 @@ Implement the correctness-critical incremental sync loop. The worker should acce
 
 ### Acceptance criteria
 
-- [ ] Incremental sync reads Gmail history from the stored mailbox cursor
+- [x] Incremental sync reads Gmail history from the stored mailbox cursor
 - [x] Cursor advancement happens only after durable mailbox state writes succeed
 - [ ] Duplicate notifications do not create duplicate state changes or invalid cursor movement
 - [ ] Worker retries or crashes do not corrupt mailbox state or lose changes
-- [ ] One active sync per mailbox is enforced by the mailbox lease, not by queue semantics
-- [ ] The worker heartbeats the lease during long-running sync execution
-- [ ] Expired leases can be safely taken over by a new sync attempt
-- [ ] Losing the lease mid-run stops execution and records the correct sync run outcome
+- [x] One active sync per mailbox is enforced by the mailbox lease, not by queue semantics
+- [x] The worker heartbeats the lease during long-running sync execution
+- [x] Expired leases can be safely taken over by a new sync attempt
+- [x] Losing the lease mid-run stops execution and records the correct sync run outcome
 - [x] Gmail push remains a wake-up signal only; a direct sync dispatch path exists for local development without requiring local Pub/Sub
 
 ---

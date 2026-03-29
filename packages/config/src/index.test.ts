@@ -33,6 +33,10 @@ describe("WorkerConfig", () => {
       expect(config).toEqual({
         asyncTransportMode: "local",
         databaseUrl: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+        gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
+        gmailOauthClientId: null,
+        gmailOauthClientSecret: null,
+        gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         gcpProjectId: null,
         gcpRegion: null,
         host: "127.0.0.1",
@@ -58,6 +62,7 @@ describe("WorkerConfig", () => {
       expect(config.asyncTransportMode).toBe("legacy_bullmq");
       expect(config.redisUrl).toBe("redis://localhost:6379");
       expect(config.host).toBe("127.0.0.1");
+      expect(config.gmailOauthClientId).toBeNull();
     }).pipe(
       Effect.provide(WorkerConfig.layer),
       Effect.withConfigProvider(

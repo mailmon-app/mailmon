@@ -74,11 +74,12 @@ export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateSt
     readonly applySyncResult: (
       params: Readonly<{
         mailboxId: string;
+        leaseOwnerId: string;
         snapshot: MailboxSyncSnapshot;
         nextCursor: string | null;
         syncedAt: string;
       }>,
-    ) => Effect.Effect<void>;
+    ) => Effect.Effect<boolean>;
   }
 >() {}
 

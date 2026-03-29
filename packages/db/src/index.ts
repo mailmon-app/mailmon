@@ -8,9 +8,12 @@ export { createDb, createSqlClient } from "./client.js";
 export {
   createCorePersistenceLayer,
   createDatabaseLayer,
+  createGmailMailboxCredentialStoreLayer,
   createMailboxCatalogLayer,
   createMailboxSyncCoordinatorLayer,
   createMailboxStateStoreLayer,
+  createPersistenceServicesLayer,
   createSyncRunStoreLayer,
+  createWorkerPersistenceLayer,
   MailmonDatabase,
 } from "./persistence.js";

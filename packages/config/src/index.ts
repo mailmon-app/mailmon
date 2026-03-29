@@ -23,6 +23,16 @@ const loadPort = (fallbackPort: number) =>
 const loadHost = Config.option(nonEmptyString("HOST"));
 const loadGcpProjectId = Config.option(nonEmptyString("GCP_PROJECT_ID"));
 const loadGcpRegion = Config.option(nonEmptyString("GCP_REGION"));
+const loadGmailApiBaseUrl = nonEmptyString("MAILMON_GMAIL_API_BASE_URL").pipe(
+  Config.orElse(() => Config.succeed("https://gmail.googleapis.com/gmail/v1")),
+);
+const loadGmailOauthClientId = Config.option(nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_ID"));
+const loadGmailOauthClientSecret = Config.option(
+  nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_SECRET"),
+);
+const loadGmailOauthTokenUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_TOKEN_URL").pipe(
+  Config.orElse(() => Config.succeed("https://oauth2.googleapis.com/token")),
+);
 const loadMailboxWorkerBaseUrl = nonEmptyString("MAILMON_WORKER_BASE_URL").pipe(
   Config.orElse(() => Config.succeed("http://127.0.0.1:3001")),
 );
@@ -49,6 +59,10 @@ export interface ApiEnv extends CommonEnv {
 export interface WorkerEnv extends CommonEnv {
   readonly asyncTransportMode: AsyncTransportMode;
   readonly databaseUrl: string;
+  readonly gmailApiBaseUrl: string;
+  readonly gmailOauthClientId: string | null;
+  readonly gmailOauthClientSecret: string | null;
+  readonly gmailOauthTokenUrl: string;
   readonly gcpProjectId: string | null;
   readonly gcpRegion: string | null;
   readonly host: string;
@@ -104,6 +118,10 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
     Effect.all({
       asyncTransportMode: loadAsyncTransportMode,
       databaseUrl: loadDatabaseUrl,
+      gmailApiBaseUrl: loadGmailApiBaseUrl,
+      gmailOauthClientId: loadGmailOauthClientId,
+      gmailOauthClientSecret: loadGmailOauthClientSecret,
+      gmailOauthTokenUrl: loadGmailOauthTokenUrl,
       gcpProjectId: loadGcpProjectId,
       gcpRegion: loadGcpRegion,
       host: loadHost,
@@ -114,6 +132,10 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
       Effect.map((config) => ({
         asyncTransportMode: config.asyncTransportMode,
         databaseUrl: config.databaseUrl,
+        gmailApiBaseUrl: config.gmailApiBaseUrl,
+        gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
+        gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
+        gmailOauthTokenUrl: config.gmailOauthTokenUrl,
         gcpProjectId: normalizeOptional(config.gcpProjectId),
         gcpRegion: normalizeOptional(config.gcpRegion),
         host: Option.match(config.host, {
@@ -130,6 +152,10 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
   static readonly testLayer = Layer.succeed(this, {
     asyncTransportMode: "local",
     databaseUrl: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+    gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
+    gmailOauthClientId: null,
+    gmailOauthClientSecret: null,
+    gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
     gcpProjectId: null,
     gcpRegion: null,
     host: "127.0.0.1",

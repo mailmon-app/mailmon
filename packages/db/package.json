@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@mailmon/core": "workspace:*",
+    "@mailmon/gmail": "workspace:*",
     "drizzle-orm": "^0.45.1",
     "effect": "catalog:",
     "postgres": "^3.4.8"

@@ -126,10 +126,7 @@ export const runMailboxSync = (mailboxId: string) =>
       ),
     );
 
-    return yield* Effect.raceFirst(
-      mailboxProvider.syncMailbox({ mailbox, cursor }),
-      heartbeat,
-    ).pipe(
+    const syncWork = mailboxProvider.syncMailbox({ mailbox, cursor }).pipe(
       Effect.flatMap((providerResult) => {
         const completedAt = new Date().toISOString();
         const completion = createSyncRunCompletion({
@@ -151,12 +148,22 @@ export const runMailboxSync = (mailboxId: string) =>
         return mailboxStateStore
           .applySyncResult({
             mailboxId: mailbox.id,
+            leaseOwnerId,
             snapshot: providerResult.snapshot,
             nextCursor: providerResult.nextCursor,
             syncedAt: completedAt,
           })
-          .pipe(Effect.zipRight(syncRunStore.completeSyncRun(completion)), Effect.as(result));
+          .pipe(
+            Effect.flatMap((applied) =>
+              applied
+                ? syncRunStore.completeSyncRun(completion).pipe(Effect.as(result))
+                : Effect.fail(mailboxSyncLeaseLost(mailbox.id)),
+            ),
+          );
       }),
+    );
+
+    return yield* Effect.raceFirst(syncWork, heartbeat).pipe(
       Effect.catchAll((problem) => {
         const completedAt = new Date().toISOString();
         const completion = createSyncRunCompletion({

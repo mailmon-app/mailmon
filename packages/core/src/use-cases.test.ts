@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Either, Effect, Layer, Option } from "effect";
+import { Duration, Effect, Fiber, Layer, Option } from "effect";
+import * as TestClock from "effect/TestClock";
 
-import type { MailboxResource } from "./contracts.js";
+import type { CompletedSyncRun, MailboxResource } from "./contracts.js";
 import {
   MailboxCatalog,
   MailboxSyncCoordinator,
@@ -30,51 +31,72 @@ const catalogLayer = Layer.succeed(MailboxCatalog, {
     Effect.succeed(mailboxId === mailboxFixture.id ? Option.some(mailboxFixture) : Option.none()),
 });
 
-const syncRunStoreLayer = Layer.succeed(SyncRunStore, {
-  startSyncRun: (mailboxId: string) =>
-    Effect.succeed({
-      syncRunId: `sr_${mailboxId}`,
-      mailboxId,
-      startedAt: "2026-03-24T00:00:00.000Z",
-    }),
-  completeSyncRun: () => Effect.void,
-});
+const createSyncRunStoreTestLayer = (completedSyncRuns: Array<CompletedSyncRun>) =>
+  Layer.succeed(SyncRunStore, {
+    startSyncRun: (mailboxId: string) =>
+      Effect.succeed({
+        syncRunId: `sr_${mailboxId}`,
+        mailboxId,
+        startedAt: "2026-03-24T00:00:00.000Z",
+      }),
+    completeSyncRun: (result) =>
+      Effect.sync(() => {
+        completedSyncRuns.push(result);
+      }),
+  });
 
-const syncCoordinatorLayer = Layer.succeed(MailboxSyncCoordinator, {
-  acquireMailboxSyncLease: () =>
-    Effect.succeed({
-      acquired: true,
-      expiresAt: "2026-03-24T00:01:30.000Z",
-    }),
-  renewMailboxSyncLease: () =>
-    Effect.succeed({
-      renewed: true,
-      expiresAt: "2026-03-24T00:01:30.000Z",
-    }),
-  releaseMailboxSyncLease: () => Effect.void,
-});
+const createSyncCoordinatorTestLayer = (
+  params: Readonly<{
+    acquisitionSucceeds?: boolean;
+    releaseCalls?: Array<{
+      mailboxId: string;
+      leaseOwnerId: string;
+    }>;
+    renewCalls?: Array<{
+      mailboxId: string;
+      leaseOwnerId: string;
+      heartbeatAt: string;
+      expiresAt: string;
+    }>;
+    renewResults?: ReadonlyArray<boolean>;
+  }> = {},
+) =>
+  Layer.succeed(MailboxSyncCoordinator, {
+    acquireMailboxSyncLease: () =>
+      Effect.succeed({
+        acquired: params.acquisitionSucceeds ?? true,
+        expiresAt: "2026-03-24T00:01:30.000Z",
+      }),
+    renewMailboxSyncLease: (lease) =>
+      Effect.sync(() => {
+        params.renewCalls?.push(lease);
+        const renewAttempt = params.renewCalls?.length ?? 1;
+        const renewed = params.renewResults?.[renewAttempt - 1] ?? true;
 
-const busySyncCoordinatorLayer = Layer.succeed(MailboxSyncCoordinator, {
-  acquireMailboxSyncLease: () =>
-    Effect.succeed({
-      acquired: false,
-      expiresAt: "2026-03-24T00:01:30.000Z",
-    }),
-  renewMailboxSyncLease: () =>
-    Effect.succeed({
-      renewed: false,
-      expiresAt: null,
-    }),
-  releaseMailboxSyncLease: () => Effect.void,
-});
+        return {
+          renewed,
+          expiresAt: renewed ? lease.expiresAt : null,
+        };
+      }),
+    releaseMailboxSyncLease: (lease) =>
+      Effect.sync(() => {
+        params.releaseCalls?.push(lease);
+      }),
+  });
 
-const createSyncProviderTestLayer = (observedCursors: Array<string | null>) =>
+const createSyncProviderTestLayer = (
+  observedCursors: Array<string | null>,
+  options: Readonly<{
+    delayMs?: number;
+  }> = {},
+) =>
   Layer.succeed(MailboxSyncProvider, {
     syncMailbox: ({ cursor }) =>
       Effect.sync(() => {
         observedCursors.push(cursor);
-
-        return {
+      }).pipe(
+        Effect.zipRight(Effect.sleep(Duration.millis(options.delayMs ?? 0))),
+        Effect.as({
           snapshot: {
             threads: [
               {
@@ -100,33 +122,47 @@ const createSyncProviderTestLayer = (observedCursors: Array<string | null>) =>
                 labelIds: ["INBOX"],
               },
             ],
+            deletedProviderMessageIds: [],
           },
           eventsEmitted: 2,
           nextCursor: "hist_2",
-        };
-      }),
+        }),
+      ),
   });
 
 const createMailboxStateStoreTestLayer = (
   currentCursor: string | null,
   appliedSnapshots: Array<{
     mailboxId: string;
+    leaseOwnerId: string;
     threadCount: number;
     messageCount: number;
     nextCursor: string | null;
   }>,
+  options: Readonly<{
+    applyDelayMs?: number;
+    applied?: boolean;
+  }> = {},
 ) =>
   Layer.succeed(MailboxStateStore, {
     getMailboxCursor: () => Effect.succeed(currentCursor),
-    applySyncResult: ({ mailboxId, nextCursor, snapshot }) =>
-      Effect.sync(() => {
-        appliedSnapshots.push({
-          mailboxId,
-          threadCount: snapshot.threads.length,
-          messageCount: snapshot.messages.length,
-          nextCursor,
-        });
-      }),
+    applySyncResult: ({ mailboxId, leaseOwnerId, nextCursor, snapshot }) =>
+      Effect.sleep(Duration.millis(options.applyDelayMs ?? 0)).pipe(
+        Effect.map(() => options.applied ?? true),
+        Effect.tap((applied) =>
+          applied
+            ? Effect.sync(() => {
+                appliedSnapshots.push({
+                  mailboxId,
+                  leaseOwnerId,
+                  threadCount: snapshot.threads.length,
+                  messageCount: snapshot.messages.length,
+                  nextCursor,
+                });
+              })
+            : Effect.void,
+        ),
+      ),
   });
 
 const dispatchedMailboxIds: Array<string> = [];
@@ -141,14 +177,10 @@ const syncDispatcherLayer = Layer.succeed(MailboxSyncDispatcher, {
 describe("getMailboxOrFail", () => {
   it.effect("fails with a structured problem when the mailbox is missing", () =>
     getMailboxOrFail("mbx_missing").pipe(
-      Effect.either,
-      Effect.map((result) => {
-        expect(Either.isLeft(result)).toBe(true);
-
-        if (Either.isLeft(result)) {
-          expect(result.left.code).toBe("mailbox_not_found");
-          expect(result.left.status).toBe(404);
-        }
+      Effect.flip,
+      Effect.map((problem) => {
+        expect(problem.code).toBe("mailbox_not_found");
+        expect(problem.status).toBe(404);
       }),
       Effect.provide(catalogLayer),
     ),
@@ -172,16 +204,18 @@ describe("dispatchMailboxSync", () => {
 
 describe("runMailboxSync", () => {
   it.effect("coordinates mailbox lookup, provider sync, and sync run completion", () =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const appliedSnapshots: Array<{
         mailboxId: string;
+        leaseOwnerId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;
       }> = [];
       const observedCursors: Array<string | null> = [];
+      const completedSyncRuns: Array<CompletedSyncRun> = [];
 
-      return runMailboxSync(mailboxFixture.id).pipe(
+      return yield* runMailboxSync(mailboxFixture.id).pipe(
         Effect.map((result) => {
           expect(result.mailboxId).toBe(mailboxFixture.id);
           expect(result.syncRunId).toBe("sr_mbx_demo");
@@ -191,36 +225,46 @@ describe("runMailboxSync", () => {
           expect(appliedSnapshots).toEqual([
             {
               mailboxId: mailboxFixture.id,
+              leaseOwnerId: expect.any(String),
               threadCount: 1,
               messageCount: 1,
               nextCursor: "hist_2",
             },
+          ]);
+          expect(completedSyncRuns).toEqual([
+            expect.objectContaining({
+              mailboxId: mailboxFixture.id,
+              status: "completed",
+              eventsEmitted: 2,
+              nextCursor: "hist_2",
+            }),
           ]);
         }),
         Effect.provide(
           Layer.mergeAll(
             catalogLayer,
             createMailboxStateStoreTestLayer(null, appliedSnapshots),
-            syncRunStoreLayer,
-            syncCoordinatorLayer,
+            createSyncRunStoreTestLayer(completedSyncRuns),
+            createSyncCoordinatorTestLayer(),
             createSyncProviderTestLayer(observedCursors),
           ),
         ),
       );
-    }).pipe(Effect.flatten),
+    }),
   );
 
   it.effect("passes the stored cursor into the provider for incremental sync", () =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const appliedSnapshots: Array<{
         mailboxId: string;
+        leaseOwnerId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;
       }> = [];
       const observedCursors: Array<string | null> = [];
 
-      return runMailboxSync(mailboxFixture.id).pipe(
+      return yield* runMailboxSync(mailboxFixture.id).pipe(
         Effect.map((result) => {
           expect(result.status).toBe("completed");
           expect(result.nextCursor).toBe("hist_2");
@@ -228,6 +272,7 @@ describe("runMailboxSync", () => {
           expect(appliedSnapshots).toEqual([
             {
               mailboxId: mailboxFixture.id,
+              leaseOwnerId: expect.any(String),
               threadCount: 1,
               messageCount: 1,
               nextCursor: "hist_2",
@@ -238,26 +283,28 @@ describe("runMailboxSync", () => {
           Layer.mergeAll(
             catalogLayer,
             createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
-            syncRunStoreLayer,
-            syncCoordinatorLayer,
+            createSyncRunStoreTestLayer([]),
+            createSyncCoordinatorTestLayer(),
             createSyncProviderTestLayer(observedCursors),
           ),
         ),
       );
-    }).pipe(Effect.flatten),
+    }),
   );
 
   it.effect("returns a skipped result when another worker holds the mailbox lease", () =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const appliedSnapshots: Array<{
         mailboxId: string;
+        leaseOwnerId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;
       }> = [];
       const observedCursors: Array<string | null> = [];
+      const completedSyncRuns: Array<CompletedSyncRun> = [];
 
-      return runMailboxSync(mailboxFixture.id).pipe(
+      return yield* runMailboxSync(mailboxFixture.id).pipe(
         Effect.map((result) => {
           expect(result.mailboxId).toBe(mailboxFixture.id);
           expect(result.syncRunId).toBe("sr_mbx_demo");
@@ -266,17 +313,165 @@ describe("runMailboxSync", () => {
           expect(result.nextCursor).toBeNull();
           expect(observedCursors).toEqual([]);
           expect(appliedSnapshots).toEqual([]);
+          expect(completedSyncRuns).toEqual([
+            expect.objectContaining({
+              mailboxId: mailboxFixture.id,
+              status: "skipped_due_to_active_lease",
+              eventsEmitted: 0,
+              nextCursor: null,
+            }),
+          ]);
         }),
         Effect.provide(
           Layer.mergeAll(
             catalogLayer,
             createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
-            syncRunStoreLayer,
-            busySyncCoordinatorLayer,
+            createSyncRunStoreTestLayer(completedSyncRuns),
+            createSyncCoordinatorTestLayer({
+              acquisitionSucceeds: false,
+            }),
             createSyncProviderTestLayer(observedCursors),
           ),
         ),
       );
-    }).pipe(Effect.flatten),
+    }),
+  );
+
+  it.effect("keeps heartbeating the mailbox lease until state writes finish", () =>
+    Effect.gen(function* () {
+      const appliedSnapshots: Array<{
+        mailboxId: string;
+        leaseOwnerId: string;
+        threadCount: number;
+        messageCount: number;
+        nextCursor: string | null;
+      }> = [];
+      const observedCursors: Array<string | null> = [];
+      const completedSyncRuns: Array<CompletedSyncRun> = [];
+      const renewCalls: Array<{
+        mailboxId: string;
+        leaseOwnerId: string;
+        heartbeatAt: string;
+        expiresAt: string;
+      }> = [];
+      const releaseCalls: Array<{
+        mailboxId: string;
+        leaseOwnerId: string;
+      }> = [];
+
+      const fiber = yield* Effect.fork(
+        runMailboxSync(mailboxFixture.id).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              catalogLayer,
+              createMailboxStateStoreTestLayer(null, appliedSnapshots, {
+                applyDelayMs: 31_000,
+              }),
+              createSyncRunStoreTestLayer(completedSyncRuns),
+              createSyncCoordinatorTestLayer({
+                releaseCalls,
+                renewCalls,
+              }),
+              createSyncProviderTestLayer(observedCursors),
+            ),
+          ),
+        ),
+      );
+
+      yield* TestClock.adjust(Duration.millis(31_000));
+
+      const result = yield* Fiber.join(fiber);
+
+      expect(result.status).toBe("completed");
+      expect(observedCursors).toEqual([null]);
+      expect(renewCalls).toHaveLength(1);
+      expect(appliedSnapshots).toEqual([
+        {
+          mailboxId: mailboxFixture.id,
+          leaseOwnerId: expect.any(String),
+          threadCount: 1,
+          messageCount: 1,
+          nextCursor: "hist_2",
+        },
+      ]);
+      expect(completedSyncRuns).toEqual([
+        expect.objectContaining({
+          mailboxId: mailboxFixture.id,
+          status: "completed",
+          eventsEmitted: 2,
+          nextCursor: "hist_2",
+        }),
+      ]);
+      expect(releaseCalls).toHaveLength(1);
+    }),
+  );
+
+  it.effect("stops execution and records lease_lost when heartbeat renewal fails mid-run", () =>
+    Effect.gen(function* () {
+      const appliedSnapshots: Array<{
+        mailboxId: string;
+        leaseOwnerId: string;
+        threadCount: number;
+        messageCount: number;
+        nextCursor: string | null;
+      }> = [];
+      const observedCursors: Array<string | null> = [];
+      const completedSyncRuns: Array<CompletedSyncRun> = [];
+      const renewCalls: Array<{
+        mailboxId: string;
+        leaseOwnerId: string;
+        heartbeatAt: string;
+        expiresAt: string;
+      }> = [];
+      const releaseCalls: Array<{
+        mailboxId: string;
+        leaseOwnerId: string;
+      }> = [];
+
+      const fiber = yield* Effect.fork(
+        runMailboxSync(mailboxFixture.id).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              catalogLayer,
+              createMailboxStateStoreTestLayer(null, appliedSnapshots, {
+                applyDelayMs: 31_000,
+              }),
+              createSyncRunStoreTestLayer(completedSyncRuns),
+              createSyncCoordinatorTestLayer({
+                releaseCalls,
+                renewCalls,
+                renewResults: [false],
+              }),
+              createSyncProviderTestLayer(observedCursors),
+            ),
+          ),
+          Effect.either,
+        ),
+      );
+
+      yield* TestClock.adjust(Duration.millis(30_000));
+
+      const result = yield* Fiber.join(fiber);
+
+      expect(result._tag).toBe("Left");
+
+      if (result._tag === "Left") {
+        expect(result.left.code).toBe("mailbox_sync_lease_lost");
+      }
+
+      expect(observedCursors).toEqual([null]);
+      expect(renewCalls).toHaveLength(1);
+      expect(appliedSnapshots).toEqual([]);
+      expect(completedSyncRuns).toEqual([
+        expect.objectContaining({
+          mailboxId: mailboxFixture.id,
+          status: "lease_lost",
+          eventsEmitted: 0,
+          nextCursor: null,
+          detail: "mailbox_sync_lease_lost",
+        }),
+      ]);
+      expect(releaseCalls).toHaveLength(1);
+    }),
   );
 });

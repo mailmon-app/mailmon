@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { bootstrap, createCorePersistenceLayer, MailmonDatabase, schema } from "./index.js";
+import {
+  bootstrap,
+  createCorePersistenceLayer,
+  createWorkerPersistenceLayer,
+  MailmonDatabase,
+  schema,
+} from "./index.js";
 
 describe("schema", () => {
   it("exports the bootstrap and mailbox tables", () => {
     expect(schema.bootstrapState).toBeDefined();
     expect(schema.mailboxes).toBeDefined();
+    expect(schema.gmailMailboxCredentials).toBeDefined();
     expect(schema.threads).toBeDefined();
     expect(schema.messages).toBeDefined();
     expect(schema.syncRuns).toBeDefined();
@@ -18,6 +25,7 @@ describe("schema", () => {
 
   it("exports DB-backed core persistence helpers", () => {
     expect(createCorePersistenceLayer).toBeDefined();
+    expect(createWorkerPersistenceLayer).toBeDefined();
     expect(MailmonDatabase).toBeDefined();
   });
 });

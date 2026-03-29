@@ -12,11 +12,12 @@ import {
   type MailboxSyncLeaseRenewal,
   type StartedSyncRun,
 } from "@mailmon/core";
-import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
+import { GmailMailboxCredentialStore } from "@mailmon/gmail";
+import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { createDb } from "./client.js";
-import { mailboxes, messages, syncRuns, threads } from "./schema.js";
+import { gmailMailboxCredentials, mailboxes, messages, syncRuns, threads } from "./schema.js";
 
 type DatabaseHandle = ReturnType<typeof createDb>;
 type MailboxRow = typeof mailboxes.$inferSelect;
@@ -242,11 +243,31 @@ export const createMailboxStateStoreLayer = Layer.effect(
 
           return row?.cursor ?? null;
         }),
-      applySyncResult: ({ mailboxId, nextCursor, snapshot, syncedAt }) =>
+      applySyncResult: ({ mailboxId, leaseOwnerId, nextCursor, snapshot, syncedAt }) =>
         Effect.promise(async () => {
           const syncedAtDate = toDate(syncedAt);
 
-          await database.db.transaction(async (transaction) => {
+          return database.db.transaction(async (transaction) => {
+            const leaseCheckAt = new Date();
+            const [row] = await transaction
+              .select({
+                activeSyncLeaseExpiresAt: mailboxes.activeSyncLeaseExpiresAt,
+                activeSyncLeaseOwner: mailboxes.activeSyncLeaseOwner,
+                initializedAt: mailboxes.initializedAt,
+              })
+              .from(mailboxes)
+              .where(eq(mailboxes.id, mailboxId))
+              .limit(1);
+
+            if (
+              row === undefined ||
+              row.activeSyncLeaseOwner !== leaseOwnerId ||
+              row.activeSyncLeaseExpiresAt === null ||
+              row.activeSyncLeaseExpiresAt <= leaseCheckAt
+            ) {
+              return false;
+            }
+
             for (const thread of snapshot.threads) {
               await transaction
                 .insert(threads)
@@ -267,13 +288,26 @@ export const createMailboxStateStoreLayer = Layer.effect(
                 });
             }
 
-            const [row] = await transaction
-              .select({
-                initializedAt: mailboxes.initializedAt,
-              })
-              .from(mailboxes)
-              .where(eq(mailboxes.id, mailboxId))
-              .limit(1);
+            if (snapshot.deletedProviderMessageIds.length > 0) {
+              await transaction
+                .delete(messages)
+                .where(
+                  and(
+                    eq(messages.mailboxId, mailboxId),
+                    inArray(messages.providerMessageId, [...snapshot.deletedProviderMessageIds]),
+                  ),
+                );
+
+              await transaction.execute(sql`
+                DELETE FROM ${threads}
+                WHERE ${threads.mailboxId} = ${mailboxId}
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM ${messages}
+                    WHERE ${messages.threadId} = ${threads.id}
+                  )
+              `);
+            }
 
             await transaction
               .update(mailboxes)
@@ -289,7 +323,32 @@ export const createMailboxStateStoreLayer = Layer.effect(
                 updatedAt: syncedAtDate,
               })
               .where(eq(mailboxes.id, mailboxId));
+
+            return true;
           });
+        }),
+    };
+  }),
+);
+
+export const createGmailMailboxCredentialStoreLayer = Layer.effect(
+  GmailMailboxCredentialStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      getGmailMailboxCredential: (mailboxId: string) =>
+        Effect.promise(async () => {
+          const [row] = await database.db
+            .select({
+              mailboxId: gmailMailboxCredentials.mailboxId,
+              refreshToken: gmailMailboxCredentials.refreshToken,
+            })
+            .from(gmailMailboxCredentials)
+            .where(eq(gmailMailboxCredentials.mailboxId, mailboxId))
+            .limit(1);
+
+          return row ?? null;
         }),
     };
   }),
@@ -487,10 +546,17 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
   }),
 );
 
+export const createPersistenceServicesLayer = Layer.mergeAll(
+  createMailboxCatalogLayer,
+  createMailboxStateStoreLayer,
+  createMailboxSyncCoordinatorLayer,
+  createSyncRunStoreLayer,
+);
+
 export const createCorePersistenceLayer = (connectionString: string) =>
-  Layer.mergeAll(
-    createMailboxCatalogLayer,
-    createMailboxStateStoreLayer,
-    createMailboxSyncCoordinatorLayer,
-    createSyncRunStoreLayer,
-  ).pipe(Layer.provide(createDatabaseLayer(connectionString)));
+  createPersistenceServicesLayer.pipe(Layer.provide(createDatabaseLayer(connectionString)));
+
+export const createWorkerPersistenceLayer = (connectionString: string) =>
+  Layer.mergeAll(createPersistenceServicesLayer, createGmailMailboxCredentialStoreLayer).pipe(
+    Layer.provide(createDatabaseLayer(connectionString)),
+  );
