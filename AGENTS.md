@@ -74,7 +74,8 @@ Start here when tracing behavior:
 
 Current bootstrap note:
 
-- The repo still uses bootstrap fixture layers in `packages/db/src/bootstrap.ts` and a stub provider in `packages/gmail/src/index.ts`.
+- The repo still contains bootstrap/dev scaffolding in `packages/db/src/bootstrap.ts`, but mailbox reads, sync runs, and mailbox lease coordination now have DB-backed implementations in `packages/db/src/persistence.ts`.
+- Gmail sync execution still uses the stub provider in `packages/gmail/src/index.ts`; canonical message/thread persistence remains future work.
 - `packages/queue` now contains usable local transport adapters, but BullMQ/Redis helpers are still present for compatibility.
 - `apps/worker` now defaults to HTTP runtime modes, but the BullMQ path is still present as `legacy_bullmq` scaffolding.
 - Treat all of those as scaffolding to replace, not as the final production design.

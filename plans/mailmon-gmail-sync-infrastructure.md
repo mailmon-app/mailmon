@@ -73,10 +73,10 @@ Create the first durable mailbox read path from Postgres through `@mailmon/core`
 
 ### Acceptance criteria
 
-- [ ] `mailboxes` exists as a real persistent table and replaces bootstrap-only mailbox fixtures for API reads
-- [ ] `GET /v1/mailboxes/{mailbox_id}` returns a mailbox resource with the PRD state fields
-- [ ] Missing mailboxes return the shared problem envelope with `404 Not Found`
-- [ ] Mailbox operational degradation is represented on the mailbox resource, not as a transport error
+- [x] `mailboxes` exists as a real persistent table and replaces bootstrap-only mailbox fixtures for API reads
+- [x] `GET /v1/mailboxes/{mailbox_id}` returns a mailbox resource with the PRD state fields
+- [x] Missing mailboxes return the shared problem envelope with `404 Not Found`
+- [x] Mailbox operational degradation is represented on the mailbox resource, not as a transport error
 
 ---
 
@@ -107,13 +107,13 @@ Implement the first narrow but real sync path: one connected mailbox can be sche
 
 ### Acceptance criteria
 
-- [ ] A mailbox can transition into `initializing`, be scheduled through the shared mailbox dispatch interface, and complete an initial sync
-- [ ] The worker acquires a mailbox lease before doing initial sync work
-- [ ] `sync_runs` records the run lifecycle for the initial sync
+- [x] A mailbox can transition into `initializing`, be scheduled through the shared mailbox dispatch interface, and complete an initial sync
+- [x] The worker acquires a mailbox lease before doing initial sync work
+- [x] `sync_runs` records the run lifecycle for the initial sync
 - [ ] Canonical message/thread baseline data is written durably
-- [ ] Mailbox state transitions to `healthy` after a successful initial sync
-- [ ] The initial sync path works with local dispatch adapters in local development and Pub/Sub-backed dispatch in staging/production without changing core workflow code
-- [ ] Duplicate initial-sync dispatches are safe and become normal skipped attempts when another lease holder is active
+- [x] Mailbox state transitions to `healthy` after a successful initial sync
+- [x] The initial sync path works with local dispatch adapters in local development and Pub/Sub-backed dispatch in staging/production without changing core workflow code
+- [x] Duplicate initial-sync dispatches are safe and become normal skipped attempts when another lease holder is active
 
 ---
 
@@ -135,7 +135,7 @@ Implement the correctness-critical incremental sync loop. The worker should acce
 - [ ] The worker heartbeats the lease during long-running sync execution
 - [ ] Expired leases can be safely taken over by a new sync attempt
 - [ ] Losing the lease mid-run stops execution and records the correct sync run outcome
-- [ ] Gmail push remains a wake-up signal only; a direct sync dispatch path exists for local development without requiring local Pub/Sub
+- [x] Gmail push remains a wake-up signal only; a direct sync dispatch path exists for local development without requiring local Pub/Sub
 
 ---
 
