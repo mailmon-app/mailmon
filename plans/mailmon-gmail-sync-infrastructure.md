@@ -128,7 +128,7 @@ Implement the correctness-critical incremental sync loop. The worker should acce
 ### Acceptance criteria
 
 - [ ] Incremental sync reads Gmail history from the stored mailbox cursor
-- [ ] Cursor advancement happens only after durable mailbox state writes succeed
+- [x] Cursor advancement happens only after durable mailbox state writes succeed
 - [ ] Duplicate notifications do not create duplicate state changes or invalid cursor movement
 - [ ] Worker retries or crashes do not corrupt mailbox state or lose changes
 - [ ] One active sync per mailbox is enforced by the mailbox lease, not by queue semantics
