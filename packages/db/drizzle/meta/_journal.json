@@ -43,6 +43,13 @@
       "when": 1774777902804,
       "tag": "0005_natural_valeria_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1775679362000,
+      "tag": "0006_clumsy_iron_monger",
+      "breakpoints": true
     }
   ]
 }

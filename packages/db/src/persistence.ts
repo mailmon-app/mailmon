@@ -1,26 +1,83 @@
+import { createHash } from "node:crypto";
+
 import {
   MailboxCatalog,
+  MailboxConnectSessionStore,
   MailboxSyncCoordinator,
   MailboxStateStore,
   SyncRunStore,
+  WorkspaceApiKeyStore,
+  mailboxAlreadyConnected,
   type CanonicalMessageRecord,
   type CanonicalThreadRecord,
+  type CompletedMailboxConnectSession,
   type CompletedSyncRun,
   type MailboxOperationalError,
   type MailboxResource,
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncLeaseRenewal,
   type StartedSyncRun,
+  type StoredConnectSession,
+  type WorkspaceApiKeyIdentity,
 } from "@mailmon/core";
 import { GmailMailboxCredentialStore } from "@mailmon/gmail";
 import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { createDb } from "./client.js";
-import { gmailMailboxCredentials, mailboxes, messages, syncRuns, threads } from "./schema.js";
+import {
+  gmailMailboxCredentials,
+  mailboxConnectSessions,
+  mailboxes,
+  messages,
+  syncRuns,
+  threads,
+  workspaceApiKeys,
+} from "./schema.js";
 
 type DatabaseHandle = ReturnType<typeof createDb>;
 type MailboxRow = typeof mailboxes.$inferSelect;
+type ConnectSessionRow = typeof mailboxConnectSessions.$inferSelect;
+
+const hashApiKey = (apiKey: string) => {
+  return createHash("sha256").update(apiKey).digest("hex");
+};
+
+const normalizeEmailAddress = (emailAddress: string) => {
+  return emailAddress.trim().toLowerCase();
+};
+
+const createMailboxId = () => {
+  return `mbx_${globalThis.crypto.randomUUID()}`;
+};
+
+const isProblemDetails = (
+  value: unknown,
+): value is Readonly<{
+  code: string;
+  detail: string;
+  retryable: boolean;
+  status: number;
+  title: string;
+  type: string;
+}> => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string" &&
+    "title" in value &&
+    typeof value.title === "string" &&
+    "status" in value &&
+    typeof value.status === "number" &&
+    "code" in value &&
+    typeof value.code === "string" &&
+    "detail" in value &&
+    typeof value.detail === "string" &&
+    "retryable" in value &&
+    typeof value.retryable === "boolean"
+  );
+};
 
 const toMailboxProvider = (provider: string): MailboxResource["provider"] => {
   switch (provider) {
@@ -104,6 +161,27 @@ const toMailboxResource = (row: MailboxRow): MailboxResource => {
     initializedAt: toIsoString(row.initializedAt),
     lastSuccessfulSyncAt: toIsoString(row.lastSuccessfulSyncAt),
     lastError: toMailboxOperationalError(row),
+  };
+};
+
+const toStoredConnectSession = (row: ConnectSessionRow): StoredConnectSession => {
+  return {
+    id: row.id,
+    provider: toMailboxProvider(row.provider),
+    workspaceId: row.workspaceId,
+    tenantExternalId: row.tenantExternalId,
+    mailboxExternalId: row.mailboxExternalId,
+    redirectUrl: row.redirectUrl,
+    codeVerifier: row.codeVerifier,
+    expiresAt: row.expiresAt.toISOString(),
+    mailboxId: row.mailboxId,
+    completedAt: toIsoString(row.completedAt),
+  };
+};
+
+const toWorkspaceApiKeyIdentity = (workspaceId: string): WorkspaceApiKeyIdentity => {
+  return {
+    workspaceId,
   };
 };
 
@@ -211,15 +289,202 @@ export const createMailboxCatalogLayer = Layer.effect(
     const database = yield* MailmonDatabase;
 
     return {
-      getMailbox: (mailboxId: string) =>
+      getMailbox: (
+        mailboxId: string,
+        options: Readonly<{
+          workspaceId?: string;
+        }> = {},
+      ) =>
         Effect.promise(async () => {
           const [row] = await database.db
             .select()
             .from(mailboxes)
-            .where(eq(mailboxes.id, mailboxId))
+            .where(
+              options.workspaceId === undefined
+                ? eq(mailboxes.id, mailboxId)
+                : and(eq(mailboxes.id, mailboxId), eq(mailboxes.workspaceId, options.workspaceId)),
+            )
             .limit(1);
 
           return Option.fromNullable(row).pipe(Option.map(toMailboxResource));
+        }),
+    };
+  }),
+);
+
+export const createWorkspaceApiKeyStoreLayer = Layer.effect(
+  WorkspaceApiKeyStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      getWorkspaceForApiKey: (apiKey: string) =>
+        Effect.promise(async () => {
+          const [row] = await database.db
+            .select({
+              workspaceId: workspaceApiKeys.workspaceId,
+            })
+            .from(workspaceApiKeys)
+            .where(eq(workspaceApiKeys.apiKeyHash, hashApiKey(apiKey)))
+            .limit(1);
+
+          return Option.fromNullable(row).pipe(
+            Option.map((value) => toWorkspaceApiKeyIdentity(value.workspaceId)),
+          );
+        }),
+    };
+  }),
+);
+
+export const createMailboxConnectSessionStoreLayer = Layer.effect(
+  MailboxConnectSessionStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      createConnectSession: (params) =>
+        Effect.promise(async () => {
+          const [row] = await database.db
+            .insert(mailboxConnectSessions)
+            .values({
+              id: params.id,
+              provider: params.provider,
+              workspaceId: params.workspaceId,
+              tenantExternalId: params.tenantExternalId,
+              mailboxExternalId: params.mailboxExternalId,
+              redirectUrl: params.redirectUrl,
+              codeVerifier: params.codeVerifier,
+              expiresAt: toDate(params.expiresAt),
+            })
+            .returning();
+
+          if (row === undefined) {
+            throw new Error(`Connect session ${params.id} was not created.`);
+          }
+
+          return toStoredConnectSession(row);
+        }),
+      getConnectSession: (connectSessionId: string) =>
+        Effect.promise(async () => {
+          const [row] = await database.db
+            .select()
+            .from(mailboxConnectSessions)
+            .where(eq(mailboxConnectSessions.id, connectSessionId))
+            .limit(1);
+
+          return Option.fromNullable(row).pipe(Option.map(toStoredConnectSession));
+        }),
+      completeConnectSession: (params) =>
+        Effect.tryPromise({
+          catch: (error) => {
+            if (isProblemDetails(error)) {
+              return error;
+            }
+
+            throw error;
+          },
+          try: async () => {
+            return database.db.transaction(async (transaction) => {
+              const [connectSession] = await transaction
+                .select()
+                .from(mailboxConnectSessions)
+                .where(eq(mailboxConnectSessions.id, params.connectSessionId))
+                .limit(1);
+
+              if (connectSession === undefined) {
+                throw new Error(`Connect session ${params.connectSessionId} does not exist.`);
+              }
+
+              if (connectSession.mailboxId !== null) {
+                const [existingMailbox] = await transaction
+                  .select()
+                  .from(mailboxes)
+                  .where(eq(mailboxes.id, connectSession.mailboxId))
+                  .limit(1);
+
+                if (existingMailbox === undefined) {
+                  throw new Error(
+                    `Mailbox ${connectSession.mailboxId} referenced by connect session ${connectSession.id} does not exist.`,
+                  );
+                }
+
+                return {
+                  mailbox: toMailboxResource(existingMailbox),
+                  redirectUrl: connectSession.redirectUrl,
+                  created: false,
+                } satisfies CompletedMailboxConnectSession;
+              }
+
+              const normalizedEmailAddress = normalizeEmailAddress(params.providerAccountEmail);
+              const [existingMailbox] = await transaction
+                .select()
+                .from(mailboxes)
+                .where(
+                  and(
+                    eq(mailboxes.workspaceId, connectSession.workspaceId),
+                    eq(mailboxes.provider, connectSession.provider),
+                    or(
+                      eq(mailboxes.emailAddress, normalizedEmailAddress),
+                      and(
+                        eq(mailboxes.tenantExternalId, connectSession.tenantExternalId),
+                        eq(mailboxes.mailboxExternalId, connectSession.mailboxExternalId),
+                      ),
+                    ),
+                  ),
+                )
+                .limit(1);
+
+              if (existingMailbox !== undefined) {
+                throw mailboxAlreadyConnected(existingMailbox.id);
+              }
+
+              const createdAt = toDate(params.connectedAt);
+              const mailboxId = createMailboxId();
+
+              const [createdMailbox] = await transaction
+                .insert(mailboxes)
+                .values({
+                  id: mailboxId,
+                  workspaceId: connectSession.workspaceId,
+                  provider: connectSession.provider,
+                  tenantExternalId: connectSession.tenantExternalId,
+                  mailboxExternalId: connectSession.mailboxExternalId,
+                  emailAddress: normalizedEmailAddress,
+                  status: "active",
+                  syncState: "initializing",
+                  watchState: "active",
+                  createdAt,
+                  updatedAt: createdAt,
+                })
+                .returning();
+
+              if (createdMailbox === undefined) {
+                throw new Error(`Mailbox ${mailboxId} was not created.`);
+              }
+
+              await transaction.insert(gmailMailboxCredentials).values({
+                mailboxId,
+                refreshToken: params.refreshToken,
+                createdAt,
+                updatedAt: createdAt,
+              });
+
+              await transaction
+                .update(mailboxConnectSessions)
+                .set({
+                  mailboxId,
+                  completedAt: createdAt,
+                  updatedAt: createdAt,
+                })
+                .where(eq(mailboxConnectSessions.id, connectSession.id));
+
+              return {
+                mailbox: toMailboxResource(createdMailbox),
+                redirectUrl: connectSession.redirectUrl,
+                created: true,
+              } satisfies CompletedMailboxConnectSession;
+            });
+          },
         }),
     };
   }),
@@ -572,9 +837,11 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
 
 export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxCatalogLayer,
+  createMailboxConnectSessionStoreLayer,
   createMailboxStateStoreLayer,
   createMailboxSyncCoordinatorLayer,
   createSyncRunStoreLayer,
+  createWorkspaceApiKeyStoreLayer,
 );
 
 export const createCorePersistenceLayer = (connectionString: string) =>
