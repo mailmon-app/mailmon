@@ -213,7 +213,10 @@ const toThreadMessageSummaryResource = (
   };
 };
 
-const toThreadResource = (row: ThreadRow, threadMessages: ReadonlyArray<MessageRow>): ThreadResource => {
+const toThreadResource = (
+  row: ThreadRow,
+  threadMessages: ReadonlyArray<MessageRow>,
+): ThreadResource => {
   return {
     ...toThreadListItemResource(row),
     messages: threadMessages.map((message) => toThreadMessageSummaryResource(message)),
@@ -519,7 +522,9 @@ export const createMailboxQueryCatalogLayer = Layer.effect(
             )
             .limit(1);
 
-          return Option.fromNullable(row?.message).pipe(Option.map((message) => toMessageResource(message)));
+          return Option.fromNullable(row?.message).pipe(
+            Option.map((message) => toMessageResource(message)),
+          );
         }),
       listThreads: (request: ListMailboxThreadsRequest) =>
         Effect.tryPromise({

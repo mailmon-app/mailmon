@@ -1,4 +1,4 @@
-import { boolean, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const bootstrapState = pgTable("bootstrap_state", {
   name: text("name").primaryKey(),
@@ -112,6 +112,11 @@ export const threads = pgTable(
       table.mailboxId,
       table.providerThreadId,
     ),
+    mailboxNewestFirstIndex: index("threads_mailbox_last_message_at_id_idx").on(
+      table.mailboxId,
+      table.lastMessageAt.desc(),
+      table.id.desc(),
+    ),
   }),
 );
 
@@ -140,6 +145,11 @@ export const messages = pgTable(
     mailboxProviderMessageIdUnique: unique("messages_mailbox_provider_message_id_unique").on(
       table.mailboxId,
       table.providerMessageId,
+    ),
+    mailboxNewestFirstIndex: index("messages_mailbox_received_at_id_idx").on(
+      table.mailboxId,
+      table.receivedAt.desc(),
+      table.id.desc(),
     ),
   }),
 );

@@ -50,6 +50,13 @@
       "when": 1775679362000,
       "tag": "0006_clumsy_iron_monger",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1775683734635,
+      "tag": "0007_lumpy_miracleman",
+      "breakpoints": true
     }
   ]
 }

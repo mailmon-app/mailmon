@@ -1,0 +1,2 @@
+CREATE INDEX "messages_mailbox_received_at_id_idx" ON "messages" USING btree ("mailbox_id","received_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "threads_mailbox_last_message_at_id_idx" ON "threads" USING btree ("mailbox_id","last_message_at" DESC NULLS LAST,"id" DESC NULLS LAST);
