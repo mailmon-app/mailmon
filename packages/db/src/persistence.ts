@@ -243,7 +243,15 @@ export const createMailboxStateStoreLayer = Layer.effect(
 
           return row?.cursor ?? null;
         }),
-      applySyncResult: ({ mailboxId, leaseOwnerId, nextCursor, snapshot, syncedAt }) =>
+      applySyncResult: ({
+        eventsEmitted,
+        mailboxId,
+        leaseOwnerId,
+        nextCursor,
+        snapshot,
+        syncRunId,
+        syncedAt,
+      }) =>
         Effect.promise(async () => {
           const syncedAtDate = toDate(syncedAt);
 
@@ -312,6 +320,11 @@ export const createMailboxStateStoreLayer = Layer.effect(
             await transaction
               .update(mailboxes)
               .set({
+                activeSyncLeaseAcquiredAt: null,
+                activeSyncLeaseExpiresAt: null,
+                activeSyncLeaseHeartbeatAt: null,
+                activeSyncLeaseOwner: null,
+                activeSyncRunId: null,
                 cursor: nextCursor,
                 initializedAt: row?.initializedAt ?? syncedAtDate,
                 lastErrorCode: null,
@@ -323,6 +336,17 @@ export const createMailboxStateStoreLayer = Layer.effect(
                 updatedAt: syncedAtDate,
               })
               .where(eq(mailboxes.id, mailboxId));
+
+            await transaction
+              .update(syncRuns)
+              .set({
+                completedAt: syncedAtDate,
+                detail: null,
+                eventsEmitted: String(eventsEmitted),
+                nextCursor,
+                status: "completed",
+              })
+              .where(eq(syncRuns.id, syncRunId));
 
             return true;
           });

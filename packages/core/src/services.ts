@@ -73,8 +73,10 @@ export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateSt
     readonly getMailboxCursor: (mailboxId: string) => Effect.Effect<string | null>;
     readonly applySyncResult: (
       params: Readonly<{
+        eventsEmitted: number;
         mailboxId: string;
         leaseOwnerId: string;
+        syncRunId: string;
         snapshot: MailboxSyncSnapshot;
         nextCursor: string | null;
         syncedAt: string;

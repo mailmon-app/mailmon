@@ -129,14 +129,6 @@ export const runMailboxSync = (mailboxId: string) =>
     const syncWork = mailboxProvider.syncMailbox({ mailbox, cursor }).pipe(
       Effect.flatMap((providerResult) => {
         const completedAt = new Date().toISOString();
-        const completion = createSyncRunCompletion({
-          syncRunId: syncRun.syncRunId,
-          mailboxId: mailbox.id,
-          completedAt,
-          status: "completed",
-          eventsEmitted: providerResult.eventsEmitted,
-          nextCursor: providerResult.nextCursor,
-        });
         const result: SyncMailboxResult = {
           ...syncRun,
           status: "completed",
@@ -147,17 +139,17 @@ export const runMailboxSync = (mailboxId: string) =>
 
         return mailboxStateStore
           .applySyncResult({
+            eventsEmitted: providerResult.eventsEmitted,
             mailboxId: mailbox.id,
             leaseOwnerId,
+            syncRunId: syncRun.syncRunId,
             snapshot: providerResult.snapshot,
             nextCursor: providerResult.nextCursor,
             syncedAt: completedAt,
           })
           .pipe(
             Effect.flatMap((applied) =>
-              applied
-                ? syncRunStore.completeSyncRun(completion).pipe(Effect.as(result))
-                : Effect.fail(mailboxSyncLeaseLost(mailbox.id)),
+              applied ? Effect.succeed(result) : Effect.fail(mailboxSyncLeaseLost(mailbox.id)),
             ),
           );
       }),
