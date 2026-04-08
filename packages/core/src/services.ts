@@ -1,8 +1,10 @@
 import { Context, Effect, Option } from "effect";
 
 import type {
+  CompletedMailboxConnectSession,
   MailboxSyncRequest,
   MailboxSyncSnapshot,
+  MailboxConnectAuthorization,
   CompletedSyncRun,
   ControlJobDispatchRequest,
   MailboxSyncLeaseAcquisition,
@@ -11,13 +13,56 @@ import type {
   MailboxResource,
   ProblemDetails,
   StartedSyncRun,
+  StoredConnectSession,
   WebhookDeliveryScheduleRequest,
+  WorkspaceApiKeyIdentity,
 } from "./contracts.js";
 
 export class MailboxCatalog extends Context.Tag("@mailmon/core/MailboxCatalog")<
   MailboxCatalog,
   {
-    readonly getMailbox: (mailboxId: string) => Effect.Effect<Option.Option<MailboxResource>>;
+    readonly getMailbox: (
+      mailboxId: string,
+      options?: Readonly<{
+        workspaceId?: string;
+      }>,
+    ) => Effect.Effect<Option.Option<MailboxResource>>;
+  }
+>() {}
+
+export class WorkspaceApiKeyStore extends Context.Tag("@mailmon/core/WorkspaceApiKeyStore")<
+  WorkspaceApiKeyStore,
+  {
+    readonly getWorkspaceForApiKey: (
+      apiKey: string,
+    ) => Effect.Effect<Option.Option<WorkspaceApiKeyIdentity>>;
+  }
+>() {}
+
+export class MailboxConnectSessionStore extends Context.Tag(
+  "@mailmon/core/MailboxConnectSessionStore",
+)<
+  MailboxConnectSessionStore,
+  {
+    readonly createConnectSession: (params: {
+      readonly id: string;
+      readonly workspaceId: string;
+      readonly provider: "gmail";
+      readonly tenantExternalId: string;
+      readonly mailboxExternalId: string;
+      readonly redirectUrl: string;
+      readonly codeVerifier: string;
+      readonly expiresAt: string;
+    }) => Effect.Effect<StoredConnectSession>;
+    readonly getConnectSession: (
+      connectSessionId: string,
+    ) => Effect.Effect<Option.Option<StoredConnectSession>>;
+    readonly completeConnectSession: (params: {
+      readonly connectSessionId: string;
+      readonly connectedAt: string;
+      readonly providerAccountEmail: string;
+      readonly refreshToken: string;
+    }) => Effect.Effect<CompletedMailboxConnectSession, ProblemDetails>;
   }
 >() {}
 
@@ -64,6 +109,23 @@ export class MailboxSyncProvider extends Context.Tag("@mailmon/core/MailboxSyncP
     readonly syncMailbox: (
       request: MailboxSyncRequest,
     ) => Effect.Effect<MailboxProviderSyncResult, ProblemDetails>;
+  }
+>() {}
+
+export class MailboxConnectProvider extends Context.Tag("@mailmon/core/MailboxConnectProvider")<
+  MailboxConnectProvider,
+  {
+    readonly createAuthorizationUrl: (params: {
+      readonly connectSessionId: string;
+      readonly codeVerifier: string;
+      readonly redirectUri: string;
+    }) => Effect.Effect<string, ProblemDetails>;
+    readonly completeAuthorization: (params: {
+      readonly connectSessionId: string;
+      readonly code: string;
+      readonly codeVerifier: string;
+      readonly redirectUri: string;
+    }) => Effect.Effect<MailboxConnectAuthorization, ProblemDetails>;
   }
 >() {}
 

@@ -56,6 +56,44 @@ export interface MailboxOperationalError {
   readonly retryable: boolean;
 }
 
+export interface ConnectSessionResource {
+  readonly id: string;
+  readonly object: "connect_session";
+  readonly connectUrl: string;
+  readonly expiresAt: string;
+}
+
+export interface CreateConnectSessionRequest {
+  readonly provider: "gmail";
+  readonly tenantExternalId: string;
+  readonly mailboxExternalId: string;
+  readonly redirectUrl: string;
+}
+
+export interface StoredConnectSession {
+  readonly id: string;
+  readonly provider: "gmail";
+  readonly workspaceId: string;
+  readonly tenantExternalId: string;
+  readonly mailboxExternalId: string;
+  readonly redirectUrl: string;
+  readonly codeVerifier: string;
+  readonly expiresAt: string;
+  readonly mailboxId: string | null;
+  readonly completedAt: string | null;
+}
+
+export interface MailboxConnectAuthorization {
+  readonly providerAccountEmail: string;
+  readonly refreshToken: string;
+}
+
+export interface CompletedMailboxConnectSession {
+  readonly mailbox: MailboxResource;
+  readonly redirectUrl: string;
+  readonly created: boolean;
+}
+
 export interface MailboxResource {
   readonly id: string;
   readonly object: "mailbox";
@@ -163,6 +201,10 @@ export interface MailboxSyncLeaseAcquisition {
 export interface MailboxSyncLeaseRenewal {
   readonly renewed: boolean;
   readonly expiresAt: string | null;
+}
+
+export interface WorkspaceApiKeyIdentity {
+  readonly workspaceId: string;
 }
 
 export interface CompletedSyncMailboxResult extends StartedSyncRun {
