@@ -149,11 +149,11 @@ Expose the first useful developer read surface over the synced canonical state. 
 
 ### Acceptance criteria
 
-- [ ] `GET /v1/messages` returns paginated mailbox-scoped canonical messages
-- [ ] `GET /v1/messages/{message_id}` returns a single canonical message
-- [ ] `GET /v1/threads` returns paginated mailbox-scoped canonical threads
-- [ ] `GET /v1/threads/{thread_id}` returns a thread plus its messages
-- [ ] Response shapes match the PRD fields for message/thread resources
+- [x] `GET /v1/messages` returns paginated mailbox-scoped canonical messages
+- [x] `GET /v1/messages/{message_id}` returns a single canonical message
+- [x] `GET /v1/threads` returns paginated mailbox-scoped canonical threads
+- [x] `GET /v1/threads/{thread_id}` returns a thread plus its messages
+- [x] Response shapes match the PRD fields for message/thread resources
 
 ---
 

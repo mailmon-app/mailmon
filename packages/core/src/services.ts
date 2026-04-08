@@ -2,6 +2,10 @@ import { Context, Effect, Option } from "effect";
 
 import type {
   CompletedMailboxConnectSession,
+  ListMailboxMessagesRequest,
+  ListMailboxThreadsRequest,
+  ListResource,
+  MessageResource,
   MailboxSyncRequest,
   MailboxSyncSnapshot,
   MailboxConnectAuthorization,
@@ -14,6 +18,8 @@ import type {
   ProblemDetails,
   StartedSyncRun,
   StoredConnectSession,
+  ThreadListItemResource,
+  ThreadResource,
   WebhookDeliveryScheduleRequest,
   WorkspaceApiKeyIdentity,
 } from "./contracts.js";
@@ -36,6 +42,30 @@ export class WorkspaceApiKeyStore extends Context.Tag("@mailmon/core/WorkspaceAp
     readonly getWorkspaceForApiKey: (
       apiKey: string,
     ) => Effect.Effect<Option.Option<WorkspaceApiKeyIdentity>>;
+  }
+>() {}
+
+export class MailboxQueryCatalog extends Context.Tag("@mailmon/core/MailboxQueryCatalog")<
+  MailboxQueryCatalog,
+  {
+    readonly listMessages: (
+      request: ListMailboxMessagesRequest,
+    ) => Effect.Effect<ListResource<MessageResource>, ProblemDetails>;
+    readonly getMessage: (
+      messageId: string,
+      options?: Readonly<{
+        workspaceId?: string;
+      }>,
+    ) => Effect.Effect<Option.Option<MessageResource>>;
+    readonly listThreads: (
+      request: ListMailboxThreadsRequest,
+    ) => Effect.Effect<ListResource<ThreadListItemResource>, ProblemDetails>;
+    readonly getThread: (
+      threadId: string,
+      options?: Readonly<{
+        workspaceId?: string;
+      }>,
+    ) => Effect.Effect<Option.Option<ThreadResource>>;
   }
 >() {}
 

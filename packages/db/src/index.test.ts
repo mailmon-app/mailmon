@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   bootstrap,
   createCorePersistenceLayer,
+  createMailboxQueryCatalogLayer,
   createWorkerPersistenceLayer,
   MailmonDatabase,
   schema,
@@ -25,6 +26,7 @@ describe("schema", () => {
 
   it("exports DB-backed core persistence helpers", () => {
     expect(createCorePersistenceLayer).toBeDefined();
+    expect(createMailboxQueryCatalogLayer).toBeDefined();
     expect(createWorkerPersistenceLayer).toBeDefined();
     expect(MailmonDatabase).toBeDefined();
   });

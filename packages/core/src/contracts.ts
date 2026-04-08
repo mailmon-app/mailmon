@@ -127,6 +127,54 @@ export interface ReplayResource {
   readonly eventsReplayed?: number;
 }
 
+export interface ListResource<T> {
+  readonly object: "list";
+  readonly data: ReadonlyArray<T>;
+  readonly nextCursor: string | null;
+}
+
+export interface MessageSenderResource {
+  readonly name: string | null;
+  readonly email: string;
+}
+
+export interface MessageResource {
+  readonly id: string;
+  readonly mailboxId: string;
+  readonly threadId: string;
+  readonly providerMessageId: string;
+  readonly subject: string;
+  readonly from: MessageSenderResource;
+  readonly snippet: string;
+  readonly receivedAt: string;
+  readonly labelIds: ReadonlyArray<string>;
+}
+
+export interface ThreadMessageSummaryResource {
+  readonly id: string;
+  readonly subject: string;
+  readonly receivedAt: string;
+}
+
+export interface ThreadResource {
+  readonly id: string;
+  readonly object: "thread";
+  readonly mailboxId: string;
+  readonly providerThreadId: string;
+  readonly subject: string;
+  readonly lastMessageAt: string;
+  readonly messages: ReadonlyArray<ThreadMessageSummaryResource>;
+}
+
+export interface ThreadListItemResource {
+  readonly id: string;
+  readonly object: "thread";
+  readonly mailboxId: string;
+  readonly providerThreadId: string;
+  readonly subject: string;
+  readonly lastMessageAt: string;
+}
+
 export interface WebhookEventEnvelope {
   readonly id: string;
   readonly type: "message.created" | "message.updated" | "thread.updated";
@@ -205,6 +253,18 @@ export interface MailboxSyncLeaseRenewal {
 
 export interface WorkspaceApiKeyIdentity {
   readonly workspaceId: string;
+}
+
+export interface ListMailboxMessagesRequest {
+  readonly mailboxId: string;
+  readonly limit: number;
+  readonly cursor: string | null;
+}
+
+export interface ListMailboxThreadsRequest {
+  readonly mailboxId: string;
+  readonly limit: number;
+  readonly cursor: string | null;
 }
 
 export interface CompletedSyncMailboxResult extends StartedSyncRun {

@@ -5,13 +5,22 @@ import * as TestClock from "effect/TestClock";
 import type { CompletedSyncRun, MailboxResource } from "./contracts.js";
 import {
   MailboxCatalog,
+  MailboxQueryCatalog,
   MailboxSyncCoordinator,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
   MailboxStateStore,
   SyncRunStore,
 } from "./services.js";
-import { dispatchMailboxSync, getMailboxOrFail, runMailboxSync } from "./use-cases.js";
+import {
+  dispatchMailboxSync,
+  getMailboxOrFail,
+  getMessageOrFail,
+  getThreadOrFail,
+  listMailboxMessages,
+  listMailboxThreads,
+  runMailboxSync,
+} from "./use-cases.js";
 
 const mailboxFixture: MailboxResource = {
   id: "mbx_demo",
@@ -189,6 +198,90 @@ const syncDispatcherLayer = Layer.succeed(MailboxSyncDispatcher, {
     }),
 });
 
+const queryCatalogLayer = Layer.succeed(MailboxQueryCatalog, {
+  listMessages: ({ mailboxId, cursor, limit }) =>
+    Effect.succeed({
+      object: "list" as const,
+      data:
+        mailboxId === mailboxFixture.id
+          ? [
+              {
+                id: "msg_demo",
+                mailboxId,
+                threadId: "thr_demo",
+                providerMessageId: "gmail_msg_demo",
+                subject: "Demo message",
+                from: {
+                  name: "Mailmon",
+                  email: "hello@mailmon.dev",
+                },
+                snippet: "Mailbox message fixture",
+                receivedAt: "2026-03-24T00:00:00.000Z",
+                labelIds: ["INBOX"],
+              },
+            ].slice(0, limit)
+          : [],
+      nextCursor: cursor === null && mailboxId === mailboxFixture.id ? "cur_2" : null,
+    }),
+  getMessage: (messageId: string) =>
+    Effect.succeed(
+      messageId === "msg_demo"
+        ? Option.some({
+            id: "msg_demo",
+            mailboxId: mailboxFixture.id,
+            threadId: "thr_demo",
+            providerMessageId: "gmail_msg_demo",
+            subject: "Demo message",
+            from: {
+              name: "Mailmon",
+              email: "hello@mailmon.dev",
+            },
+            snippet: "Mailbox message fixture",
+            receivedAt: "2026-03-24T00:00:00.000Z",
+            labelIds: ["INBOX"],
+          })
+        : Option.none(),
+    ),
+  listThreads: ({ mailboxId }) =>
+    Effect.succeed({
+      object: "list" as const,
+      data:
+        mailboxId === mailboxFixture.id
+          ? [
+              {
+                id: "thr_demo",
+                object: "thread" as const,
+                mailboxId,
+                providerThreadId: "gmail_thr_demo",
+                subject: "Demo thread",
+                lastMessageAt: "2026-03-24T00:00:00.000Z",
+              },
+            ]
+          : [],
+      nextCursor: null,
+    }),
+  getThread: (threadId: string) =>
+    Effect.succeed(
+      threadId === "thr_demo"
+        ? Option.some({
+            id: "thr_demo",
+            object: "thread" as const,
+            mailboxId: mailboxFixture.id,
+            providerThreadId: "gmail_thr_demo",
+            subject: "Demo thread",
+            lastMessageAt: "2026-03-24T00:00:00.000Z",
+            messages: [
+              {
+                id: "msg_demo",
+                subject: "Demo message",
+                receivedAt: "2026-03-24T00:00:00.000Z",
+              },
+            ],
+          })
+        : Option.none(),
+    ),
+});
+
 describe("getMailboxOrFail", () => {
   it.effect("fails with a structured problem when the mailbox is missing", () =>
     getMailboxOrFail("mbx_missing").pipe(
@@ -214,6 +307,52 @@ describe("dispatchMailboxSync", () => {
         Effect.tap(() => Effect.sync(() => dispatchedMailboxIds.splice(0))),
         Effect.provide(Layer.mergeAll(catalogLayer, syncDispatcherLayer)),
       ),
+  );
+});
+
+describe("message and thread query use cases", () => {
+  it.effect("lists messages after verifying mailbox ownership", () =>
+    listMailboxMessages(mailboxFixture.id, {
+      limit: 10,
+      workspaceId: "ws_123",
+    }).pipe(
+      Effect.map((result) => {
+        expect(result.object).toBe("list");
+        expect(result.data).toHaveLength(1);
+        expect(result.data[0]?.id).toBe("msg_demo");
+        expect(result.nextCursor).toBe("cur_2");
+      }),
+      Effect.provide(Layer.mergeAll(catalogLayer, queryCatalogLayer)),
+    ),
+  );
+
+  it.effect("gets a single message and maps missing resources to a problem", () =>
+    Effect.gen(function* () {
+      const message = yield* getMessageOrFail("msg_demo");
+      expect(message.id).toBe("msg_demo");
+
+      const problem = yield* getMessageOrFail("msg_missing").pipe(Effect.flip);
+      expect(problem.code).toBe("message_not_found");
+    }).pipe(Effect.provide(queryCatalogLayer)),
+  );
+
+  it.effect("lists threads and returns a thread with message summaries", () =>
+    Effect.gen(function* () {
+      const threads = yield* listMailboxThreads(mailboxFixture.id, {
+        limit: 10,
+        workspaceId: "ws_123",
+      });
+      expect(threads.data[0]?.id).toBe("thr_demo");
+
+      const thread = yield* getThreadOrFail("thr_demo");
+      expect(thread.messages).toEqual([
+        {
+          id: "msg_demo",
+          subject: "Demo message",
+          receivedAt: "2026-03-24T00:00:00.000Z",
+        },
+      ]);
+    }).pipe(Effect.provide(Layer.mergeAll(catalogLayer, queryCatalogLayer))),
   );
 });
 

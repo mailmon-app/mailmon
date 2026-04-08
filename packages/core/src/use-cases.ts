@@ -15,8 +15,11 @@ import {
   invalidApiKey,
   mailboxNotFound,
   mailboxSyncLeaseLost,
+  messageNotFound,
+  threadNotFound,
 } from "./problems.js";
 import {
+  MailboxQueryCatalog,
   MailboxCatalog,
   MailboxConnectProvider,
   MailboxConnectSessionStore,
@@ -125,6 +128,82 @@ export const getMailboxOrFail = (
       }),
     ),
   );
+
+export const listMailboxMessages = (
+  mailboxId: string,
+  options: Readonly<{
+    cursor?: string | null;
+    limit: number;
+    workspaceId?: string;
+  }>,
+) =>
+  Effect.gen(function* () {
+    yield* getMailboxOrFail(
+      mailboxId,
+      options.workspaceId === undefined ? {} : { workspaceId: options.workspaceId },
+    );
+    const queryCatalog = yield* MailboxQueryCatalog;
+
+    return yield* queryCatalog.listMessages({
+      mailboxId,
+      cursor: options.cursor ?? null,
+      limit: options.limit,
+    });
+  });
+
+export const getMessageOrFail = (
+  messageId: string,
+  options: Readonly<{
+    workspaceId?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const queryCatalog = yield* MailboxQueryCatalog;
+    const message = yield* queryCatalog.getMessage(messageId, options);
+
+    return yield* Option.match(message, {
+      onNone: () => Effect.fail(messageNotFound(messageId)),
+      onSome: (value) => Effect.succeed(value),
+    });
+  });
+
+export const listMailboxThreads = (
+  mailboxId: string,
+  options: Readonly<{
+    cursor?: string | null;
+    limit: number;
+    workspaceId?: string;
+  }>,
+) =>
+  Effect.gen(function* () {
+    yield* getMailboxOrFail(
+      mailboxId,
+      options.workspaceId === undefined ? {} : { workspaceId: options.workspaceId },
+    );
+    const queryCatalog = yield* MailboxQueryCatalog;
+
+    return yield* queryCatalog.listThreads({
+      mailboxId,
+      cursor: options.cursor ?? null,
+      limit: options.limit,
+    });
+  });
+
+export const getThreadOrFail = (
+  threadId: string,
+  options: Readonly<{
+    workspaceId?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const queryCatalog = yield* MailboxQueryCatalog;
+    const thread = yield* queryCatalog.getThread(threadId, options);
+
+    return yield* Option.match(thread, {
+      onNone: () => Effect.fail(threadNotFound(threadId)),
+      onSome: (value) => Effect.succeed(value),
+    });
+  });
 
 export const getConnectSessionOrFail = (connectSessionId: string) =>
   Effect.gen(function* () {

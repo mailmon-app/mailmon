@@ -4,8 +4,8 @@
 
 **IMPORTANT:** Always consult effect-solutions before writing Effect code.
 
-1. Run `effect-solutions list` to see available guides
-2. Run `effect-solutions show <topic>...` for relevant patterns (supports multiple topics)
+1. Run `pnpm exec effect-solutions list` to see available guides
+2. Run `pnpm exec effect-solutions show <topic>...` for relevant patterns (supports multiple topics)
 3. Search `~/.local/share/effect-solutions/effect` for real implementations
 
 Topics: quick-start, project-setup, tsconfig, basics, services-and-layers, data-modeling, error-handling, config, testing, cli.
@@ -75,6 +75,7 @@ Start here when tracing behavior:
 Current bootstrap note:
 
 - The repo still contains bootstrap/dev scaffolding in `packages/db/src/bootstrap.ts`, but mailbox reads, sync runs, and mailbox lease coordination now have DB-backed implementations in `packages/db/src/persistence.ts`.
+- The public read surface now includes workspace-scoped `GET /v1/messages`, `GET /v1/messages/{message_id}`, `GET /v1/threads`, and `GET /v1/threads/{thread_id}` routes backed by canonical `messages` and `threads` state in Postgres.
 - `packages/gmail/src/index.ts` now has a real HTTP Gmail sync provider path with persisted refresh-token lookup from `gmail_mailbox_credentials`, durable canonical baseline writes, and Gmail history-based incremental sync from the stored mailbox cursor.
 - Mailbox sync state writes are now lease-aware, successful sync finalization is committed transactionally with sync run completion and lease clearing, and the worker heartbeats the mailbox lease across the full sync critical section so stale leases can be taken over safely.
 - Duplicate wake-ups now rely on the stored mailbox cursor plus Gmail history compaction, so repeated dispatches do not replay stale mailbox state changes.

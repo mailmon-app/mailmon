@@ -3,25 +3,34 @@ import { createHash } from "node:crypto";
 import {
   MailboxCatalog,
   MailboxConnectSessionStore,
+  MailboxQueryCatalog,
   MailboxSyncCoordinator,
   MailboxStateStore,
   SyncRunStore,
   WorkspaceApiKeyStore,
+  invalidPaginationCursor,
   mailboxAlreadyConnected,
   type CanonicalMessageRecord,
   type CanonicalThreadRecord,
   type CompletedMailboxConnectSession,
   type CompletedSyncRun,
+  type ListMailboxMessagesRequest,
+  type ListMailboxThreadsRequest,
+  type ListResource,
   type MailboxOperationalError,
   type MailboxResource,
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncLeaseRenewal,
+  type MessageResource,
   type StartedSyncRun,
   type StoredConnectSession,
+  type ThreadListItemResource,
+  type ThreadMessageSummaryResource,
+  type ThreadResource,
   type WorkspaceApiKeyIdentity,
 } from "@mailmon/core";
 import { GmailMailboxCredentialStore } from "@mailmon/gmail";
-import { and, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { createDb } from "./client.js";
@@ -38,6 +47,8 @@ import {
 type DatabaseHandle = ReturnType<typeof createDb>;
 type MailboxRow = typeof mailboxes.$inferSelect;
 type ConnectSessionRow = typeof mailboxConnectSessions.$inferSelect;
+type MessageRow = typeof messages.$inferSelect;
+type ThreadRow = typeof threads.$inferSelect;
 
 const hashApiKey = (apiKey: string) => {
   return createHash("sha256").update(apiKey).digest("hex");
@@ -162,6 +173,103 @@ const toMailboxResource = (row: MailboxRow): MailboxResource => {
     lastSuccessfulSyncAt: toIsoString(row.lastSuccessfulSyncAt),
     lastError: toMailboxOperationalError(row),
   };
+};
+
+const toMessageResource = (row: MessageRow): MessageResource => {
+  return {
+    id: row.id,
+    mailboxId: row.mailboxId,
+    threadId: row.threadId,
+    providerMessageId: row.providerMessageId,
+    subject: row.subject,
+    from: {
+      name: row.fromName,
+      email: row.fromEmail,
+    },
+    snippet: row.snippet,
+    receivedAt: row.receivedAt.toISOString(),
+    labelIds: [...row.labelIds],
+  };
+};
+
+const toThreadListItemResource = (row: ThreadRow): ThreadListItemResource => {
+  return {
+    id: row.id,
+    object: "thread",
+    mailboxId: row.mailboxId,
+    providerThreadId: row.providerThreadId,
+    subject: row.subject,
+    lastMessageAt: row.lastMessageAt.toISOString(),
+  };
+};
+
+const toThreadMessageSummaryResource = (
+  row: Pick<MessageRow, "id" | "receivedAt" | "subject">,
+): ThreadMessageSummaryResource => {
+  return {
+    id: row.id,
+    subject: row.subject,
+    receivedAt: row.receivedAt.toISOString(),
+  };
+};
+
+const toThreadResource = (row: ThreadRow, threadMessages: ReadonlyArray<MessageRow>): ThreadResource => {
+  return {
+    ...toThreadListItemResource(row),
+    messages: threadMessages.map((message) => toThreadMessageSummaryResource(message)),
+  };
+};
+
+interface PaginationCursor {
+  readonly id: string;
+  readonly timestamp: string;
+}
+
+const encodePaginationCursor = (cursor: PaginationCursor) => {
+  const payload = JSON.stringify({
+    id: cursor.id,
+    timestamp: cursor.timestamp,
+  });
+
+  return `cur_${Buffer.from(payload, "utf8").toString("base64url")}`;
+};
+
+const decodePaginationCursor = (
+  resourceType: "messages" | "threads",
+  cursor: string,
+): PaginationCursor => {
+  if (!cursor.startsWith("cur_")) {
+    throw invalidPaginationCursor(resourceType);
+  }
+
+  try {
+    const decoded = Buffer.from(cursor.slice(4), "base64url").toString("utf8");
+    const payload = JSON.parse(decoded) as unknown;
+
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      !("id" in payload) ||
+      typeof payload.id !== "string" ||
+      payload.id.length === 0 ||
+      !("timestamp" in payload) ||
+      typeof payload.timestamp !== "string" ||
+      Number.isNaN(Date.parse(payload.timestamp))
+    ) {
+      throw invalidPaginationCursor(resourceType);
+    }
+
+    return {
+      id: payload.id,
+      timestamp: payload.timestamp,
+    };
+  } catch (error) {
+    if (isProblemDetails(error)) {
+      throw error;
+    }
+
+    throw invalidPaginationCursor(resourceType);
+  }
 };
 
 const toStoredConnectSession = (row: ConnectSessionRow): StoredConnectSession => {
@@ -331,6 +439,168 @@ export const createWorkspaceApiKeyStoreLayer = Layer.effect(
           return Option.fromNullable(row).pipe(
             Option.map((value) => toWorkspaceApiKeyIdentity(value.workspaceId)),
           );
+        }),
+    };
+  }),
+);
+
+export const createMailboxQueryCatalogLayer = Layer.effect(
+  MailboxQueryCatalog,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      listMessages: (request: ListMailboxMessagesRequest) =>
+        Effect.tryPromise({
+          catch: (error) => {
+            if (isProblemDetails(error)) {
+              return error;
+            }
+
+            throw error;
+          },
+          try: async () => {
+            const paginationCursor =
+              request.cursor === null ? null : decodePaginationCursor("messages", request.cursor);
+            const whereClause =
+              paginationCursor === null
+                ? eq(messages.mailboxId, request.mailboxId)
+                : and(
+                    eq(messages.mailboxId, request.mailboxId),
+                    or(
+                      lt(messages.receivedAt, toDate(paginationCursor.timestamp)),
+                      and(
+                        eq(messages.receivedAt, toDate(paginationCursor.timestamp)),
+                        lt(messages.id, paginationCursor.id),
+                      ),
+                    ),
+                  );
+            const rows = await database.db
+              .select()
+              .from(messages)
+              .where(whereClause)
+              .orderBy(desc(messages.receivedAt), desc(messages.id))
+              .limit(request.limit + 1);
+            const pageRows = rows.slice(0, request.limit);
+            const nextCursor =
+              rows.length > request.limit
+                ? encodePaginationCursor({
+                    id: pageRows[pageRows.length - 1]?.id ?? rows[request.limit - 1]!.id,
+                    timestamp:
+                      pageRows[pageRows.length - 1]?.receivedAt.toISOString() ??
+                      rows[request.limit - 1]!.receivedAt.toISOString(),
+                  })
+                : null;
+
+            return {
+              object: "list",
+              data: pageRows.map((row) => toMessageResource(row)),
+              nextCursor,
+            } satisfies ListResource<MessageResource>;
+          },
+        }),
+      getMessage: (
+        messageId: string,
+        options: Readonly<{
+          workspaceId?: string;
+        }> = {},
+      ) =>
+        Effect.promise(async () => {
+          const [row] = await database.db
+            .select({
+              message: messages,
+            })
+            .from(messages)
+            .innerJoin(mailboxes, eq(messages.mailboxId, mailboxes.id))
+            .where(
+              options.workspaceId === undefined
+                ? eq(messages.id, messageId)
+                : and(eq(messages.id, messageId), eq(mailboxes.workspaceId, options.workspaceId)),
+            )
+            .limit(1);
+
+          return Option.fromNullable(row?.message).pipe(Option.map((message) => toMessageResource(message)));
+        }),
+      listThreads: (request: ListMailboxThreadsRequest) =>
+        Effect.tryPromise({
+          catch: (error) => {
+            if (isProblemDetails(error)) {
+              return error;
+            }
+
+            throw error;
+          },
+          try: async () => {
+            const paginationCursor =
+              request.cursor === null ? null : decodePaginationCursor("threads", request.cursor);
+            const whereClause =
+              paginationCursor === null
+                ? eq(threads.mailboxId, request.mailboxId)
+                : and(
+                    eq(threads.mailboxId, request.mailboxId),
+                    or(
+                      lt(threads.lastMessageAt, toDate(paginationCursor.timestamp)),
+                      and(
+                        eq(threads.lastMessageAt, toDate(paginationCursor.timestamp)),
+                        lt(threads.id, paginationCursor.id),
+                      ),
+                    ),
+                  );
+            const rows = await database.db
+              .select()
+              .from(threads)
+              .where(whereClause)
+              .orderBy(desc(threads.lastMessageAt), desc(threads.id))
+              .limit(request.limit + 1);
+            const pageRows = rows.slice(0, request.limit);
+            const nextCursor =
+              rows.length > request.limit
+                ? encodePaginationCursor({
+                    id: pageRows[pageRows.length - 1]?.id ?? rows[request.limit - 1]!.id,
+                    timestamp:
+                      pageRows[pageRows.length - 1]?.lastMessageAt.toISOString() ??
+                      rows[request.limit - 1]!.lastMessageAt.toISOString(),
+                  })
+                : null;
+
+            return {
+              object: "list",
+              data: pageRows.map((row) => toThreadListItemResource(row)),
+              nextCursor,
+            } satisfies ListResource<ThreadListItemResource>;
+          },
+        }),
+      getThread: (
+        threadId: string,
+        options: Readonly<{
+          workspaceId?: string;
+        }> = {},
+      ) =>
+        Effect.promise(async () => {
+          const [threadRow] = await database.db
+            .select({
+              thread: threads,
+            })
+            .from(threads)
+            .innerJoin(mailboxes, eq(threads.mailboxId, mailboxes.id))
+            .where(
+              options.workspaceId === undefined
+                ? eq(threads.id, threadId)
+                : and(eq(threads.id, threadId), eq(mailboxes.workspaceId, options.workspaceId)),
+            )
+            .limit(1);
+
+          if (threadRow === undefined) {
+            return Option.none();
+          }
+
+          const threadMessages = await database.db
+            .select()
+            .from(messages)
+            .where(eq(messages.threadId, threadRow.thread.id))
+            .orderBy(asc(messages.receivedAt), asc(messages.id));
+
+          return Option.some(toThreadResource(threadRow.thread, threadMessages));
         }),
     };
   }),
@@ -838,6 +1108,7 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
 export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxCatalogLayer,
   createMailboxConnectSessionStoreLayer,
+  createMailboxQueryCatalogLayer,
   createMailboxStateStoreLayer,
   createMailboxSyncCoordinatorLayer,
   createSyncRunStoreLayer,

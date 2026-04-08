@@ -29,6 +29,48 @@ export const mailboxNotFound = (mailboxId: string): ProblemDetails => {
   });
 };
 
+export const messageNotFound = (messageId: string): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/message-not-found",
+    title: "Message not found",
+    status: 404,
+    code: "message_not_found",
+    detail: `Message ${messageId} does not exist in the current workspace.`,
+    resource: {
+      message_id: messageId,
+    },
+    retryable: false,
+  });
+};
+
+export const threadNotFound = (threadId: string): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/thread-not-found",
+    title: "Thread not found",
+    status: 404,
+    code: "thread_not_found",
+    detail: `Thread ${threadId} does not exist in the current workspace.`,
+    resource: {
+      thread_id: threadId,
+    },
+    retryable: false,
+  });
+};
+
+export const invalidPaginationCursor = (resourceType: "messages" | "threads"): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/invalid-pagination-cursor",
+    title: "Invalid pagination cursor",
+    status: 400,
+    code: "invalid_pagination_cursor",
+    detail: `The pagination cursor for ${resourceType} is invalid.`,
+    resource: {
+      resource_type: resourceType,
+    },
+    retryable: false,
+  });
+};
+
 export const mailboxSyncLeaseLost = (mailboxId: string): ProblemDetails => {
   return makeProblem({
     type: "https://api.mailmon.dev/problems/mailbox-sync-lease-lost",
