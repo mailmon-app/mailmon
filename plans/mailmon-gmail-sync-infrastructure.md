@@ -60,6 +60,14 @@ Durable decisions that apply across all phases:
 - **Provider boundary**: Gmail-specific behavior stays in `@mailmon/gmail`; no app should call Gmail APIs directly.
 - **Error model**: synchronous API failures use problem-details style envelopes; mailbox and delivery degradation are represented on resources.
 - **Secrets and token handling**: application secrets live in Secret Manager; Gmail refresh tokens are encrypted with Cloud KMS-backed application logic before persistence.
+- **Read model**:
+  - public `messages` and `threads` reads are mailbox-scoped, newest-first, and paginated with opaque cursors
+  - mailbox-scoped read paths require supporting database indexes so API pagination does not regress as mailbox size grows
+- **Event durability model**:
+  - mailbox state writes, cursor advancement, sync run completion, and mailbox event creation must commit transactionally
+  - webhook delivery scheduling must start from durable mailbox event records rather than inline network I/O during sync execution
+- **Verification model**:
+  - happy-path unit tests are not sufficient for post-Phase-5 work; DB-backed integration coverage is required for pagination, ownership scoping, event emission, and delivery retries
 
 ---
 
@@ -157,6 +165,16 @@ Expose the first useful developer read surface over the synced canonical state. 
 
 ---
 
+## Post-Phase-5 Hardening Additions
+
+Immediate hardening work unlocked by the new read API surface:
+
+- [ ] Add mailbox-scoped newest-first read indexes for `messages` and `threads`
+- [ ] Add DB-backed integration tests for mailbox-scoped pagination, opaque cursor advancement, and workspace ownership enforcement
+- [ ] Document cursor ordering and opacity explicitly in the API contract examples when the public docs are refreshed
+
+---
+
 ## Phase 6: Event Log And Webhook Delivery
 
 **User stories**: emit `message.created`, `message.updated`, and `thread.updated`; register webhook endpoints; subscribe mailboxes; deliver at-least-once with stable event IDs.
@@ -165,11 +183,30 @@ Expose the first useful developer read surface over the synced canonical state. 
 
 Turn state changes into durable mailbox events and deliver them through registered webhook endpoints. This slice includes endpoint registration, subscriptions, event persistence, delivery attempts, and endpoint health, with Cloud Tasks as the production delivery primitive.
 
+### Recommended execution order
+
+Break this phase into four implementation slices so event semantics and delivery runtime are introduced in the right order:
+
+- **Phase 6a: Webhook Endpoint And Subscription Spine**
+  - persist webhook endpoints, delivery secrets, and mailbox-scoped subscriptions
+  - expose `POST /v1/webhook-endpoints` and `POST /v1/webhook-endpoints/{endpoint_id}/subscriptions`
+- **Phase 6b: Durable Event Emission**
+  - diff sync-applied canonical state into `message.created`, `message.updated`, and `thread.updated`
+  - persist mailbox events transactionally with sync finalization
+- **Phase 6c: Local Delivery Runtime**
+  - schedule webhook deliveries from durable mailbox events
+  - implement local `/internal/webhook-deliveries` handling, retries, and endpoint health transitions
+- **Phase 6d: GCP Delivery Adapter**
+  - map the transport-neutral delivery scheduler onto Cloud Tasks semantics for staging/production
+  - preserve the same core delivery workflow used in local mode
+
 ### Acceptance criteria
 
 - [ ] `POST /v1/webhook-endpoints` creates webhook endpoints and returns the secret once
 - [ ] `POST /v1/webhook-endpoints/{endpoint_id}/subscriptions` stores mailbox-scoped subscriptions
 - [ ] Sync-generated state changes create durable mailbox events with stable IDs
+- [ ] Mailbox state writes, mailbox event inserts, cursor advancement, and sync run completion commit transactionally
+- [ ] Delivery scheduling starts from durable mailbox event records and not from inline endpoint calls inside sync execution
 - [ ] Webhook deliveries retry on timeout and `5xx`
 - [ ] Endpoint health reflects repeated delivery failures without breaking unrelated API reads
 - [ ] Delivery scheduling is transport-neutral in core and can run through local adapters in development and Cloud Tasks in staging/production
@@ -223,8 +260,11 @@ Harden the system for production behavior under failure and scale. This slice fo
 ### Acceptance criteria
 
 - [ ] Revoked or unrefreshable Gmail tokens move mailboxes into `reconnect_required`
+- [ ] Persisted Gmail refresh tokens are encrypted before any staging or production rollout
 - [ ] Watch expiration is detected and mailboxes move through `expiring` and `expired` states appropriately
+- [ ] Staging and production include Gmail watch registration, renewal, and Pub/Sub push ingress handling
 - [ ] Gmail `429` and `403` rate limits degrade mailbox sync state without surfacing as unrelated synchronous API failures
+- [ ] Invalid or expired Gmail history cursors trigger a repair or full-resync path instead of leaving the mailbox permanently failed
 - [ ] Repair or catch-up sync paths exist for missed changes and unhealthy watches
 - [ ] Sync runs, cursor movement, mailbox lag, and webhook delivery degradation are observable
 - [ ] Stuck mailbox execution recovers through lease expiry and takeover
