@@ -90,10 +90,10 @@ Implement the first real write path into the system. Developers create a connect
 
 ### Acceptance criteria
 
-- [ ] `POST /v1/mailboxes/connect-sessions` creates a connect session resource with `connect_url` and `expires_at`
-- [ ] Mailboxes are created from successful Gmail authorization without manual DB seeding
-- [ ] Duplicate mailbox connections in the same workspace return `409 mailbox_already_connected`
-- [ ] Mailbox creation records enough identity to uniquely map a Gmail account inside a workspace
+- [x] `POST /v1/mailboxes/connect-sessions` creates a connect session resource with `connect_url` and `expires_at`
+- [x] Mailboxes are created from successful Gmail authorization without manual DB seeding
+- [x] Duplicate mailbox connections in the same workspace return `409 mailbox_already_connected`
+- [x] Mailbox creation records enough identity to uniquely map a Gmail account inside a workspace
 
 ---
 

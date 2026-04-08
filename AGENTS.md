@@ -78,7 +78,8 @@ Current bootstrap note:
 - `packages/gmail/src/index.ts` now has a real HTTP Gmail sync provider path with persisted refresh-token lookup from `gmail_mailbox_credentials`, durable canonical baseline writes, and Gmail history-based incremental sync from the stored mailbox cursor.
 - Mailbox sync state writes are now lease-aware, successful sync finalization is committed transactionally with sync run completion and lease clearing, and the worker heartbeats the mailbox lease across the full sync critical section so stale leases can be taken over safely.
 - Duplicate wake-ups now rely on the stored mailbox cursor plus Gmail history compaction, so repeated dispatches do not replay stale mailbox state changes.
-- Mailbox creation and hosted Gmail OAuth/connect-session flow are still future work; local verification currently depends on seeded mailboxes plus stored refresh tokens.
+- Mailbox creation and hosted Gmail OAuth/connect-session flow are now real: the API authenticates workspace-scoped API keys, persists DB-backed connect sessions, exchanges Gmail OAuth codes for refresh tokens, creates workspace-scoped mailboxes, and dispatches the initial sync automatically.
+- Local verification for the connect flow still uses a mock Gmail OAuth/API server rather than live Google credentials.
 - `packages/queue` now contains usable local transport adapters, but BullMQ/Redis helpers are still present for compatibility.
 - `apps/worker` now defaults to HTTP runtime modes, but the BullMQ path is still present as `legacy_bullmq` scaffolding.
 - Treat all of those as scaffolding to replace, not as the final production design.
