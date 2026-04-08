@@ -133,8 +133,10 @@ const createSyncProviderTestLayer = (
 const createMailboxStateStoreTestLayer = (
   currentCursor: string | null,
   appliedSnapshots: Array<{
+    eventsEmitted: number;
     mailboxId: string;
     leaseOwnerId: string;
+    syncRunId: string;
     threadCount: number;
     messageCount: number;
     nextCursor: string | null;
@@ -143,18 +145,30 @@ const createMailboxStateStoreTestLayer = (
     applyDelayMs?: number;
     applied?: boolean;
   }> = {},
-) =>
-  Layer.succeed(MailboxStateStore, {
-    getMailboxCursor: () => Effect.succeed(currentCursor),
-    applySyncResult: ({ mailboxId, leaseOwnerId, nextCursor, snapshot }) =>
+) => {
+  let storedCursor = currentCursor;
+
+  return Layer.succeed(MailboxStateStore, {
+    getMailboxCursor: () => Effect.succeed(storedCursor),
+    applySyncResult: ({
+      eventsEmitted,
+      mailboxId,
+      leaseOwnerId,
+      nextCursor,
+      snapshot,
+      syncRunId,
+    }) =>
       Effect.sleep(Duration.millis(options.applyDelayMs ?? 0)).pipe(
         Effect.map(() => options.applied ?? true),
         Effect.tap((applied) =>
           applied
             ? Effect.sync(() => {
+                storedCursor = nextCursor;
                 appliedSnapshots.push({
+                  eventsEmitted,
                   mailboxId,
                   leaseOwnerId,
+                  syncRunId,
                   threadCount: snapshot.threads.length,
                   messageCount: snapshot.messages.length,
                   nextCursor,
@@ -164,6 +178,7 @@ const createMailboxStateStoreTestLayer = (
         ),
       ),
   });
+};
 
 const dispatchedMailboxIds: Array<string> = [];
 
@@ -206,8 +221,10 @@ describe("runMailboxSync", () => {
   it.effect("coordinates mailbox lookup, provider sync, and sync run completion", () =>
     Effect.gen(function* () {
       const appliedSnapshots: Array<{
+        eventsEmitted: number;
         mailboxId: string;
         leaseOwnerId: string;
+        syncRunId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;
@@ -225,20 +242,15 @@ describe("runMailboxSync", () => {
           expect(appliedSnapshots).toEqual([
             {
               mailboxId: mailboxFixture.id,
+              eventsEmitted: 2,
               leaseOwnerId: expect.any(String),
+              syncRunId: "sr_mbx_demo",
               threadCount: 1,
               messageCount: 1,
               nextCursor: "hist_2",
             },
           ]);
-          expect(completedSyncRuns).toEqual([
-            expect.objectContaining({
-              mailboxId: mailboxFixture.id,
-              status: "completed",
-              eventsEmitted: 2,
-              nextCursor: "hist_2",
-            }),
-          ]);
+          expect(completedSyncRuns).toEqual([]);
         }),
         Effect.provide(
           Layer.mergeAll(
@@ -256,8 +268,10 @@ describe("runMailboxSync", () => {
   it.effect("passes the stored cursor into the provider for incremental sync", () =>
     Effect.gen(function* () {
       const appliedSnapshots: Array<{
+        eventsEmitted: number;
         mailboxId: string;
         leaseOwnerId: string;
+        syncRunId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;
@@ -272,7 +286,9 @@ describe("runMailboxSync", () => {
           expect(appliedSnapshots).toEqual([
             {
               mailboxId: mailboxFixture.id,
+              eventsEmitted: 2,
               leaseOwnerId: expect.any(String),
+              syncRunId: "sr_mbx_demo",
               threadCount: 1,
               messageCount: 1,
               nextCursor: "hist_2",
@@ -292,11 +308,124 @@ describe("runMailboxSync", () => {
     }),
   );
 
+  it.effect(
+    "uses the advanced cursor on a follow-up wake-up so duplicate dispatches stay idempotent",
+    () =>
+      Effect.gen(function* () {
+        const appliedSnapshots: Array<{
+          eventsEmitted: number;
+          mailboxId: string;
+          leaseOwnerId: string;
+          syncRunId: string;
+          threadCount: number;
+          messageCount: number;
+          nextCursor: string | null;
+        }> = [];
+        const observedCursors: Array<string | null> = [];
+
+        const providerLayer = Layer.succeed(MailboxSyncProvider, {
+          syncMailbox: ({ cursor }) =>
+            Effect.sync(() => {
+              observedCursors.push(cursor);
+
+              if (cursor === "hist_1") {
+                return {
+                  snapshot: {
+                    deletedProviderMessageIds: [],
+                    threads: [
+                      {
+                        id: "thr_demo",
+                        providerThreadId: "gmail_thr_demo",
+                        subject: "Demo thread",
+                        lastMessageAt: "2026-03-24T00:01:00.000Z",
+                      },
+                    ],
+                    messages: [
+                      {
+                        id: "msg_demo_2",
+                        threadId: "thr_demo",
+                        providerMessageId: "gmail_msg_demo_2",
+                        providerThreadId: "gmail_thr_demo",
+                        subject: "Demo thread",
+                        from: {
+                          name: "Mailmon",
+                          email: "hello@mailmon.dev",
+                        },
+                        snippet: "Incremental message",
+                        receivedAt: "2026-03-24T00:01:00.000Z",
+                        labelIds: ["INBOX"],
+                      },
+                    ],
+                  },
+                  eventsEmitted: 1,
+                  nextCursor: "hist_2",
+                };
+              }
+
+              return {
+                snapshot: {
+                  deletedProviderMessageIds: [],
+                  threads: [],
+                  messages: [],
+                },
+                eventsEmitted: 0,
+                nextCursor: "hist_2",
+              };
+            }),
+        });
+
+        const testLayer = Layer.mergeAll(
+          catalogLayer,
+          createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
+          createSyncRunStoreTestLayer([]),
+          createSyncCoordinatorTestLayer(),
+          providerLayer,
+        );
+
+        const firstResult = yield* runMailboxSync(mailboxFixture.id).pipe(
+          Effect.provide(testLayer),
+        );
+        const secondResult = yield* runMailboxSync(mailboxFixture.id).pipe(
+          Effect.provide(testLayer),
+        );
+
+        expect(firstResult.status).toBe("completed");
+        expect(firstResult.eventsEmitted).toBe(1);
+        expect(firstResult.nextCursor).toBe("hist_2");
+        expect(secondResult.status).toBe("completed");
+        expect(secondResult.eventsEmitted).toBe(0);
+        expect(secondResult.nextCursor).toBe("hist_2");
+        expect(observedCursors).toEqual(["hist_1", "hist_2"]);
+        expect(appliedSnapshots).toEqual([
+          {
+            mailboxId: mailboxFixture.id,
+            eventsEmitted: 1,
+            leaseOwnerId: expect.any(String),
+            syncRunId: "sr_mbx_demo",
+            threadCount: 1,
+            messageCount: 1,
+            nextCursor: "hist_2",
+          },
+          {
+            mailboxId: mailboxFixture.id,
+            eventsEmitted: 0,
+            leaseOwnerId: expect.any(String),
+            syncRunId: "sr_mbx_demo",
+            threadCount: 0,
+            messageCount: 0,
+            nextCursor: "hist_2",
+          },
+        ]);
+      }),
+  );
+
   it.effect("returns a skipped result when another worker holds the mailbox lease", () =>
     Effect.gen(function* () {
       const appliedSnapshots: Array<{
+        eventsEmitted: number;
         mailboxId: string;
         leaseOwnerId: string;
+        syncRunId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;
@@ -340,8 +469,10 @@ describe("runMailboxSync", () => {
   it.effect("keeps heartbeating the mailbox lease until state writes finish", () =>
     Effect.gen(function* () {
       const appliedSnapshots: Array<{
+        eventsEmitted: number;
         mailboxId: string;
         leaseOwnerId: string;
+        syncRunId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;
@@ -388,20 +519,15 @@ describe("runMailboxSync", () => {
       expect(appliedSnapshots).toEqual([
         {
           mailboxId: mailboxFixture.id,
+          eventsEmitted: 2,
           leaseOwnerId: expect.any(String),
+          syncRunId: "sr_mbx_demo",
           threadCount: 1,
           messageCount: 1,
           nextCursor: "hist_2",
         },
       ]);
-      expect(completedSyncRuns).toEqual([
-        expect.objectContaining({
-          mailboxId: mailboxFixture.id,
-          status: "completed",
-          eventsEmitted: 2,
-          nextCursor: "hist_2",
-        }),
-      ]);
+      expect(completedSyncRuns).toEqual([]);
       expect(releaseCalls).toHaveLength(1);
     }),
   );
@@ -409,8 +535,10 @@ describe("runMailboxSync", () => {
   it.effect("stops execution and records lease_lost when heartbeat renewal fails mid-run", () =>
     Effect.gen(function* () {
       const appliedSnapshots: Array<{
+        eventsEmitted: number;
         mailboxId: string;
         leaseOwnerId: string;
+        syncRunId: string;
         threadCount: number;
         messageCount: number;
         nextCursor: string | null;

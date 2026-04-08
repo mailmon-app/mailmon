@@ -360,4 +360,133 @@ describe("createHttpGmailSyncProviderLayer", () => {
       nextCursor: "hist_incremental_2",
     });
   });
+
+  it("deduplicates repeated history references and keeps deletes dominant", async () => {
+    const fetchedMessageIds: Array<string> = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        return new Response(JSON.stringify({ access_token: "access-token" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/history") {
+        expect(url.searchParams.get("startHistoryId")).toBe("hist_bootstrap");
+        return new Response(
+          JSON.stringify({
+            history: [
+              {
+                labelsAdded: [
+                  { message: { id: "gmail_msg_2" } },
+                  { message: { id: "gmail_msg_2" } },
+                ],
+                labelsRemoved: [{ message: { id: "gmail_msg_1" } }],
+                messagesAdded: [{ message: { id: "gmail_msg_2" } }],
+                messagesDeleted: [{ message: { id: "gmail_msg_1" } }],
+              },
+              {
+                messagesAdded: [
+                  { message: { id: "gmail_msg_2" } },
+                  { message: { id: "gmail_msg_3" } },
+                ],
+                messagesDeleted: [{ message: { id: "gmail_msg_2" } }],
+              },
+            ],
+            historyId: "hist_incremental_3",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/messages/gmail_msg_3") {
+        fetchedMessageIds.push("gmail_msg_3");
+
+        return new Response(
+          JSON.stringify({
+            id: "gmail_msg_3",
+            internalDate: String(Date.parse("2026-03-29T10:05:00.000Z")),
+            labelIds: ["INBOX"],
+            payload: {
+              headers: [
+                { name: "From", value: "Mailmon <hello@mailmon.dev>" },
+                { name: "Subject", value: "Latest Mailmon update" },
+              ],
+            },
+            snippet: "Only the surviving change should be fetched.",
+            threadId: "gmail_thread_1",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxSyncProvider;
+
+        return yield* provider.syncMailbox({
+          mailbox: {
+            ...mailboxFixture,
+            initializedAt: "2026-03-29T09:30:00.000Z",
+            lastSuccessfulSyncAt: "2026-03-29T09:30:00.000Z",
+          },
+          cursor: "hist_bootstrap",
+        });
+      }).pipe(
+        Effect.provide(
+          createHttpGmailSyncProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }).pipe(Layer.provide(credentialStoreLayer)),
+        ),
+      ),
+    );
+
+    expect(fetchedMessageIds).toEqual(["gmail_msg_3"]);
+    expect(result).toEqual({
+      snapshot: {
+        deletedProviderMessageIds: ["gmail_msg_1", "gmail_msg_2"],
+        threads: [
+          {
+            id: "thr_mbx_123_gmail_thread_1",
+            providerThreadId: "gmail_thread_1",
+            subject: "Latest Mailmon update",
+            lastMessageAt: "2026-03-29T10:05:00.000Z",
+          },
+        ],
+        messages: [
+          {
+            id: "msg_mbx_123_gmail_msg_3",
+            threadId: "thr_mbx_123_gmail_thread_1",
+            providerMessageId: "gmail_msg_3",
+            providerThreadId: "gmail_thread_1",
+            subject: "Latest Mailmon update",
+            from: {
+              name: "Mailmon",
+              email: "hello@mailmon.dev",
+            },
+            snippet: "Only the surviving change should be fetched.",
+            receivedAt: "2026-03-29T10:05:00.000Z",
+            labelIds: ["INBOX"],
+          },
+        ],
+      },
+      eventsEmitted: 3,
+      nextCursor: "hist_incremental_3",
+    });
+  });
 });
