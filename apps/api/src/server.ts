@@ -1,15 +1,136 @@
-import { MailboxCatalog, getMailboxOrFail } from "@mailmon/core";
-import { Effect } from "effect";
+import {
+  authenticateWorkspaceApiKeyOrFail,
+  completeGmailMailboxConnectSession,
+  createMailboxConnectSession,
+  getConnectSessionOrFail,
+  getGmailMailboxConnectAuthorizationUrl,
+  getMailboxOrFail,
+  type CreateConnectSessionRequest,
+  type ProblemDetails,
+} from "@mailmon/core";
+import { Effect, ManagedRuntime } from "effect";
 import { Hono } from "hono";
 
-export interface ApiServerRuntime {
-  readonly runPromise: <A, E>(
-    effect: Effect.Effect<A, E, MailboxCatalog>,
-    options?: {
-      readonly signal?: AbortSignal;
+export type ApiServerRuntime = Pick<ManagedRuntime.ManagedRuntime<any, any>, "runPromise">;
+
+const createProblemResponse = (problem: ProblemDetails) => {
+  return new Response(JSON.stringify(problem), {
+    status: problem.status,
+    headers: {
+      "content-type": "application/json",
     },
-  ) => Promise<A>;
-}
+  });
+};
+
+const invalidRequest = (detail: string): ProblemDetails => {
+  return {
+    type: "https://api.mailmon.dev/problems/invalid-request",
+    title: "Invalid request",
+    status: 400,
+    code: "invalid_request",
+    detail,
+    retryable: false,
+  };
+};
+
+const extractBearerApiKey = (authorizationHeader: string | undefined) => {
+  if (authorizationHeader === undefined) {
+    return null;
+  }
+
+  const [scheme, token] = authorizationHeader.split(/\s+/, 2);
+
+  if (scheme?.toLowerCase() !== "bearer" || token === undefined || token.length === 0) {
+    return null;
+  }
+
+  return token;
+};
+
+const isCreateConnectSessionRequest = (value: unknown): value is CreateConnectSessionRequest => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "provider" in value &&
+    value.provider === "gmail" &&
+    "tenantExternalId" in value &&
+    typeof value.tenantExternalId === "string" &&
+    value.tenantExternalId.length > 0 &&
+    "mailboxExternalId" in value &&
+    typeof value.mailboxExternalId === "string" &&
+    value.mailboxExternalId.length > 0 &&
+    "redirectUrl" in value &&
+    typeof value.redirectUrl === "string" &&
+    value.redirectUrl.length > 0
+  );
+};
+
+const getRequestOrigin = (requestUrl: string) => {
+  return new URL(requestUrl).origin;
+};
+
+const buildConnectRedirectUrl = (
+  redirectUrl: string,
+  params: Readonly<Record<string, string | null | undefined>>,
+) => {
+  const url = new URL(redirectUrl);
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined) {
+      continue;
+    }
+
+    url.searchParams.set(key, value);
+  }
+
+  return url.toString();
+};
+
+const redirectToConnectResult = (
+  redirectUrl: string,
+  params: Readonly<Record<string, string | null | undefined>>,
+) => {
+  return Response.redirect(buildConnectRedirectUrl(redirectUrl, params), 302);
+};
+
+const matchProblemEffect = async <A, E, R>(
+  runtime: ApiServerRuntime,
+  effect: Effect.Effect<A, E, R>,
+) => {
+  return runtime.runPromise(
+    effect.pipe(
+      Effect.match({
+        onFailure: (problem) => ({ _tag: "failure" as const, problem }),
+        onSuccess: (value) => ({ _tag: "success" as const, value }),
+      }),
+    ),
+  );
+};
+
+const authenticateRequest = async (
+  runtime: ApiServerRuntime,
+  authorizationHeader: string | undefined,
+) => {
+  const apiKey = extractBearerApiKey(authorizationHeader);
+
+  if (apiKey === null) {
+    return {
+      _tag: "failure" as const,
+      problem: invalidRequest("Authorization must use Bearer <mailmon_api_key>."),
+    };
+  }
+
+  const result = await matchProblemEffect(runtime, authenticateWorkspaceApiKeyOrFail(apiKey));
+
+  if (result._tag === "failure") {
+    return result;
+  }
+
+  return {
+    _tag: "success" as const,
+    workspace: result.value,
+  };
+};
 
 export const createApp = (runtime: ApiServerRuntime) => {
   const app = new Hono();
@@ -18,26 +139,131 @@ export const createApp = (runtime: ApiServerRuntime) => {
     return context.json({ status: "ok" });
   });
 
-  app.get("/v1/mailboxes/:mailboxId", async (context) => {
-    const result = await runtime.runPromise(
-      getMailboxOrFail(context.req.param("mailboxId")).pipe(
-        Effect.match({
-          onFailure: (problem) => ({ _tag: "failure" as const, problem }),
-          onSuccess: (mailbox) => ({ _tag: "success" as const, mailbox }),
-        }),
+  app.post("/v1/mailboxes/connect-sessions", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const payload = await context.req.json().catch(() => null);
+
+    if (!isCreateConnectSessionRequest(payload)) {
+      return createProblemResponse(
+        invalidRequest(
+          "Body must include provider, tenantExternalId, mailboxExternalId, and redirectUrl.",
+        ),
+      );
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      createMailboxConnectSession(
+        auth.workspace.workspaceId,
+        payload,
+        getRequestOrigin(context.req.url),
       ),
     );
 
     if (result._tag === "failure") {
-      return new Response(JSON.stringify(result.problem), {
-        status: result.problem.status,
-        headers: {
-          "content-type": "application/json",
-        },
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value, 201);
+  });
+
+  app.get("/v1/mailboxes/:mailboxId", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      getMailboxOrFail(context.req.param("mailboxId"), {
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value);
+  });
+
+  app.get("/oauth/gmail/callback", async (context) => {
+    const connectSessionId = context.req.query("state");
+
+    if (connectSessionId === undefined || connectSessionId.length === 0) {
+      return createProblemResponse(
+        invalidRequest("OAuth callback is missing the connect session state."),
+      );
+    }
+
+    const connectSessionResult = await matchProblemEffect(
+      runtime,
+      getConnectSessionOrFail(connectSessionId),
+    );
+
+    if (connectSessionResult._tag === "failure") {
+      return createProblemResponse(connectSessionResult.problem);
+    }
+
+    if (context.req.query("error") !== undefined) {
+      return redirectToConnectResult(connectSessionResult.value.redirectUrl, {
+        code: context.req.query("error") ?? "gmail_authorization_denied",
+        detail:
+          context.req.query("error_description") ?? "The Gmail authorization flow was cancelled.",
+        status: "error",
       });
     }
 
-    return context.json(result.mailbox);
+    const code = context.req.query("code");
+
+    if (code === undefined || code.length === 0) {
+      return redirectToConnectResult(connectSessionResult.value.redirectUrl, {
+        code: "gmail_authorization_code_missing",
+        status: "error",
+      });
+    }
+
+    const completion = await matchProblemEffect(
+      runtime,
+      completeGmailMailboxConnectSession(connectSessionId, code, getRequestOrigin(context.req.url)),
+    );
+
+    if (completion._tag === "failure") {
+      return redirectToConnectResult(connectSessionResult.value.redirectUrl, {
+        code: completion.problem.code,
+        detail: completion.problem.detail,
+        mailbox_id: completion.problem.resource?.mailbox_id ?? null,
+        status: "error",
+      });
+    }
+
+    return redirectToConnectResult(completion.value.redirectUrl, {
+      created: completion.value.created ? "true" : "false",
+      mailbox_id: completion.value.mailbox.id,
+      status: "success",
+    });
+  });
+
+  app.get("/oauth/gmail/:connectSessionId", async (context) => {
+    const result = await matchProblemEffect(
+      runtime,
+      getGmailMailboxConnectAuthorizationUrl(
+        context.req.param("connectSessionId"),
+        getRequestOrigin(context.req.url),
+      ),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return Response.redirect(result.value, 302);
   });
 
   return app;

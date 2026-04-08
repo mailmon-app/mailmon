@@ -1,8 +1,9 @@
-import { MailboxSyncProvider } from "@mailmon/core";
+import { MailboxConnectProvider, MailboxSyncProvider } from "@mailmon/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
+  createHttpGmailConnectProviderLayer,
   createHttpGmailSyncProviderLayer,
   createStubMailboxSyncProviderLayer,
   GmailMailboxCredentialStore,
@@ -487,6 +488,106 @@ describe("createHttpGmailSyncProviderLayer", () => {
       },
       eventsEmitted: 3,
       nextCursor: "hist_incremental_3",
+    });
+  });
+});
+
+describe("createHttpGmailConnectProviderLayer", () => {
+  it("builds a Gmail OAuth authorization URL with PKCE state", async () => {
+    const authorizationUrl = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxConnectProvider;
+
+        return yield* provider.createAuthorizationUrl({
+          connectSessionId: "mcs_123",
+          codeVerifier: "verifier-123",
+          redirectUri: "http://localhost/oauth/gmail/callback",
+        });
+      }).pipe(
+        Effect.provide(
+          createHttpGmailConnectProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            oauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }),
+        ),
+      ),
+    );
+
+    const url = new URL(authorizationUrl);
+
+    expect(url.origin + url.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(url.searchParams.get("client_id")).toBe("client-id");
+    expect(url.searchParams.get("state")).toBe("mcs_123");
+    expect(url.searchParams.get("redirect_uri")).toBe("http://localhost/oauth/gmail/callback");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("code_challenge")).toBeTruthy();
+  });
+
+  it("exchanges an authorization code and returns the connected Gmail identity", async () => {
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        expect(init?.method).toBe("POST");
+
+        return new Response(
+          JSON.stringify({
+            access_token: "access-token",
+            refresh_token: "refresh-token",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/profile") {
+        return new Response(
+          JSON.stringify({
+            emailAddress: "User@gmail.com",
+            historyId: "hist_123",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const authorization = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxConnectProvider;
+
+        return yield* provider.completeAuthorization({
+          connectSessionId: "mcs_123",
+          code: "oauth-code",
+          codeVerifier: "verifier-123",
+          redirectUri: "http://localhost/oauth/gmail/callback",
+        });
+      }).pipe(
+        Effect.provide(
+          createHttpGmailConnectProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            oauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }),
+        ),
+      ),
+    );
+
+    expect(authorization).toEqual({
+      providerAccountEmail: "user@gmail.com",
+      refreshToken: "refresh-token",
     });
   });
 });

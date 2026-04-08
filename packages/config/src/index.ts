@@ -30,6 +30,9 @@ const loadGmailOauthClientId = Config.option(nonEmptyString("MAILMON_GMAIL_OAUTH
 const loadGmailOauthClientSecret = Config.option(
   nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_SECRET"),
 );
+const loadGmailOauthAuthorizeUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_AUTHORIZE_URL").pipe(
+  Config.orElse(() => Config.succeed("https://accounts.google.com/o/oauth2/v2/auth")),
+);
 const loadGmailOauthTokenUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_TOKEN_URL").pipe(
   Config.orElse(() => Config.succeed("https://oauth2.googleapis.com/token")),
 );
@@ -53,7 +56,13 @@ export interface CommonEnv {
 
 export interface ApiEnv extends CommonEnv {
   readonly databaseUrl: string;
+  readonly gmailApiBaseUrl: string;
+  readonly gmailOauthAuthorizeUrl: string;
+  readonly gmailOauthClientId: string | null;
+  readonly gmailOauthClientSecret: string | null;
+  readonly gmailOauthTokenUrl: string;
   readonly port: number;
+  readonly workerBaseUrl: string;
 }
 
 export interface WorkerEnv extends CommonEnv {
@@ -97,15 +106,39 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
     this,
     Effect.all({
       databaseUrl: loadDatabaseUrl,
+      gmailApiBaseUrl: loadGmailApiBaseUrl,
+      gmailOauthAuthorizeUrl: loadGmailOauthAuthorizeUrl,
+      gmailOauthClientId: loadGmailOauthClientId,
+      gmailOauthClientSecret: loadGmailOauthClientSecret,
+      gmailOauthTokenUrl: loadGmailOauthTokenUrl,
       nodeEnv: loadNodeEnv,
       port: loadPort(3000),
-    }),
+      workerBaseUrl: loadMailboxWorkerBaseUrl,
+    }).pipe(
+      Effect.map((config) => ({
+        databaseUrl: config.databaseUrl,
+        gmailApiBaseUrl: config.gmailApiBaseUrl,
+        gmailOauthAuthorizeUrl: config.gmailOauthAuthorizeUrl,
+        gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
+        gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
+        gmailOauthTokenUrl: config.gmailOauthTokenUrl,
+        nodeEnv: config.nodeEnv,
+        port: config.port,
+        workerBaseUrl: config.workerBaseUrl,
+      })),
+    ),
   );
 
   static readonly testLayer = Layer.succeed(this, {
     databaseUrl: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+    gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
+    gmailOauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    gmailOauthClientId: null,
+    gmailOauthClientSecret: null,
+    gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
     nodeEnv: "test",
     port: 3000,
+    workerBaseUrl: "http://127.0.0.1:3001",
   } satisfies ApiEnv);
 }
 

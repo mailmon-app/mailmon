@@ -1,14 +1,19 @@
+import { createHash } from "node:crypto";
+
 import {
+  MailboxConnectProvider,
   MailboxSyncProvider,
   makeProblem,
   type CanonicalMessageRecord,
+  type MailboxConnectAuthorization,
   type MailboxProviderSyncResult,
-  type ProblemDetails,
   type MailboxSyncRequest,
+  type ProblemDetails,
 } from "@mailmon/core";
 import { Context, Effect, Layer } from "effect";
 
 const DEFAULT_GMAIL_API_BASE_URL = "https://gmail.googleapis.com/gmail/v1";
+const DEFAULT_GMAIL_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const DEFAULT_GMAIL_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 export interface GmailMailboxCredential {
@@ -30,6 +35,7 @@ export class GmailMailboxCredentialStore extends Context.Tag(
 export interface GmailSyncProviderConfig {
   readonly apiBaseUrl?: string;
   readonly fetchImpl?: typeof fetch;
+  readonly oauthAuthorizeUrl?: string;
   readonly oauthClientId: string | null;
   readonly oauthClientSecret: string | null;
   readonly oauthTokenUrl?: string;
@@ -110,6 +116,31 @@ const parseGmailProfileResponse = (payload: unknown, mailboxId: string): GmailPr
     code: "gmail_profile_response_invalid",
     detail: "Fetching the Gmail mailbox profile returned an invalid response body.",
     mailboxId,
+    retryable: false,
+    status: 502,
+    title: "Gmail profile response invalid",
+  });
+};
+
+const parseGmailConnectProfileResponse = (
+  payload: unknown,
+  connectSessionId: string,
+): GmailProfileResponse => {
+  if (
+    isRecord(payload) &&
+    typeof payload.emailAddress === "string" &&
+    typeof payload.historyId === "string"
+  ) {
+    return {
+      emailAddress: payload.emailAddress,
+      historyId: payload.historyId,
+    };
+  }
+
+  throw makeGmailConnectProblem({
+    code: "gmail_profile_response_invalid",
+    connectSessionId,
+    detail: "Fetching the Gmail mailbox profile returned an invalid response body.",
     retryable: false,
     status: 502,
     title: "Gmail profile response invalid",
@@ -348,6 +379,31 @@ const makeGmailProblem = (params: {
   });
 };
 
+const makeGmailConnectProblem = (params: {
+  readonly code: string;
+  readonly connectSessionId: string;
+  readonly detail: string;
+  readonly retryable: boolean;
+  readonly status?: number;
+  readonly title: string;
+}) => {
+  return makeProblem({
+    type: `https://api.mailmon.dev/problems/${params.code.replaceAll("_", "-")}`,
+    title: params.title,
+    status: params.status ?? 502,
+    code: params.code,
+    detail: params.detail,
+    resource: {
+      connect_session_id: params.connectSessionId,
+    },
+    retryable: params.retryable,
+  });
+};
+
+const createPkceCodeChallenge = (codeVerifier: string) => {
+  return createHash("sha256").update(codeVerifier).digest("base64url");
+};
+
 const toCanonicalMessage = (
   mailboxId: string,
   message: GmailMessageResponse,
@@ -508,6 +564,7 @@ const createFetchUrl = (
 
 const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
   const fetchImpl = config.fetchImpl ?? globalThis.fetch;
+  const oauthAuthorizeUrl = config.oauthAuthorizeUrl ?? DEFAULT_GMAIL_OAUTH_AUTHORIZE_URL;
   const oauthTokenUrl = config.oauthTokenUrl ?? DEFAULT_GMAIL_OAUTH_TOKEN_URL;
   const apiBaseUrl = config.apiBaseUrl ?? DEFAULT_GMAIL_API_BASE_URL;
 
@@ -573,6 +630,79 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
     return payload.access_token;
   };
 
+  const exchangeAuthorizationCode = async (params: {
+    readonly code: string;
+    readonly codeVerifier: string;
+    readonly connectSessionId: string;
+    readonly redirectUri: string;
+  }): Promise<MailboxConnectAuthorization & { accessToken: string }> => {
+    if (config.oauthClientId === null || config.oauthClientSecret === null) {
+      throw makeGmailConnectProblem({
+        code: "gmail_oauth_config_missing",
+        connectSessionId: params.connectSessionId,
+        detail: "API Gmail OAuth client credentials are not configured.",
+        retryable: false,
+        status: 500,
+        title: "Gmail OAuth config missing",
+      });
+    }
+
+    const body = new URLSearchParams({
+      client_id: config.oauthClientId,
+      client_secret: config.oauthClientSecret,
+      code: params.code,
+      code_verifier: params.codeVerifier,
+      grant_type: "authorization_code",
+      redirect_uri: params.redirectUri,
+    });
+    const response = await fetchImpl(oauthTokenUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body,
+    });
+
+    if (!response.ok) {
+      throw makeGmailConnectProblem({
+        code: "gmail_authorization_code_exchange_failed",
+        connectSessionId: params.connectSessionId,
+        detail: `Exchanging the Gmail authorization code failed with HTTP ${response.status}.`,
+        retryable: response.status >= 500,
+        status: response.status,
+        title: "Gmail authorization code exchange failed",
+      });
+    }
+
+    const payload = await response.json();
+
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      !("access_token" in payload) ||
+      typeof payload.access_token !== "string" ||
+      payload.access_token.length === 0 ||
+      !("refresh_token" in payload) ||
+      typeof payload.refresh_token !== "string" ||
+      payload.refresh_token.length === 0
+    ) {
+      throw makeGmailConnectProblem({
+        code: "gmail_authorization_code_exchange_failed",
+        connectSessionId: params.connectSessionId,
+        detail: "Exchanging the Gmail authorization code returned no refresh token.",
+        retryable: false,
+        status: 502,
+        title: "Gmail authorization code exchange failed",
+      });
+    }
+
+    return {
+      accessToken: payload.access_token,
+      providerAccountEmail: "",
+      refreshToken: payload.refresh_token,
+    };
+  };
+
   const getJson = async (params: {
     readonly accessToken: string;
     readonly pathname: string;
@@ -614,6 +744,29 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
     }
 
     return parseGmailProfileResponse(responseBody, params.mailboxId);
+  };
+
+  const getConnectProfile = async (params: {
+    readonly accessToken: string;
+    readonly connectSessionId: string;
+  }) => {
+    const { response, responseBody } = await getJson({
+      accessToken: params.accessToken,
+      pathname: "/users/me/profile",
+    });
+
+    if (!response.ok) {
+      throw makeGmailConnectProblem({
+        code: "gmail_profile_fetch_failed",
+        connectSessionId: params.connectSessionId,
+        detail: `Fetching the Gmail mailbox profile failed with HTTP ${response.status}.`,
+        retryable: response.status >= 500,
+        status: response.status,
+        title: "Gmail profile fetch failed",
+      });
+    }
+
+    return parseGmailConnectProfileResponse(responseBody, params.connectSessionId);
   };
 
   const getMessage = async (params: {
@@ -792,10 +945,13 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
   };
 
   return {
+    exchangeAuthorizationCode,
     fetchAccessToken,
+    getConnectProfile,
     getProfile,
     listAllMessages,
     listHistoryDelta,
+    oauthAuthorizeUrl,
   };
 };
 
@@ -804,6 +960,107 @@ export const createStubMailboxSyncProviderLayer = Layer.succeed(MailboxSyncProvi
     return Effect.succeed(createStubSyncResult(request));
   },
 });
+
+export const createHttpGmailConnectProviderLayer = (config: GmailSyncProviderConfig) =>
+  Layer.effect(
+    MailboxConnectProvider,
+    Effect.sync(() => {
+      const gmailApi = createHttpGmailApi(config);
+
+      return {
+        createAuthorizationUrl: (params) =>
+          Effect.try({
+            catch: (error) => {
+              if (isProblemDetails(error)) {
+                return error;
+              }
+
+              return makeGmailConnectProblem({
+                code: "gmail_authorization_url_failed",
+                connectSessionId: params.connectSessionId,
+                detail:
+                  error instanceof Error
+                    ? error.message
+                    : "An unexpected Gmail authorization URL error occurred.",
+                retryable: false,
+                status: 500,
+                title: "Gmail authorization URL failed",
+              });
+            },
+            try: () => {
+              if (config.oauthClientId === null) {
+                throw makeGmailConnectProblem({
+                  code: "gmail_oauth_config_missing",
+                  connectSessionId: params.connectSessionId,
+                  detail: "API Gmail OAuth client credentials are not configured.",
+                  retryable: false,
+                  status: 500,
+                  title: "Gmail OAuth config missing",
+                });
+              }
+
+              const authorizationUrl = new URL(gmailApi.oauthAuthorizeUrl);
+
+              authorizationUrl.searchParams.set("access_type", "offline");
+              authorizationUrl.searchParams.set("client_id", config.oauthClientId);
+              authorizationUrl.searchParams.set(
+                "code_challenge",
+                createPkceCodeChallenge(params.codeVerifier),
+              );
+              authorizationUrl.searchParams.set("code_challenge_method", "S256");
+              authorizationUrl.searchParams.set("include_granted_scopes", "true");
+              authorizationUrl.searchParams.set("prompt", "consent");
+              authorizationUrl.searchParams.set("redirect_uri", params.redirectUri);
+              authorizationUrl.searchParams.set("response_type", "code");
+              authorizationUrl.searchParams.set(
+                "scope",
+                "https://www.googleapis.com/auth/gmail.readonly",
+              );
+              authorizationUrl.searchParams.set("state", params.connectSessionId);
+
+              return authorizationUrl.toString();
+            },
+          }),
+        completeAuthorization: (params) =>
+          Effect.tryPromise({
+            catch: (error) => {
+              if (isProblemDetails(error)) {
+                return error;
+              }
+
+              return makeGmailConnectProblem({
+                code: "gmail_connect_failed",
+                connectSessionId: params.connectSessionId,
+                detail:
+                  error instanceof Error
+                    ? error.message
+                    : "An unexpected Gmail connect error occurred.",
+                retryable: true,
+                status: 502,
+                title: "Gmail connect failed",
+              });
+            },
+            try: async () => {
+              const authorization = await gmailApi.exchangeAuthorizationCode({
+                code: params.code,
+                codeVerifier: params.codeVerifier,
+                connectSessionId: params.connectSessionId,
+                redirectUri: params.redirectUri,
+              });
+              const profile = await gmailApi.getConnectProfile({
+                accessToken: authorization.accessToken,
+                connectSessionId: params.connectSessionId,
+              });
+
+              return {
+                providerAccountEmail: profile.emailAddress.trim().toLowerCase(),
+                refreshToken: authorization.refreshToken,
+              } satisfies MailboxConnectAuthorization;
+            },
+          }),
+      };
+    }),
+  );
 
 export const createHttpGmailSyncProviderLayer = (config: GmailSyncProviderConfig) =>
   Layer.effect(

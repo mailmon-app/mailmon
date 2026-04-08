@@ -10,8 +10,14 @@ describe("ApiConfig", () => {
 
       expect(config).toEqual({
         databaseUrl: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+        gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
+        gmailOauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+        gmailOauthClientId: null,
+        gmailOauthClientSecret: null,
+        gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         nodeEnv: "test",
         port: 3000,
+        workerBaseUrl: "http://127.0.0.1:3001",
       });
     }).pipe(
       Effect.provide(ApiConfig.layer),
