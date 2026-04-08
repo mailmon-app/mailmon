@@ -169,9 +169,9 @@ Expose the first useful developer read surface over the synced canonical state. 
 
 Immediate hardening work unlocked by the new read API surface:
 
-- [ ] Add mailbox-scoped newest-first read indexes for `messages` and `threads`
-- [ ] Add DB-backed integration tests for mailbox-scoped pagination, opaque cursor advancement, and workspace ownership enforcement
-- [ ] Document cursor ordering and opacity explicitly in the API contract examples when the public docs are refreshed
+- [x] Add mailbox-scoped newest-first read indexes for `messages` and `threads`
+- [x] Add DB-backed integration tests for mailbox-scoped pagination, opaque cursor advancement, and workspace ownership enforcement
+- [x] Document cursor ordering and opacity explicitly in the API contract examples when the public docs are refreshed
 
 ---
 

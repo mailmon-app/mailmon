@@ -534,9 +534,17 @@ Content-Type: application/json
 #### List messages for a mailbox
 
 ```http
-GET /v1/messages?mailbox_id=mbx_123&limit=50&cursor=...
+GET /v1/messages?mailboxId=mbx_123&limit=50
 Authorization: Bearer <mailmon_api_key>
 ```
+
+#### Pagination contract
+
+- results are mailbox-scoped and returned newest-first by `receivedAt`
+- ties are broken deterministically by descending `message.id`
+- omit `cursor` on the first page
+- treat `cursor` and `nextCursor` as opaque tokens; clients must not parse or construct them
+- when `nextCursor` is `null`, there are no more results
 
 #### Response
 
@@ -546,18 +554,25 @@ Authorization: Bearer <mailmon_api_key>
   "data": [
     {
       "id": "msg_123",
-      "mailbox_id": "mbx_123",
-      "thread_id": "thr_123",
-      "provider_message_id": "195f8c...",
+      "mailboxId": "mbx_123",
+      "threadId": "thr_123",
+      "providerMessageId": "195f8c...",
       "subject": "Interview availability",
       "from": { "name": "Jane", "email": "jane@acme.com" },
       "snippet": "Could you share your availability...",
-      "received_at": "2026-03-23T10:11:20Z",
-      "label_ids": ["INBOX", "UNREAD"]
+      "receivedAt": "2026-03-23T10:11:20Z",
+      "labelIds": ["INBOX", "UNREAD"]
     }
   ],
-  "next_cursor": "cur_abc"
+  "nextCursor": "cur_abc"
 }
+```
+
+#### Follow-up page
+
+```http
+GET /v1/messages?mailboxId=mbx_123&limit=50&cursor=cur_abc
+Authorization: Bearer <mailmon_api_key>
 ```
 
 #### Get message
@@ -574,7 +589,41 @@ Authorization: Bearer <mailmon_api_key>
 #### List threads for a mailbox
 
 ```http
-GET /v1/threads?mailbox_id=mbx_123&limit=50&cursor=...
+GET /v1/threads?mailboxId=mbx_123&limit=50
+Authorization: Bearer <mailmon_api_key>
+```
+
+#### Pagination contract
+
+- results are mailbox-scoped and returned newest-first by `lastMessageAt`
+- ties are broken deterministically by descending `thread.id`
+- omit `cursor` on the first page
+- treat `cursor` and `nextCursor` as opaque tokens; clients must not parse or construct them
+- when `nextCursor` is `null`, there are no more results
+
+#### Response
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "thr_123",
+      "object": "thread",
+      "mailboxId": "mbx_123",
+      "providerThreadId": "195f8b...",
+      "subject": "Interview availability",
+      "lastMessageAt": "2026-03-23T10:11:20Z"
+    }
+  ],
+  "nextCursor": "cur_def"
+}
+```
+
+#### Follow-up page
+
+```http
+GET /v1/threads?mailboxId=mbx_123&limit=50&cursor=cur_def
 Authorization: Bearer <mailmon_api_key>
 ```
 
@@ -591,20 +640,20 @@ Authorization: Bearer <mailmon_api_key>
 {
   "id": "thr_123",
   "object": "thread",
-  "mailbox_id": "mbx_123",
-  "provider_thread_id": "195f8b...",
+  "mailboxId": "mbx_123",
+  "providerThreadId": "195f8b...",
   "subject": "Interview availability",
-  "last_message_at": "2026-03-23T10:11:20Z",
+  "lastMessageAt": "2026-03-23T10:11:20Z",
   "messages": [
     {
       "id": "msg_120",
       "subject": "Interview availability",
-      "received_at": "2026-03-23T09:55:00Z"
+      "receivedAt": "2026-03-23T09:55:00Z"
     },
     {
       "id": "msg_123",
       "subject": "Re: Interview availability",
-      "received_at": "2026-03-23T10:11:20Z"
+      "receivedAt": "2026-03-23T10:11:20Z"
     }
   ]
 }

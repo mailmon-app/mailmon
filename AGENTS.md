@@ -76,6 +76,7 @@ Current bootstrap note:
 
 - The repo still contains bootstrap/dev scaffolding in `packages/db/src/bootstrap.ts`, but mailbox reads, sync runs, and mailbox lease coordination now have DB-backed implementations in `packages/db/src/persistence.ts`.
 - The public read surface now includes workspace-scoped `GET /v1/messages`, `GET /v1/messages/{message_id}`, `GET /v1/threads`, and `GET /v1/threads/{thread_id}` routes backed by canonical `messages` and `threads` state in Postgres.
+- Mailbox `messages` and `threads` reads now rely on mailbox-scoped newest-first indexes, and `packages/db` includes DB-backed pagination and workspace-ownership coverage for those read paths.
 - `packages/gmail/src/index.ts` now has a real HTTP Gmail sync provider path with persisted refresh-token lookup from `gmail_mailbox_credentials`, durable canonical baseline writes, and Gmail history-based incremental sync from the stored mailbox cursor.
 - Mailbox sync state writes are now lease-aware, successful sync finalization is committed transactionally with sync run completion and lease clearing, and the worker heartbeats the mailbox lease across the full sync critical section so stale leases can be taken over safely.
 - Duplicate wake-ups now rely on the stored mailbox cursor plus Gmail history compaction, so repeated dispatches do not replay stale mailbox state changes.
