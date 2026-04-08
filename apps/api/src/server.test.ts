@@ -2,6 +2,7 @@ import {
   MailboxCatalog,
   MailboxConnectProvider,
   MailboxConnectSessionStore,
+  MailboxQueryCatalog,
   MailboxSyncDispatcher,
   WorkspaceApiKeyStore,
   type MailboxResource,
@@ -25,6 +26,46 @@ const mailboxFixture: MailboxResource = {
   lastError: null,
 };
 
+const messageFixture = {
+  id: "msg_demo",
+  mailboxId: mailboxFixture.id,
+  threadId: "thr_demo",
+  providerMessageId: "gmail_msg_demo",
+  subject: "Interview availability",
+  from: {
+    name: "Jane",
+    email: "jane@acme.com",
+  },
+  snippet: "Could you share your availability...",
+  receivedAt: "2026-03-23T10:11:20.000Z",
+  labelIds: ["INBOX", "UNREAD"],
+};
+
+const threadListItemFixture = {
+  id: "thr_demo",
+  object: "thread" as const,
+  mailboxId: mailboxFixture.id,
+  providerThreadId: "gmail_thr_demo",
+  subject: "Interview availability",
+  lastMessageAt: "2026-03-23T10:11:20.000Z",
+};
+
+const threadFixture = {
+  ...threadListItemFixture,
+  messages: [
+    {
+      id: "msg_120",
+      subject: "Interview availability",
+      receivedAt: "2026-03-23T09:55:00.000Z",
+    },
+    {
+      id: messageFixture.id,
+      subject: "Re: Interview availability",
+      receivedAt: messageFixture.receivedAt,
+    },
+  ],
+};
+
 const createRuntime = () => {
   const dispatchedMailboxIds: Array<string> = [];
   const connectSessions = new Map<string, StoredConnectSession>();
@@ -42,6 +83,32 @@ const createRuntime = () => {
           Effect.succeed(
             mailboxId === mailboxFixture.id && options?.workspaceId === "ws_123"
               ? Option.some(mailboxFixture)
+              : Option.none(),
+          ),
+      }),
+      Layer.succeed(MailboxQueryCatalog, {
+        listMessages: ({ mailboxId }) =>
+          Effect.succeed({
+            object: "list" as const,
+            data: mailboxId === mailboxFixture.id ? [messageFixture] : [],
+            nextCursor: mailboxId === mailboxFixture.id ? "cur_next" : null,
+          }),
+        getMessage: (messageId: string, options?: Readonly<{ workspaceId?: string }>) =>
+          Effect.succeed(
+            messageId === messageFixture.id && options?.workspaceId === "ws_123"
+              ? Option.some(messageFixture)
+              : Option.none(),
+          ),
+        listThreads: ({ mailboxId }) =>
+          Effect.succeed({
+            object: "list" as const,
+            data: mailboxId === mailboxFixture.id ? [threadListItemFixture] : [],
+            nextCursor: null,
+          }),
+        getThread: (threadId: string, options?: Readonly<{ workspaceId?: string }>) =>
+          Effect.succeed(
+            threadId === threadFixture.id && options?.workspaceId === "ws_123"
+              ? Option.some(threadFixture)
               : Option.none(),
           ),
       }),
@@ -150,6 +217,62 @@ describe("createApp", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(mailboxFixture);
+  });
+
+  it("lists mailbox-scoped messages for the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/messages?mailbox_id=mbx_demo&limit=25", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      object: "list",
+      data: [messageFixture],
+      nextCursor: "cur_next",
+    });
+  });
+
+  it("returns a single message resource scoped to the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/messages/msg_demo", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(messageFixture);
+  });
+
+  it("lists mailbox-scoped threads for the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/threads?mailboxId=mbx_demo", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      object: "list",
+      data: [threadListItemFixture],
+      nextCursor: null,
+    });
+  });
+
+  it("returns a thread with its messages scoped to the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/threads/thr_demo", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(threadFixture);
   });
 
   it("creates a connect session through the core workflow", async () => {

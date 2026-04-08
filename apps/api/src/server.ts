@@ -2,9 +2,13 @@ import {
   authenticateWorkspaceApiKeyOrFail,
   completeGmailMailboxConnectSession,
   createMailboxConnectSession,
+  getMessageOrFail,
   getConnectSessionOrFail,
   getGmailMailboxConnectAuthorizationUrl,
   getMailboxOrFail,
+  getThreadOrFail,
+  listMailboxMessages,
+  listMailboxThreads,
   type CreateConnectSessionRequest,
   type ProblemDetails,
 } from "@mailmon/core";
@@ -32,6 +36,9 @@ const invalidRequest = (detail: string): ProblemDetails => {
     retryable: false,
   };
 };
+
+const DEFAULT_LIST_LIMIT = 50;
+const MAX_LIST_LIMIT = 100;
 
 const extractBearerApiKey = (authorizationHeader: string | undefined) => {
   if (authorizationHeader === undefined) {
@@ -67,6 +74,30 @@ const isCreateConnectSessionRequest = (value: unknown): value is CreateConnectSe
 
 const getRequestOrigin = (requestUrl: string) => {
   return new URL(requestUrl).origin;
+};
+
+const getMailboxIdQuery = (request: { readonly query: (key: string) => string | undefined }) => {
+  return request.query("mailboxId") ?? request.query("mailbox_id") ?? null;
+};
+
+const parseListCursor = (request: { readonly query: (key: string) => string | undefined }) => {
+  return request.query("cursor") ?? null;
+};
+
+const parseListLimit = (request: { readonly query: (key: string) => string | undefined }) => {
+  const limitValue = request.query("limit");
+
+  if (limitValue === undefined) {
+    return DEFAULT_LIST_LIMIT;
+  }
+
+  const parsed = Number.parseInt(limitValue, 10);
+
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LIST_LIMIT) {
+    return null;
+  }
+
+  return parsed;
 };
 
 const buildConnectRedirectUrl = (
@@ -182,6 +213,126 @@ export const createApp = (runtime: ApiServerRuntime) => {
     const result = await matchProblemEffect(
       runtime,
       getMailboxOrFail(context.req.param("mailboxId"), {
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value);
+  });
+
+  app.get("/v1/messages", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const mailboxId = getMailboxIdQuery(context.req);
+
+    if (mailboxId === null) {
+      return createProblemResponse(
+        invalidRequest("Query must include mailboxId or mailbox_id."),
+      );
+    }
+
+    const limit = parseListLimit(context.req);
+
+    if (limit === null) {
+      return createProblemResponse(
+        invalidRequest(`Query parameter limit must be an integer between 1 and ${MAX_LIST_LIMIT}.`),
+      );
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      listMailboxMessages(mailboxId, {
+        cursor: parseListCursor(context.req),
+        limit,
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value);
+  });
+
+  app.get("/v1/messages/:messageId", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      getMessageOrFail(context.req.param("messageId"), {
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value);
+  });
+
+  app.get("/v1/threads", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const mailboxId = getMailboxIdQuery(context.req);
+
+    if (mailboxId === null) {
+      return createProblemResponse(
+        invalidRequest("Query must include mailboxId or mailbox_id."),
+      );
+    }
+
+    const limit = parseListLimit(context.req);
+
+    if (limit === null) {
+      return createProblemResponse(
+        invalidRequest(`Query parameter limit must be an integer between 1 and ${MAX_LIST_LIMIT}.`),
+      );
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      listMailboxThreads(mailboxId, {
+        cursor: parseListCursor(context.req),
+        limit,
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value);
+  });
+
+  app.get("/v1/threads/:threadId", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      getThreadOrFail(context.req.param("threadId"), {
         workspaceId: auth.workspace.workspaceId,
       }),
     );
