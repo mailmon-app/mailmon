@@ -4,10 +4,13 @@ import type {
   CompletedSyncRun,
   ConnectSessionResource,
   CreateConnectSessionRequest,
+  CreateWebhookEndpointRequest,
+  CreateWebhookEndpointSubscriptionRequest,
   MailboxResource,
   StoredConnectSession,
   SyncMailboxResult,
   SyncRunOutcome,
+  WebhookEventType,
 } from "./contracts.js";
 import {
   connectSessionExpired,
@@ -17,6 +20,7 @@ import {
   mailboxSyncLeaseLost,
   messageNotFound,
   threadNotFound,
+  webhookEndpointNotFound,
 } from "./problems.js";
 import {
   MailboxQueryCatalog,
@@ -28,6 +32,9 @@ import {
   MailboxSyncProvider,
   MailboxStateStore,
   SyncRunStore,
+  WebhookEndpointCatalog,
+  WebhookEndpointStore,
+  WebhookEndpointSubscriptionStore,
   WorkspaceApiKeyStore,
 } from "./services.js";
 
@@ -57,6 +64,30 @@ const createConnectSessionCodeVerifier = () => {
 
 const createConnectSessionId = () => {
   return `mcs_${globalThis.crypto.randomUUID()}`;
+};
+
+const createWebhookEndpointId = () => {
+  return `whe_${globalThis.crypto.randomUUID()}`;
+};
+
+const createWebhookEndpointSecret = () => {
+  return `whsec_${globalThis.crypto.randomUUID()}${globalThis.crypto.randomUUID()}`;
+};
+
+const WEBHOOK_EVENT_TYPE_ORDER: ReadonlyArray<WebhookEventType> = [
+  "message.created",
+  "message.updated",
+  "thread.updated",
+];
+
+const normalizeWebhookEventTypes = (
+  eventTypes: ReadonlyArray<WebhookEventType>,
+): ReadonlyArray<WebhookEventType> => {
+  const requestedEventTypes = new Set(eventTypes);
+
+  return WEBHOOK_EVENT_TYPE_ORDER.filter((eventType) =>
+    requestedEventTypes.has(eventType),
+  );
 };
 
 const isConnectSessionExpired = (
@@ -124,6 +155,33 @@ export const getMailboxOrFail = (
     Effect.flatMap((mailbox) =>
       Option.match(mailbox, {
         onNone: () => Effect.fail(mailboxNotFound(mailboxId)),
+        onSome: (value) => Effect.succeed(value),
+      }),
+    ),
+  );
+
+export const getWebhookEndpointById = (
+  webhookEndpointId: string,
+  options: Readonly<{
+    workspaceId?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const catalog = yield* WebhookEndpointCatalog;
+
+    return yield* catalog.getWebhookEndpoint(webhookEndpointId, options);
+  });
+
+export const getWebhookEndpointOrFail = (
+  webhookEndpointId: string,
+  options: Readonly<{
+    workspaceId?: string;
+  }> = {},
+) =>
+  getWebhookEndpointById(webhookEndpointId, options).pipe(
+    Effect.flatMap((webhookEndpoint) =>
+      Option.match(webhookEndpoint, {
+        onNone: () => Effect.fail(webhookEndpointNotFound(webhookEndpointId)),
         onSome: (value) => Effect.succeed(value),
       }),
     ),
@@ -243,6 +301,47 @@ export const createMailboxConnectSession = (
     };
 
     return resource;
+  });
+
+export const createWebhookEndpoint = (
+  workspaceId: string,
+  request: CreateWebhookEndpointRequest,
+) =>
+  Effect.gen(function* () {
+    const webhookEndpointStore = yield* WebhookEndpointStore;
+    const createdAt = new Date().toISOString();
+
+    return yield* webhookEndpointStore.createWebhookEndpoint({
+      id: createWebhookEndpointId(),
+      workspaceId,
+      url: request.url,
+      description: request.description ?? null,
+      secret: createWebhookEndpointSecret(),
+      createdAt,
+    });
+  });
+
+export const createWebhookEndpointSubscription = (
+  workspaceId: string,
+  webhookEndpointId: string,
+  request: CreateWebhookEndpointSubscriptionRequest,
+) =>
+  Effect.gen(function* () {
+    const mailboxIds = [...new Set(request.mailboxIds)];
+    const eventTypes = normalizeWebhookEventTypes(request.eventTypes);
+
+    yield* getWebhookEndpointOrFail(webhookEndpointId, { workspaceId });
+    yield* Effect.forEach(mailboxIds, (mailboxId) => getMailboxOrFail(mailboxId, { workspaceId }));
+
+    const webhookEndpointSubscriptionStore = yield* WebhookEndpointSubscriptionStore;
+
+    return yield* webhookEndpointSubscriptionStore.createWebhookEndpointSubscription({
+      webhookEndpointId,
+      workspaceId,
+      mailboxIds,
+      eventTypes,
+      createdAt: new Date().toISOString(),
+    });
   });
 
 export const getGmailMailboxConnectAuthorizationUrl = (

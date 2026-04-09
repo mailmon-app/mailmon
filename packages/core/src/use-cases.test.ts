@@ -2,7 +2,11 @@ import { describe, expect, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as TestClock from "effect/TestClock";
 
-import type { CompletedSyncRun, MailboxResource } from "./contracts.js";
+import type {
+  CompletedSyncRun,
+  MailboxResource,
+  WebhookEndpointResource,
+} from "./contracts.js";
 import {
   MailboxCatalog,
   MailboxQueryCatalog,
@@ -11,8 +15,13 @@ import {
   MailboxSyncProvider,
   MailboxStateStore,
   SyncRunStore,
+  WebhookEndpointCatalog,
+  WebhookEndpointStore,
+  WebhookEndpointSubscriptionStore,
 } from "./services.js";
 import {
+  createWebhookEndpoint,
+  createWebhookEndpointSubscription,
   dispatchMailboxSync,
   getMailboxOrFail,
   getMessageOrFail,
@@ -21,6 +30,9 @@ import {
   listMailboxThreads,
   runMailboxSync,
 } from "./use-cases.js";
+
+const primaryWorkspaceId = "ws_123";
+const foreignWorkspaceId = "ws_foreign";
 
 const mailboxFixture: MailboxResource = {
   id: "mbx_demo",
@@ -35,9 +47,78 @@ const mailboxFixture: MailboxResource = {
   lastError: null,
 };
 
+const foreignMailboxFixture: MailboxResource = {
+  ...mailboxFixture,
+  id: "mbx_foreign",
+  emailAddress: "foreign@mailmon.dev",
+};
+
+const webhookEndpointFixture: WebhookEndpointResource = {
+  id: "whe_demo",
+  object: "webhook_endpoint",
+  url: "https://app.example.com/webhooks/mailmon",
+  description: "production inbox events",
+  deliveryState: "healthy",
+  lastDeliveryAt: null,
+  lastDeliveryError: null,
+  createdAt: "2026-03-24T00:00:00.000Z",
+};
+
+const foreignWebhookEndpointFixture: WebhookEndpointResource = {
+  ...webhookEndpointFixture,
+  id: "whe_foreign",
+  url: "https://foreign.example.com/webhooks/mailmon",
+};
+
+const mailboxFixtures = new Map([
+  [mailboxFixture.id, { mailbox: mailboxFixture, workspaceId: primaryWorkspaceId }],
+  [foreignMailboxFixture.id, { mailbox: foreignMailboxFixture, workspaceId: foreignWorkspaceId }],
+]);
+
 const catalogLayer = Layer.succeed(MailboxCatalog, {
-  getMailbox: (mailboxId: string) =>
-    Effect.succeed(mailboxId === mailboxFixture.id ? Option.some(mailboxFixture) : Option.none()),
+  getMailbox: (mailboxId: string, options?: Readonly<{ workspaceId?: string }>) =>
+    Effect.succeed(
+      Option.fromNullable(mailboxFixtures.get(mailboxId)).pipe(
+        Option.filter(
+          (value) =>
+            options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
+        ),
+        Option.map((value) => value.mailbox),
+      ),
+    ),
+});
+
+const webhookEndpointFixtures = new Map([
+  [
+    webhookEndpointFixture.id,
+    {
+      webhookEndpoint: webhookEndpointFixture,
+      workspaceId: primaryWorkspaceId,
+    },
+  ],
+  [
+    foreignWebhookEndpointFixture.id,
+    {
+      webhookEndpoint: foreignWebhookEndpointFixture,
+      workspaceId: foreignWorkspaceId,
+    },
+  ],
+]);
+
+const webhookEndpointCatalogLayer = Layer.succeed(WebhookEndpointCatalog, {
+  getWebhookEndpoint: (
+    webhookEndpointId: string,
+    options?: Readonly<{ workspaceId?: string }>,
+  ) =>
+    Effect.succeed(
+      Option.fromNullable(webhookEndpointFixtures.get(webhookEndpointId)).pipe(
+        Option.filter(
+          (value) =>
+            options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
+        ),
+        Option.map((value) => value.webhookEndpoint),
+      ),
+    ),
 });
 
 const createSyncRunStoreTestLayer = (completedSyncRuns: Array<CompletedSyncRun>) =>
@@ -51,6 +132,64 @@ const createSyncRunStoreTestLayer = (completedSyncRuns: Array<CompletedSyncRun>)
     completeSyncRun: (result) =>
       Effect.sync(() => {
         completedSyncRuns.push(result);
+      }),
+  });
+
+const createWebhookEndpointStoreTestLayer = (
+  observedCreates: Array<{
+    createdAt: string;
+    description: string | null;
+    id: string;
+    secret: string;
+    url: string;
+    workspaceId: string;
+  }>,
+) =>
+  Layer.succeed(WebhookEndpointStore, {
+    createWebhookEndpoint: (params) =>
+      Effect.sync(() => {
+        observedCreates.push(params);
+
+        return {
+          id: params.id,
+          object: "webhook_endpoint" as const,
+          url: params.url,
+          description: params.description,
+          deliveryState: "healthy" as const,
+          lastDeliveryAt: null,
+          lastDeliveryError: null,
+          createdAt: params.createdAt,
+          secret: params.secret,
+        };
+      }),
+  });
+
+const createWebhookEndpointSubscriptionStoreTestLayer = (
+  observedCreates: Array<{
+    createdAt: string;
+    eventTypes: ReadonlyArray<string>;
+    mailboxIds: ReadonlyArray<string>;
+    webhookEndpointId: string;
+    workspaceId: string;
+  }>,
+) =>
+  Layer.succeed(WebhookEndpointSubscriptionStore, {
+    createWebhookEndpointSubscription: (params) =>
+      Effect.sync(() => {
+        observedCreates.push(params);
+
+        return {
+          object: "list" as const,
+          data: params.mailboxIds.map((mailboxId) => ({
+            id: `whsub_${mailboxId}`,
+            object: "webhook_endpoint_subscription" as const,
+            webhookEndpointId: params.webhookEndpointId,
+            mailboxId,
+            eventTypes: [...params.eventTypes],
+            createdAt: params.createdAt,
+          })),
+          nextCursor: null,
+        };
       }),
   });
 
@@ -314,7 +453,7 @@ describe("message and thread query use cases", () => {
   it.effect("lists messages after verifying mailbox ownership", () =>
     listMailboxMessages(mailboxFixture.id, {
       limit: 10,
-      workspaceId: "ws_123",
+      workspaceId: primaryWorkspaceId,
     }).pipe(
       Effect.map((result) => {
         expect(result.object).toBe("list");
@@ -340,7 +479,7 @@ describe("message and thread query use cases", () => {
     Effect.gen(function* () {
       const threads = yield* listMailboxThreads(mailboxFixture.id, {
         limit: 10,
-        workspaceId: "ws_123",
+        workspaceId: primaryWorkspaceId,
       });
       expect(threads.data[0]?.id).toBe("thr_demo");
 
@@ -353,6 +492,158 @@ describe("message and thread query use cases", () => {
         },
       ]);
     }).pipe(Effect.provide(Layer.mergeAll(catalogLayer, queryCatalogLayer))),
+  );
+});
+
+describe("webhook endpoint use cases", () => {
+  it.effect("creates a webhook endpoint and returns its secret once", () => {
+    const observedCreates: Array<{
+      createdAt: string;
+      description: string | null;
+      id: string;
+      secret: string;
+      url: string;
+      workspaceId: string;
+    }> = [];
+
+    return Effect.gen(function* () {
+      const createdWebhookEndpoint = yield* createWebhookEndpoint(primaryWorkspaceId, {
+        url: "https://app.example.com/webhooks/mailmon",
+        description: "production inbox events",
+      });
+
+      expect(createdWebhookEndpoint.id).toMatch(/^whe_/);
+      expect(createdWebhookEndpoint.secret).toMatch(/^whsec_/);
+      expect(createdWebhookEndpoint.url).toBe("https://app.example.com/webhooks/mailmon");
+      expect(createdWebhookEndpoint.description).toBe("production inbox events");
+      expect(createdWebhookEndpoint.deliveryState).toBe("healthy");
+      expect(observedCreates).toEqual([
+        {
+          createdAt: expect.any(String),
+          description: "production inbox events",
+          id: expect.stringMatching(/^whe_/),
+          secret: expect.stringMatching(/^whsec_/),
+          url: "https://app.example.com/webhooks/mailmon",
+          workspaceId: primaryWorkspaceId,
+        },
+      ]);
+    }).pipe(Effect.provide(createWebhookEndpointStoreTestLayer(observedCreates)));
+  });
+
+  it.effect("creates mailbox-scoped subscriptions for an owned endpoint", () => {
+    const observedCreates: Array<{
+      createdAt: string;
+      eventTypes: ReadonlyArray<string>;
+      mailboxIds: ReadonlyArray<string>;
+      webhookEndpointId: string;
+      workspaceId: string;
+    }> = [];
+
+    return Effect.gen(function* () {
+      const subscriptions = yield* createWebhookEndpointSubscription(
+        primaryWorkspaceId,
+        webhookEndpointFixture.id,
+        {
+          mailboxIds: [mailboxFixture.id, mailboxFixture.id],
+          eventTypes: ["thread.updated", "message.created"],
+        },
+      );
+
+      expect(subscriptions.object).toBe("list");
+      expect(subscriptions.data).toEqual([
+        {
+          id: `whsub_${mailboxFixture.id}`,
+          object: "webhook_endpoint_subscription",
+          webhookEndpointId: webhookEndpointFixture.id,
+          mailboxId: mailboxFixture.id,
+          eventTypes: ["message.created", "thread.updated"],
+          createdAt: expect.any(String),
+        },
+      ]);
+      expect(observedCreates).toEqual([
+        {
+          createdAt: expect.any(String),
+          eventTypes: ["message.created", "thread.updated"],
+          mailboxIds: [mailboxFixture.id],
+          webhookEndpointId: webhookEndpointFixture.id,
+          workspaceId: primaryWorkspaceId,
+        },
+      ]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          catalogLayer,
+          webhookEndpointCatalogLayer,
+          createWebhookEndpointSubscriptionStoreTestLayer(observedCreates),
+        ),
+      ),
+    );
+  });
+
+  it.effect("collapses foreign-owned webhook endpoints to not found", () =>
+    createWebhookEndpointSubscription(primaryWorkspaceId, foreignWebhookEndpointFixture.id, {
+      mailboxIds: [mailboxFixture.id],
+      eventTypes: ["message.created"],
+    }).pipe(
+      Effect.flip,
+      Effect.map((problem) => {
+        expect(problem.code).toBe("webhook_endpoint_not_found");
+        expect(problem.status).toBe(404);
+        expect(problem.resource).toEqual({
+          webhook_endpoint_id: foreignWebhookEndpointFixture.id,
+        });
+      }),
+      Effect.provide(
+        Layer.mergeAll(
+          catalogLayer,
+          webhookEndpointCatalogLayer,
+          createWebhookEndpointSubscriptionStoreTestLayer([]),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("fails when the webhook endpoint is missing", () =>
+    createWebhookEndpointSubscription(primaryWorkspaceId, "whe_missing", {
+      mailboxIds: [mailboxFixture.id],
+      eventTypes: ["message.created"],
+    }).pipe(
+      Effect.flip,
+      Effect.map((problem) => {
+        expect(problem.code).toBe("webhook_endpoint_not_found");
+        expect(problem.status).toBe(404);
+      }),
+      Effect.provide(
+        Layer.mergeAll(
+          catalogLayer,
+          webhookEndpointCatalogLayer,
+          createWebhookEndpointSubscriptionStoreTestLayer([]),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("collapses foreign-owned mailboxes to not found", () =>
+    createWebhookEndpointSubscription(primaryWorkspaceId, webhookEndpointFixture.id, {
+      mailboxIds: [foreignMailboxFixture.id],
+      eventTypes: ["message.created"],
+    }).pipe(
+      Effect.flip,
+      Effect.map((problem) => {
+        expect(problem.code).toBe("mailbox_not_found");
+        expect(problem.status).toBe(404);
+        expect(problem.resource).toEqual({
+          mailbox_id: foreignMailboxFixture.id,
+        });
+      }),
+      Effect.provide(
+        Layer.mergeAll(
+          catalogLayer,
+          webhookEndpointCatalogLayer,
+          createWebhookEndpointSubscriptionStoreTestLayer([]),
+        ),
+      ),
+    ),
   );
 });
 

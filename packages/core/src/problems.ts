@@ -29,6 +29,20 @@ export const mailboxNotFound = (mailboxId: string): ProblemDetails => {
   });
 };
 
+export const webhookEndpointNotFound = (webhookEndpointId: string): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/webhook-endpoint-not-found",
+    title: "Webhook endpoint not found",
+    status: 404,
+    code: "webhook_endpoint_not_found",
+    detail: `Webhook endpoint ${webhookEndpointId} does not exist in the current workspace.`,
+    resource: {
+      webhook_endpoint_id: webhookEndpointId,
+    },
+    retryable: false,
+  });
+};
+
 export const messageNotFound = (messageId: string): ProblemDetails => {
   return makeProblem({
     type: "https://api.mailmon.dev/problems/message-not-found",
@@ -122,6 +136,38 @@ export const mailboxAlreadyConnected = (mailboxId: string): ProblemDetails => {
     detail: "This Gmail account is already connected in this workspace.",
     resource: {
       mailbox_id: mailboxId,
+    },
+    retryable: false,
+  });
+};
+
+export const webhookEndpointAlreadyExists = (url: string): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/webhook-endpoint-already-exists",
+    title: "Webhook endpoint already exists",
+    status: 409,
+    code: "webhook_endpoint_already_exists",
+    detail: `Webhook endpoint ${url} already exists in this workspace.`,
+    resource: {
+      url,
+    },
+    retryable: false,
+  });
+};
+
+export const webhookEndpointSubscriptionAlreadyExists = (
+  webhookEndpointId: string,
+  mailboxId: string,
+): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/webhook-endpoint-subscription-already-exists",
+    title: "Webhook endpoint subscription already exists",
+    status: 409,
+    code: "webhook_endpoint_subscription_already_exists",
+    detail: `Webhook endpoint ${webhookEndpointId} already has a subscription for mailbox ${mailboxId}.`,
+    resource: {
+      mailbox_id: mailboxId,
+      webhook_endpoint_id: webhookEndpointId,
     },
     retryable: false,
   });

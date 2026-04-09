@@ -8,6 +8,16 @@ export const MailboxSyncStateSchema = Schema.Literal(
   "failed",
 );
 export const MailboxWatchStateSchema = Schema.Literal("active", "expiring", "expired", "unhealthy");
+export const WebhookEventTypeSchema = Schema.Literal(
+  "message.created",
+  "message.updated",
+  "thread.updated",
+);
+export const WebhookEndpointDeliveryStateSchema = Schema.Literal(
+  "healthy",
+  "degraded",
+  "failing",
+);
 export const ReplayStatusSchema = Schema.Literal(
   "queued",
   "running",
@@ -40,6 +50,10 @@ export const ControlJobDispatchRequestSchema = Schema.Struct({
 export type MailboxStatus = Schema.Schema.Type<typeof MailboxStatusSchema>;
 export type MailboxSyncState = Schema.Schema.Type<typeof MailboxSyncStateSchema>;
 export type MailboxWatchState = Schema.Schema.Type<typeof MailboxWatchStateSchema>;
+export type WebhookEventType = Schema.Schema.Type<typeof WebhookEventTypeSchema>;
+export type WebhookEndpointDeliveryState = Schema.Schema.Type<
+  typeof WebhookEndpointDeliveryStateSchema
+>;
 export type ReplayStatus = Schema.Schema.Type<typeof ReplayStatusSchema>;
 export type SyncRunOutcome = Schema.Schema.Type<typeof SyncRunOutcomeSchema>;
 export type ControlJobKind = Schema.Schema.Type<typeof ControlJobKindSchema>;
@@ -56,6 +70,13 @@ export interface MailboxOperationalError {
   readonly retryable: boolean;
 }
 
+export interface WebhookEndpointOperationalError {
+  readonly code: string;
+  readonly message: string;
+  readonly occurredAt: string;
+  readonly retryable: boolean;
+}
+
 export interface ConnectSessionResource {
   readonly id: string;
   readonly object: "connect_session";
@@ -63,11 +84,45 @@ export interface ConnectSessionResource {
   readonly expiresAt: string;
 }
 
+export interface CreateWebhookEndpointRequest {
+  readonly url: string;
+  readonly description?: string | null;
+}
+
+export interface CreateWebhookEndpointSubscriptionRequest {
+  readonly mailboxIds: ReadonlyArray<string>;
+  readonly eventTypes: ReadonlyArray<WebhookEventType>;
+}
+
 export interface CreateConnectSessionRequest {
   readonly provider: "gmail";
   readonly tenantExternalId: string;
   readonly mailboxExternalId: string;
   readonly redirectUrl: string;
+}
+
+export interface WebhookEndpointResource {
+  readonly id: string;
+  readonly object: "webhook_endpoint";
+  readonly url: string;
+  readonly description: string | null;
+  readonly deliveryState: WebhookEndpointDeliveryState;
+  readonly lastDeliveryAt: string | null;
+  readonly lastDeliveryError: WebhookEndpointOperationalError | null;
+  readonly createdAt: string;
+}
+
+export interface CreatedWebhookEndpointResource extends WebhookEndpointResource {
+  readonly secret: string;
+}
+
+export interface WebhookEndpointSubscriptionResource {
+  readonly id: string;
+  readonly object: "webhook_endpoint_subscription";
+  readonly webhookEndpointId: string;
+  readonly mailboxId: string;
+  readonly eventTypes: ReadonlyArray<WebhookEventType>;
+  readonly createdAt: string;
 }
 
 export interface StoredConnectSession {
@@ -177,7 +232,7 @@ export interface ThreadListItemResource {
 
 export interface WebhookEventEnvelope {
   readonly id: string;
-  readonly type: "message.created" | "message.updated" | "thread.updated";
+  readonly type: WebhookEventType;
   readonly schemaVersion: 1;
   readonly occurredAt: string;
   readonly workspaceId: string;

@@ -2,6 +2,7 @@ import { Context, Effect, Option } from "effect";
 
 import type {
   CompletedMailboxConnectSession,
+  CreatedWebhookEndpointResource,
   ListMailboxMessagesRequest,
   ListMailboxThreadsRequest,
   ListResource,
@@ -20,6 +21,9 @@ import type {
   StoredConnectSession,
   ThreadListItemResource,
   ThreadResource,
+  WebhookEndpointResource,
+  WebhookEndpointSubscriptionResource,
+  WebhookEventType,
   WebhookDeliveryScheduleRequest,
   WorkspaceApiKeyIdentity,
 } from "./contracts.js";
@@ -42,6 +46,47 @@ export class WorkspaceApiKeyStore extends Context.Tag("@mailmon/core/WorkspaceAp
     readonly getWorkspaceForApiKey: (
       apiKey: string,
     ) => Effect.Effect<Option.Option<WorkspaceApiKeyIdentity>>;
+  }
+>() {}
+
+export class WebhookEndpointCatalog extends Context.Tag("@mailmon/core/WebhookEndpointCatalog")<
+  WebhookEndpointCatalog,
+  {
+    readonly getWebhookEndpoint: (
+      webhookEndpointId: string,
+      options?: Readonly<{
+        workspaceId?: string;
+      }>,
+    ) => Effect.Effect<Option.Option<WebhookEndpointResource>>;
+  }
+>() {}
+
+export class WebhookEndpointStore extends Context.Tag("@mailmon/core/WebhookEndpointStore")<
+  WebhookEndpointStore,
+  {
+    readonly createWebhookEndpoint: (params: {
+      readonly id: string;
+      readonly workspaceId: string;
+      readonly url: string;
+      readonly description: string | null;
+      readonly secret: string;
+      readonly createdAt: string;
+    }) => Effect.Effect<CreatedWebhookEndpointResource, ProblemDetails>;
+  }
+>() {}
+
+export class WebhookEndpointSubscriptionStore extends Context.Tag(
+  "@mailmon/core/WebhookEndpointSubscriptionStore",
+)<
+  WebhookEndpointSubscriptionStore,
+  {
+    readonly createWebhookEndpointSubscription: (params: {
+      readonly webhookEndpointId: string;
+      readonly workspaceId: string;
+      readonly mailboxIds: ReadonlyArray<string>;
+      readonly eventTypes: ReadonlyArray<WebhookEventType>;
+      readonly createdAt: string;
+    }) => Effect.Effect<ListResource<WebhookEndpointSubscriptionResource>, ProblemDetails>;
   }
 >() {}
 
