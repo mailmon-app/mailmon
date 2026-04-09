@@ -82,6 +82,7 @@ Current bootstrap note:
 - Duplicate wake-ups now rely on the stored mailbox cursor plus Gmail history compaction, so repeated dispatches do not replay stale mailbox state changes.
 - Mailbox creation and hosted Gmail OAuth/connect-session flow are now real: the API authenticates workspace-scoped API keys, persists DB-backed connect sessions, exchanges Gmail OAuth codes for refresh tokens, creates workspace-scoped mailboxes, and dispatches the initial sync automatically.
 - Webhook endpoint registration and mailbox-scoped subscription creation are now real: the API exposes `POST /v1/webhook-endpoints` and `POST /v1/webhook-endpoints/{endpoint_id}/subscriptions`, core owns the shared contracts and use cases, and `packages/db` persists delivery secrets and subscriptions.
+- Durable mailbox event emission is now real: sync finalization diffs canonical pre-state, persists `message.created`, `message.updated`, and `thread.updated` rows into `mailbox_events` with stable `evt_...` IDs, and commits mailbox state, cursor advancement, sync run completion, and mailbox event insertion atomically.
 - Local verification for the connect flow still uses a mock Gmail OAuth/API server rather than live Google credentials.
 - `packages/queue` now contains usable local transport adapters, but BullMQ/Redis helpers are still present for compatibility.
 - `apps/worker` now defaults to HTTP runtime modes, but the BullMQ path is still present as `legacy_bullmq` scaffolding.

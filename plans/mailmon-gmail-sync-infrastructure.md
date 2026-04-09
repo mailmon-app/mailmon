@@ -190,7 +190,7 @@ Break this phase into four implementation slices so event semantics and delivery
 - **Phase 6a: Webhook Endpoint And Subscription Spine** (completed)
   - persist webhook endpoints, delivery secrets, and mailbox-scoped subscriptions
   - expose `POST /v1/webhook-endpoints` and `POST /v1/webhook-endpoints/{endpoint_id}/subscriptions`
-- **Phase 6b: Durable Event Emission**
+- **Phase 6b: Durable Event Emission** (completed)
   - diff sync-applied canonical state into `message.created`, `message.updated`, and `thread.updated`
   - persist mailbox events transactionally with sync finalization
 - **Phase 6c: Local Delivery Runtime**
@@ -204,8 +204,8 @@ Break this phase into four implementation slices so event semantics and delivery
 
 - [x] `POST /v1/webhook-endpoints` creates webhook endpoints and returns the secret once
 - [x] `POST /v1/webhook-endpoints/{endpoint_id}/subscriptions` stores mailbox-scoped subscriptions
-- [ ] Sync-generated state changes create durable mailbox events with stable IDs
-- [ ] Mailbox state writes, mailbox event inserts, cursor advancement, and sync run completion commit transactionally
+- [x] Sync-generated state changes create durable mailbox events with stable IDs
+- [x] Mailbox state writes, mailbox event inserts, cursor advancement, and sync run completion commit transactionally
 - [ ] Delivery scheduling starts from durable mailbox event records and not from inline endpoint calls inside sync execution
 - [ ] Webhook deliveries retry on timeout and `5xx`
 - [ ] Endpoint health reflects repeated delivery failures without breaking unrelated API reads

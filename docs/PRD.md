@@ -502,19 +502,20 @@ Content-Type: application/json
 {
   "id": "evt_123",
   "type": "message.created",
-  "schema_version": 1,
-  "occurred_at": "2026-03-23T10:11:22Z",
-  "workspace_id": "ws_123",
-  "tenant_external_id": "cust_123",
-  "mailbox_id": "mbx_123",
+  "schemaVersion": 1,
+  "occurredAt": "2026-03-23T10:11:22Z",
+  "workspaceId": "ws_123",
+  "tenantExternalId": "cust_123",
+  "mailboxId": "mbx_123",
   "data": {
-    "message_id": "msg_123",
-    "thread_id": "thr_123",
-    "provider_message_id": "195f8c...",
-    "provider_thread_id": "195f8b...",
+    "messageId": "msg_123",
+    "threadId": "thr_123",
+    "providerMessageId": "195f8c...",
+    "providerThreadId": "195f8b...",
     "subject": "Interview availability",
     "snippet": "Could you share your availability...",
-    "received_at": "2026-03-23T10:11:20Z"
+    "receivedAt": "2026-03-23T10:11:20Z",
+    "labelIds": ["INBOX", "UNREAD"]
   }
 }
 ```
