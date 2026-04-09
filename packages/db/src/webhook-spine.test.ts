@@ -44,10 +44,13 @@ const createDatabaseName = () => {
 
 const readMigrationStatements = async () => {
   const entries = await readdir(migrationDirectory);
-  const migrationFiles = entries.filter((entry) => entry.endsWith(".sql")).toSorted();
+  // oxlint-disable-next-line unicorn/no-array-sort
+  const migrationFiles = entries
+    .filter((entry) => entry.endsWith(".sql"))
+    .toSorted((left, right) => left.localeCompare(right));
 
   const statements = await Promise.all(
-    migrationFiles.map(async (migrationFile) => {
+    migrationFiles.map(async (migrationFile: string) => {
       const sqlText = await readFile(
         new URL(`../drizzle/${migrationFile}`, import.meta.url),
         "utf8",
