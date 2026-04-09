@@ -4,14 +4,21 @@ import {
   MailboxConnectSessionStore,
   MailboxQueryCatalog,
   MailboxSyncDispatcher,
+  WebhookEndpointCatalog,
+  WebhookEndpointStore,
+  WebhookEndpointSubscriptionStore,
   WorkspaceApiKeyStore,
   type MailboxResource,
   type StoredConnectSession,
+  type WebhookEndpointResource,
 } from "@mailmon/core";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { createApp } from "./server.js";
+
+const primaryWorkspaceId = "ws_123";
+const foreignWorkspaceId = "ws_foreign";
 
 const mailboxFixture: MailboxResource = {
   id: "mbx_demo",
@@ -24,6 +31,29 @@ const mailboxFixture: MailboxResource = {
   initializedAt: null,
   lastSuccessfulSyncAt: null,
   lastError: null,
+};
+
+const foreignMailboxFixture: MailboxResource = {
+  ...mailboxFixture,
+  id: "mbx_foreign",
+  emailAddress: "foreign@mailmon.dev",
+};
+
+const webhookEndpointFixture: WebhookEndpointResource = {
+  id: "whe_demo",
+  object: "webhook_endpoint",
+  url: "https://app.example.com/webhooks/mailmon",
+  description: "production inbox events",
+  deliveryState: "healthy",
+  lastDeliveryAt: null,
+  lastDeliveryError: null,
+  createdAt: "2026-03-24T00:00:00.000Z",
+};
+
+const foreignWebhookEndpointFixture: WebhookEndpointResource = {
+  ...webhookEndpointFixture,
+  id: "whe_foreign",
+  url: "https://foreign.example.com/webhooks/mailmon",
 };
 
 const messageFixture = {
@@ -69,21 +99,64 @@ const threadFixture = {
 const createRuntime = () => {
   const dispatchedMailboxIds: Array<string> = [];
   const connectSessions = new Map<string, StoredConnectSession>();
+  const webhookEndpoints = new Map([
+    [
+      webhookEndpointFixture.id,
+      {
+        webhookEndpoint: webhookEndpointFixture,
+        secret: "whsec_existing",
+        workspaceId: primaryWorkspaceId,
+      },
+    ],
+    [
+      foreignWebhookEndpointFixture.id,
+      {
+        webhookEndpoint: foreignWebhookEndpointFixture,
+        secret: "whsec_foreign",
+        workspaceId: foreignWorkspaceId,
+      },
+    ],
+  ]);
+  const mailboxFixtures = new Map([
+    [mailboxFixture.id, { mailbox: mailboxFixture, workspaceId: primaryWorkspaceId }],
+    [foreignMailboxFixture.id, { mailbox: foreignMailboxFixture, workspaceId: foreignWorkspaceId }],
+  ]);
 
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
       Layer.succeed(WorkspaceApiKeyStore, {
         getWorkspaceForApiKey: (apiKey: string) =>
           Effect.succeed(
-            apiKey === "test-api-key" ? Option.some({ workspaceId: "ws_123" }) : Option.none(),
+            apiKey === "test-api-key"
+              ? Option.some({ workspaceId: primaryWorkspaceId })
+              : Option.none(),
           ),
       }),
       Layer.succeed(MailboxCatalog, {
         getMailbox: (mailboxId: string, options?: Readonly<{ workspaceId?: string }>) =>
           Effect.succeed(
-            mailboxId === mailboxFixture.id && options?.workspaceId === "ws_123"
-              ? Option.some(mailboxFixture)
-              : Option.none(),
+            Option.fromNullable(mailboxFixtures.get(mailboxId)).pipe(
+              Option.filter(
+                (value) =>
+                  options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
+              ),
+              Option.map((value) => value.mailbox),
+            ),
+          ),
+      }),
+      Layer.succeed(WebhookEndpointCatalog, {
+        getWebhookEndpoint: (
+          webhookEndpointId: string,
+          options?: Readonly<{ workspaceId?: string }>,
+        ) =>
+          Effect.succeed(
+            Option.fromNullable(webhookEndpoints.get(webhookEndpointId)).pipe(
+              Option.filter(
+                (value) =>
+                  options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
+              ),
+              Option.map((value) => value.webhookEndpoint),
+            ),
           ),
       }),
       Layer.succeed(MailboxQueryCatalog, {
@@ -95,7 +168,7 @@ const createRuntime = () => {
           }),
         getMessage: (messageId: string, options?: Readonly<{ workspaceId?: string }>) =>
           Effect.succeed(
-            messageId === messageFixture.id && options?.workspaceId === "ws_123"
+            messageId === messageFixture.id && options?.workspaceId === primaryWorkspaceId
               ? Option.some(messageFixture)
               : Option.none(),
           ),
@@ -107,10 +180,51 @@ const createRuntime = () => {
           }),
         getThread: (threadId: string, options?: Readonly<{ workspaceId?: string }>) =>
           Effect.succeed(
-            threadId === threadFixture.id && options?.workspaceId === "ws_123"
+            threadId === threadFixture.id && options?.workspaceId === primaryWorkspaceId
               ? Option.some(threadFixture)
               : Option.none(),
           ),
+      }),
+      Layer.succeed(WebhookEndpointStore, {
+        createWebhookEndpoint: (params) =>
+          Effect.sync(() => {
+            const webhookEndpoint = {
+              id: params.id,
+              object: "webhook_endpoint" as const,
+              url: params.url,
+              description: params.description,
+              deliveryState: "healthy" as const,
+              lastDeliveryAt: null,
+              lastDeliveryError: null,
+              createdAt: params.createdAt,
+            };
+
+            webhookEndpoints.set(webhookEndpoint.id, {
+              webhookEndpoint,
+              secret: params.secret,
+              workspaceId: params.workspaceId,
+            });
+
+            return {
+              ...webhookEndpoint,
+              secret: params.secret,
+            };
+          }),
+      }),
+      Layer.succeed(WebhookEndpointSubscriptionStore, {
+        createWebhookEndpointSubscription: (params) =>
+          Effect.succeed({
+            object: "list" as const,
+            data: params.mailboxIds.map((mailboxId) => ({
+              id: `whsub_${mailboxId}`,
+              object: "webhook_endpoint_subscription" as const,
+              webhookEndpointId: params.webhookEndpointId,
+              mailboxId,
+              eventTypes: [...params.eventTypes],
+              createdAt: params.createdAt,
+            })),
+            nextCursor: null,
+          }),
       }),
       Layer.succeed(MailboxConnectSessionStore, {
         createConnectSession: (params) =>
@@ -297,6 +411,117 @@ describe("createApp", () => {
       object: "connect_session",
       connectUrl: expect.stringMatching(/^http:\/\/localhost\/oauth\/gmail\/mcs_/),
       expiresAt: expect.any(String),
+    });
+  });
+
+  it("creates a webhook endpoint and returns its secret once", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/webhook-endpoints", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        url: "https://app.example.com/webhooks/mailmon",
+        description: "production inbox events",
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      id: expect.stringMatching(/^whe_/),
+      object: "webhook_endpoint",
+      url: "https://app.example.com/webhooks/mailmon",
+      description: "production inbox events",
+      deliveryState: "healthy",
+      lastDeliveryAt: null,
+      lastDeliveryError: null,
+      createdAt: expect.any(String),
+      secret: expect.stringMatching(/^whsec_/),
+    });
+  });
+
+  it("accepts a null webhook endpoint description", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/webhook-endpoints", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        url: "https://app.example.com/webhooks/mailmon-null",
+        description: null,
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      id: expect.stringMatching(/^whe_/),
+      object: "webhook_endpoint",
+      url: "https://app.example.com/webhooks/mailmon-null",
+      description: null,
+      deliveryState: "healthy",
+      lastDeliveryAt: null,
+      lastDeliveryError: null,
+      createdAt: expect.any(String),
+      secret: expect.stringMatching(/^whsec_/),
+    });
+  });
+
+  it("creates mailbox-scoped webhook subscriptions for the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/webhook-endpoints/whe_demo/subscriptions", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailbox_ids: ["mbx_demo"],
+        event_types: ["message.created", "thread.updated"],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      object: "list",
+      data: [
+        {
+          id: "whsub_mbx_demo",
+          object: "webhook_endpoint_subscription",
+          webhookEndpointId: "whe_demo",
+          mailboxId: "mbx_demo",
+          eventTypes: ["message.created", "thread.updated"],
+          createdAt: expect.any(String),
+        },
+      ],
+      nextCursor: null,
+    });
+  });
+
+  it("collapses a foreign-owned subscription mailbox to not found", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/webhook-endpoints/whe_demo/subscriptions", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxIds: ["mbx_foreign"],
+        eventTypes: ["message.created"],
+      }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "mailbox_not_found",
+      status: 404,
+      resource: {
+        mailbox_id: "mbx_foreign",
+      },
     });
   });
 

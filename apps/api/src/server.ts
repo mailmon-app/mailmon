@@ -1,16 +1,21 @@
 import {
   authenticateWorkspaceApiKeyOrFail,
   completeGmailMailboxConnectSession,
+  createWebhookEndpoint,
+  createWebhookEndpointSubscription,
   createMailboxConnectSession,
-  getMessageOrFail,
   getConnectSessionOrFail,
   getGmailMailboxConnectAuthorizationUrl,
+  getMessageOrFail,
   getMailboxOrFail,
   getThreadOrFail,
   listMailboxMessages,
   listMailboxThreads,
   type CreateConnectSessionRequest,
+  type CreateWebhookEndpointRequest,
+  type CreateWebhookEndpointSubscriptionRequest,
   type ProblemDetails,
+  type WebhookEventType,
 } from "@mailmon/core";
 import { Effect, ManagedRuntime } from "effect";
 import { Hono } from "hono";
@@ -39,6 +44,7 @@ const invalidRequest = (detail: string): ProblemDetails => {
 
 const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 100;
+const INVALID_OPTIONAL_NULLABLE_STRING = Symbol("invalid_optional_nullable_string");
 
 const extractBearerApiKey = (authorizationHeader: string | undefined) => {
   if (authorizationHeader === undefined) {
@@ -70,6 +76,129 @@ const isCreateConnectSessionRequest = (value: unknown): value is CreateConnectSe
     typeof value.redirectUrl === "string" &&
     value.redirectUrl.length > 0
   );
+};
+
+const isHttpUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const getOptionalStringProperty = (
+  value: Readonly<Record<string, unknown>>,
+  keys: ReadonlyArray<string>,
+) => {
+  for (const key of keys) {
+    const property = value[key];
+
+    if (property === undefined) {
+      continue;
+    }
+
+    if (typeof property !== "string" || property.length === 0) {
+      return null;
+    }
+
+    return property;
+  }
+
+  return undefined;
+};
+
+const getOptionalNullableStringProperty = (
+  value: Readonly<Record<string, unknown>>,
+  keys: ReadonlyArray<string>,
+) => {
+  for (const key of keys) {
+    const property = value[key];
+
+    if (property === undefined) {
+      continue;
+    }
+
+    if (property === null) {
+      return null;
+    }
+
+    if (typeof property !== "string" || property.length === 0) {
+      return INVALID_OPTIONAL_NULLABLE_STRING;
+    }
+
+    return property;
+  }
+
+  return undefined;
+};
+
+const getRequiredStringArrayProperty = (
+  value: Readonly<Record<string, unknown>>,
+  keys: ReadonlyArray<string>,
+) => {
+  const property = keys
+    .map((key) => value[key])
+    .find((candidate) => candidate !== undefined);
+
+  if (!Array.isArray(property) || property.length === 0) {
+    return null;
+  }
+
+  const items = property.filter((item): item is string => typeof item === "string" && item.length > 0);
+
+  return items.length === property.length ? items : null;
+};
+
+const isWebhookEventType = (value: string): value is WebhookEventType => {
+  return value === "message.created" || value === "message.updated" || value === "thread.updated";
+};
+
+const parseCreateWebhookEndpointRequest = (
+  value: unknown,
+): CreateWebhookEndpointRequest | null => {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const body = value as Readonly<Record<string, unknown>>;
+  const url = getOptionalStringProperty(body, ["url"]);
+  const description = getOptionalNullableStringProperty(body, ["description"]);
+
+  if (
+    typeof url !== "string" ||
+    !isHttpUrl(url) ||
+    description === INVALID_OPTIONAL_NULLABLE_STRING
+  ) {
+    return null;
+  }
+
+  return {
+    url,
+    description: description ?? null,
+  };
+};
+
+const parseCreateWebhookEndpointSubscriptionRequest = (
+  value: unknown,
+): CreateWebhookEndpointSubscriptionRequest | null => {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const body = value as Readonly<Record<string, unknown>>;
+  const mailboxIds = getRequiredStringArrayProperty(body, ["mailboxIds", "mailbox_ids"]);
+  const eventTypes = getRequiredStringArrayProperty(body, ["eventTypes", "event_types"]);
+
+  if (mailboxIds === null || eventTypes === null || !eventTypes.every(isWebhookEventType)) {
+    return null;
+  }
+
+  return {
+    mailboxIds,
+    eventTypes,
+  };
 };
 
 const getRequestOrigin = (requestUrl: string) => {
@@ -193,6 +322,68 @@ export const createApp = (runtime: ApiServerRuntime) => {
         auth.workspace.workspaceId,
         payload,
         getRequestOrigin(context.req.url),
+      ),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value, 201);
+  });
+
+  app.post("/v1/webhook-endpoints", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const payload = await context.req.json().catch(() => null);
+    const request = parseCreateWebhookEndpointRequest(payload);
+
+    if (request === null) {
+      return createProblemResponse(
+        invalidRequest("Body must include a valid http(s) url and an optional description."),
+      );
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      createWebhookEndpoint(auth.workspace.workspaceId, request),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value, 201);
+  });
+
+  app.post("/v1/webhook-endpoints/:endpointId/subscriptions", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const payload = await context.req.json().catch(() => null);
+    const request = parseCreateWebhookEndpointSubscriptionRequest(payload);
+
+    if (request === null) {
+      return createProblemResponse(
+        invalidRequest(
+          "Body must include mailboxIds/mailbox_ids and eventTypes/event_types arrays.",
+        ),
+      );
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      createWebhookEndpointSubscription(
+        auth.workspace.workspaceId,
+        context.req.param("endpointId"),
+        request,
       ),
     );
 
