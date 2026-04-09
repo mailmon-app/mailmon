@@ -10,6 +10,7 @@ import type {
   MailboxSyncRequest,
   MailboxSyncSnapshot,
   MailboxConnectAuthorization,
+  MailboxSyncCommitResult,
   CompletedSyncRun,
   ControlJobDispatchRequest,
   MailboxSyncLeaseAcquisition,
@@ -218,7 +219,7 @@ export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateSt
         nextCursor: string | null;
         syncedAt: string;
       }>,
-    ) => Effect.Effect<boolean>;
+    ) => Effect.Effect<MailboxSyncCommitResult>;
   }
 >() {}
 

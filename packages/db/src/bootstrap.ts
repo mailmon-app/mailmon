@@ -51,7 +51,11 @@ export const createBootstrapSyncRunStoreLayer = Layer.effect(
 
 export const createBootstrapMailboxStateStoreLayer = Layer.succeed(MailboxStateStore, {
   getMailboxCursor: () => Effect.succeed(null),
-  applySyncResult: () => Effect.succeed(true),
+  applySyncResult: ({ eventsEmitted }) =>
+    Effect.succeed({
+      applied: true,
+      mailboxEventIds: Array.from({ length: eventsEmitted }, (_, index) => `evt_bootstrap_${index}`),
+    }),
 });
 
 interface BootstrapMailboxLease {

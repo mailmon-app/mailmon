@@ -1,3 +1,4 @@
+import type { MailboxEventEnvelope, MailboxEventType } from "@mailmon/core";
 import { boolean, index, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const bootstrapState = pgTable("bootstrap_state", {
@@ -229,7 +230,7 @@ export const mailboxEvents = pgTable("mailbox_events", {
   mailboxId: text("mailbox_id")
     .notNull()
     .references(() => mailboxes.id),
-  eventType: text("event_type").notNull(),
+  eventType: text("event_type").$type<MailboxEventType>().notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
-  payload: jsonb("payload").notNull(),
+  payload: jsonb("payload").$type<MailboxEventEnvelope>().notNull(),
 });

@@ -285,6 +285,7 @@ const createMailboxStateStoreTestLayer = (
   options: Readonly<{
     applyDelayMs?: number;
     applied?: boolean;
+    mailboxEventCount?: number;
   }> = {},
 ) => {
   let storedCursor = currentCursor;
@@ -300,9 +301,21 @@ const createMailboxStateStoreTestLayer = (
       syncRunId,
     }) =>
       Effect.sleep(Duration.millis(options.applyDelayMs ?? 0)).pipe(
-        Effect.map(() => options.applied ?? true),
-        Effect.tap((applied) =>
-          applied
+        Effect.map(() => {
+          const applied = options.applied ?? true;
+
+          return {
+            applied,
+            mailboxEventIds: applied
+              ? Array.from(
+                  { length: options.mailboxEventCount ?? eventsEmitted },
+                  (_, index) => `evt_${syncRunId}_${index}`,
+                )
+              : [],
+          };
+        }),
+        Effect.tap((commitResult) =>
+          commitResult.applied
             ? Effect.sync(() => {
                 storedCursor = nextCursor;
                 appliedSnapshots.push({
@@ -685,6 +698,89 @@ describe("runMailboxSync", () => {
           ),
         ),
       );
+    }),
+  );
+
+  it.effect("reports the durable mailbox-event count returned by the commit path", () =>
+    Effect.gen(function* () {
+      const appliedSnapshots: Array<{
+        eventsEmitted: number;
+        mailboxId: string;
+        leaseOwnerId: string;
+        syncRunId: string;
+        threadCount: number;
+        messageCount: number;
+        nextCursor: string | null;
+      }> = [];
+      const observedCursors: Array<string | null> = [];
+
+      const providerLayer = Layer.succeed(MailboxSyncProvider, {
+        syncMailbox: ({ cursor }) =>
+          Effect.sync(() => {
+            observedCursors.push(cursor);
+
+            return {
+              snapshot: {
+                deletedProviderMessageIds: [],
+                threads: [
+                  {
+                    id: "thr_demo",
+                    providerThreadId: "gmail_thr_demo",
+                    subject: "Demo thread",
+                    lastMessageAt: "2026-03-24T00:00:00.000Z",
+                  },
+                ],
+                messages: [
+                  {
+                    id: "msg_demo",
+                    threadId: "thr_demo",
+                    providerMessageId: "gmail_msg_demo",
+                    providerThreadId: "gmail_thr_demo",
+                    subject: "Demo thread",
+                    from: {
+                      name: "Mailmon",
+                      email: "hello@mailmon.dev",
+                    },
+                    snippet: "Baseline sync fixture",
+                    receivedAt: "2026-03-24T00:00:00.000Z",
+                    labelIds: ["INBOX"],
+                  },
+                ],
+              },
+              eventsEmitted: 7,
+              nextCursor: "hist_2",
+            };
+          }),
+      });
+
+      const result = yield* runMailboxSync(mailboxFixture.id).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            catalogLayer,
+            createMailboxStateStoreTestLayer(null, appliedSnapshots, {
+              mailboxEventCount: 2,
+            }),
+            createSyncRunStoreTestLayer([]),
+            createSyncCoordinatorTestLayer(),
+            providerLayer,
+          ),
+        ),
+      );
+
+      expect(result.status).toBe("completed");
+      expect(result.eventsEmitted).toBe(2);
+      expect(observedCursors).toEqual([null]);
+      expect(appliedSnapshots).toEqual([
+        {
+          mailboxId: mailboxFixture.id,
+          eventsEmitted: 7,
+          leaseOwnerId: expect.any(String),
+          syncRunId: "sr_mbx_demo",
+          threadCount: 1,
+          messageCount: 1,
+          nextCursor: "hist_2",
+        },
+      ]);
     }),
   );
 

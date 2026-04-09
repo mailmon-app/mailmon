@@ -25,7 +25,10 @@ import {
   type ListResource,
   type MailboxOperationalError,
   type MailboxResource,
+  type MailboxEventEnvelope,
+  type MailboxEventType,
   type MailboxSyncLeaseAcquisition,
+  type MailboxSyncCommitResult,
   type MailboxSyncLeaseRenewal,
   type MessageResource,
   type StartedSyncRun,
@@ -48,6 +51,7 @@ import { createDb } from "./client.js";
 import {
   gmailMailboxCredentials,
   mailboxConnectSessions,
+  mailboxEvents,
   mailboxes,
   messages,
   syncRuns,
@@ -430,7 +434,7 @@ const toMessageInsert = (mailboxId: string, message: CanonicalMessageRecord) => 
     fromEmail: message.from.email,
     snippet: message.snippet,
     receivedAt: toDate(message.receivedAt),
-    labelIds: [...message.labelIds],
+    labelIds: normalizeLabelIds(message.labelIds),
     updatedAt: timestamp,
   };
 };
@@ -444,8 +448,186 @@ const toMessageUpdateSet = (message: CanonicalMessageRecord) => {
     fromEmail: message.from.email,
     snippet: message.snippet,
     receivedAt: toDate(message.receivedAt),
-    labelIds: [...message.labelIds],
+    labelIds: normalizeLabelIds(message.labelIds),
     updatedAt: new Date(),
+  };
+};
+
+const normalizeLabelIds = (labelIds: ReadonlyArray<string>) => {
+  return [...new Set(labelIds)].toSorted();
+};
+
+const hasSameStringArrayValues = (
+  left: ReadonlyArray<string>,
+  right: ReadonlyArray<string>,
+) => {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+};
+
+const toMailboxMessageEventData = (message: CanonicalMessageRecord) => {
+  return {
+    messageId: message.id,
+    threadId: message.threadId,
+    providerMessageId: message.providerMessageId,
+    providerThreadId: message.providerThreadId,
+    subject: message.subject,
+    snippet: message.snippet,
+    receivedAt: message.receivedAt,
+    labelIds: normalizeLabelIds(message.labelIds),
+  };
+};
+
+const toMailboxThreadEventData = (thread: CanonicalThreadRecord) => {
+  return {
+    threadId: thread.id,
+    providerThreadId: thread.providerThreadId,
+    subject: thread.subject,
+    lastMessageAt: thread.lastMessageAt,
+  };
+};
+
+const toCanonicalThreadFromMessageRow = (
+  row: Pick<MessageRow, "providerThreadId" | "receivedAt" | "subject" | "threadId">,
+): CanonicalThreadRecord => {
+  return {
+    id: row.threadId,
+    providerThreadId: row.providerThreadId,
+    subject: row.subject,
+    lastMessageAt: row.receivedAt.toISOString(),
+  };
+};
+
+const isSameCanonicalMessage = (row: MessageRow, message: CanonicalMessageRecord) => {
+  return (
+    row.id === message.id &&
+    row.threadId === message.threadId &&
+    row.providerMessageId === message.providerMessageId &&
+    row.providerThreadId === message.providerThreadId &&
+    row.subject === message.subject &&
+    row.fromName === message.from.name &&
+    row.fromEmail === message.from.email &&
+    row.snippet === message.snippet &&
+    row.receivedAt.getTime() === Date.parse(message.receivedAt) &&
+    hasSameStringArrayValues(row.labelIds, normalizeLabelIds(message.labelIds))
+  );
+};
+
+const isSameCanonicalThread = (row: ThreadRow, thread: CanonicalThreadRecord) => {
+  return (
+    row.id === thread.id &&
+    row.providerThreadId === thread.providerThreadId &&
+    row.subject === thread.subject &&
+    row.lastMessageAt.getTime() === Date.parse(thread.lastMessageAt)
+  );
+};
+
+const createStableMailboxEventId = (
+  syncRunId: string,
+  eventType: MailboxEventType,
+  mailboxId: string,
+  resourceId: string,
+) => {
+  const hash = createHash("sha256")
+    .update(syncRunId)
+    .update("\0")
+    .update(eventType)
+    .update("\0")
+    .update(mailboxId)
+    .update("\0")
+    .update(resourceId)
+    .digest("hex");
+
+  return `evt_${hash}`;
+};
+
+const createMessageCreatedMailboxEvent = (params: {
+  readonly syncRunId: string;
+  readonly occurredAt: string;
+  readonly workspaceId: string;
+  readonly tenantExternalId: string;
+  readonly mailboxId: string;
+  readonly message: CanonicalMessageRecord;
+}): MailboxEventEnvelope => {
+  const data = toMailboxMessageEventData(params.message);
+
+  return {
+    id: createStableMailboxEventId(
+      params.syncRunId,
+      "message.created",
+      params.mailboxId,
+      params.message.id,
+    ),
+    type: "message.created",
+    occurredAt: params.occurredAt,
+    workspaceId: params.workspaceId,
+    tenantExternalId: params.tenantExternalId,
+    mailboxId: params.mailboxId,
+    data,
+    schemaVersion: 1,
+  };
+};
+
+const createMessageUpdatedMailboxEvent = (params: {
+  readonly syncRunId: string;
+  readonly occurredAt: string;
+  readonly workspaceId: string;
+  readonly tenantExternalId: string;
+  readonly mailboxId: string;
+  readonly message: CanonicalMessageRecord;
+}): MailboxEventEnvelope => {
+  const data = toMailboxMessageEventData(params.message);
+
+  return {
+    id: createStableMailboxEventId(
+      params.syncRunId,
+      "message.updated",
+      params.mailboxId,
+      params.message.id,
+    ),
+    type: "message.updated",
+    occurredAt: params.occurredAt,
+    workspaceId: params.workspaceId,
+    tenantExternalId: params.tenantExternalId,
+    mailboxId: params.mailboxId,
+    data,
+    schemaVersion: 1,
+  };
+};
+
+const createThreadUpdatedMailboxEvent = (params: {
+  readonly syncRunId: string;
+  readonly occurredAt: string;
+  readonly workspaceId: string;
+  readonly tenantExternalId: string;
+  readonly mailboxId: string;
+  readonly thread: CanonicalThreadRecord;
+}): MailboxEventEnvelope => {
+  const data = toMailboxThreadEventData(params.thread);
+
+  return {
+    id: createStableMailboxEventId(
+      params.syncRunId,
+      "thread.updated",
+      params.mailboxId,
+      params.thread.id,
+    ),
+    type: "thread.updated",
+    occurredAt: params.occurredAt,
+    workspaceId: params.workspaceId,
+    tenantExternalId: params.tenantExternalId,
+    mailboxId: params.mailboxId,
+    data,
+    schemaVersion: 1,
+  };
+};
+
+const toMailboxEventInsert = (event: MailboxEventEnvelope) => {
+  return {
+    id: event.id,
+    mailboxId: event.mailboxId,
+    eventType: event.type,
+    occurredAt: toDate(event.occurredAt),
+    payload: event,
   };
 };
 
@@ -1019,15 +1201,7 @@ export const createMailboxStateStoreLayer = Layer.effect(
 
           return row?.cursor ?? null;
         }),
-      applySyncResult: ({
-        eventsEmitted,
-        mailboxId,
-        leaseOwnerId,
-        nextCursor,
-        snapshot,
-        syncRunId,
-        syncedAt,
-      }) =>
+      applySyncResult: ({ mailboxId, leaseOwnerId, nextCursor, snapshot, syncRunId, syncedAt }) =>
         Effect.promise(async () => {
           const syncedAtDate = toDate(syncedAt);
 
@@ -1038,6 +1212,8 @@ export const createMailboxStateStoreLayer = Layer.effect(
                 activeSyncLeaseExpiresAt: mailboxes.activeSyncLeaseExpiresAt,
                 activeSyncLeaseOwner: mailboxes.activeSyncLeaseOwner,
                 initializedAt: mailboxes.initializedAt,
+                tenantExternalId: mailboxes.tenantExternalId,
+                workspaceId: mailboxes.workspaceId,
               })
               .from(mailboxes)
               .where(eq(mailboxes.id, mailboxId))
@@ -1049,8 +1225,75 @@ export const createMailboxStateStoreLayer = Layer.effect(
               row.activeSyncLeaseExpiresAt === null ||
               row.activeSyncLeaseExpiresAt <= leaseCheckAt
             ) {
-              return false;
+              return {
+                applied: false,
+                mailboxEventIds: [],
+              } satisfies MailboxSyncCommitResult;
             }
+
+            if (row.workspaceId === null || row.tenantExternalId === null) {
+              throw new Error(
+                `Mailbox ${mailboxId} is missing the workspace or tenant identity required for mailbox event emission.`,
+              );
+            }
+
+            const deletedMessageRows =
+              snapshot.deletedProviderMessageIds.length === 0
+                ? []
+                : await transaction
+                    .select()
+                    .from(messages)
+                    .where(
+                      and(
+                        eq(messages.mailboxId, mailboxId),
+                        inArray(
+                          messages.providerMessageId,
+                          [...snapshot.deletedProviderMessageIds],
+                        ),
+                      ),
+                    );
+            const existingMessageRows =
+              snapshot.messages.length === 0
+                ? []
+                : await transaction
+                    .select()
+                    .from(messages)
+                    .where(
+                      and(
+                        eq(messages.mailboxId, mailboxId),
+                        inArray(
+                          messages.providerMessageId,
+                          [...new Set(snapshot.messages.map((message) => message.providerMessageId))],
+                        ),
+                      ),
+                    );
+            const existingMessagesByProviderMessageId = new Map(
+              existingMessageRows.map((message) => [message.providerMessageId, message]),
+            );
+            const affectedProviderThreadIds = [
+              ...new Set([
+                ...snapshot.threads.map((thread) => thread.providerThreadId),
+                ...snapshot.messages.map((message) => message.providerThreadId),
+                ...existingMessageRows.map((message) => message.providerThreadId),
+                ...deletedMessageRows.map((message) => message.providerThreadId),
+              ]),
+            ];
+            const existingThreadRows =
+              affectedProviderThreadIds.length === 0
+                ? []
+                : await transaction
+                    .select()
+                    .from(threads)
+                    .where(
+                      and(
+                        eq(threads.mailboxId, mailboxId),
+                        inArray(threads.providerThreadId, affectedProviderThreadIds),
+                      ),
+                    );
+            const existingThreadsByProviderThreadId = new Map(
+              existingThreadRows.map((thread) => [thread.providerThreadId, thread]),
+            );
+            const emittedMailboxEvents: Array<MailboxEventEnvelope> = [];
 
             for (const thread of snapshot.threads) {
               await transaction
@@ -1063,6 +1306,34 @@ export const createMailboxStateStoreLayer = Layer.effect(
             }
 
             for (const message of snapshot.messages) {
+              const existingMessage = existingMessagesByProviderMessageId.get(
+                message.providerMessageId,
+              );
+
+              if (existingMessage === undefined) {
+                emittedMailboxEvents.push(
+                  createMessageCreatedMailboxEvent({
+                    syncRunId,
+                    occurredAt: syncedAt,
+                    workspaceId: row.workspaceId,
+                    tenantExternalId: row.tenantExternalId,
+                    mailboxId,
+                    message,
+                  }),
+                );
+              } else if (!isSameCanonicalMessage(existingMessage, message)) {
+                emittedMailboxEvents.push(
+                  createMessageUpdatedMailboxEvent({
+                    syncRunId,
+                    occurredAt: syncedAt,
+                    workspaceId: row.workspaceId,
+                    tenantExternalId: row.tenantExternalId,
+                    mailboxId,
+                    message,
+                  }),
+                );
+              }
+
               await transaction
                 .insert(messages)
                 .values(toMessageInsert(mailboxId, message))
@@ -1093,7 +1364,83 @@ export const createMailboxStateStoreLayer = Layer.effect(
               `);
             }
 
-            await transaction
+            const recalculatedThreadRecordsByProviderThreadId =
+              affectedProviderThreadIds.length === 0
+                ? new Map<string, CanonicalThreadRecord>()
+                : await transaction
+                    .select({
+                      providerThreadId: messages.providerThreadId,
+                      receivedAt: messages.receivedAt,
+                      subject: messages.subject,
+                      threadId: messages.threadId,
+                    })
+                    .from(messages)
+                    .where(
+                      and(
+                        eq(messages.mailboxId, mailboxId),
+                        inArray(messages.providerThreadId, affectedProviderThreadIds),
+                      ),
+                    )
+                    .orderBy(asc(messages.providerThreadId), desc(messages.receivedAt), desc(messages.id))
+                    .then((rows) => {
+                      const recalculatedThreads = new Map<string, CanonicalThreadRecord>();
+
+                      for (const message of rows) {
+                        if (!recalculatedThreads.has(message.providerThreadId)) {
+                          recalculatedThreads.set(
+                            message.providerThreadId,
+                            toCanonicalThreadFromMessageRow(message),
+                          );
+                        }
+                      }
+
+                      return recalculatedThreads;
+                    });
+
+            for (const providerThreadId of affectedProviderThreadIds) {
+              const existingThread = existingThreadsByProviderThreadId.get(providerThreadId);
+              const recalculatedThread =
+                recalculatedThreadRecordsByProviderThreadId.get(providerThreadId);
+
+              if (recalculatedThread === undefined) {
+                continue;
+              }
+
+              if (
+                existingThread === undefined ||
+                !isSameCanonicalThread(existingThread, recalculatedThread)
+              ) {
+                emittedMailboxEvents.push(
+                  createThreadUpdatedMailboxEvent({
+                    syncRunId,
+                    occurredAt: syncedAt,
+                    workspaceId: row.workspaceId,
+                    tenantExternalId: row.tenantExternalId,
+                    mailboxId,
+                    thread: recalculatedThread,
+                  }),
+                );
+              }
+
+              await transaction
+                .insert(threads)
+                .values(toThreadInsert(mailboxId, recalculatedThread))
+                .onConflictDoUpdate({
+                  target: [threads.mailboxId, threads.providerThreadId],
+                  set: toThreadUpdateSet(recalculatedThread),
+                });
+            }
+
+            if (emittedMailboxEvents.length > 0) {
+              await transaction
+                .insert(mailboxEvents)
+                .values(emittedMailboxEvents.map((event) => toMailboxEventInsert(event)))
+                .onConflictDoNothing({
+                  target: mailboxEvents.id,
+                });
+            }
+
+            const [updatedMailbox] = await transaction
               .update(mailboxes)
               .set({
                 activeSyncLeaseAcquiredAt: null,
@@ -1111,20 +1458,37 @@ export const createMailboxStateStoreLayer = Layer.effect(
                 syncState: "healthy",
                 updatedAt: syncedAtDate,
               })
-              .where(eq(mailboxes.id, mailboxId));
+              .where(eq(mailboxes.id, mailboxId))
+              .returning({
+                id: mailboxes.id,
+              });
 
-            await transaction
+            if (updatedMailbox === undefined) {
+              throw new Error(`Mailbox ${mailboxId} could not be finalized after sync application.`);
+            }
+
+            const [updatedSyncRun] = await transaction
               .update(syncRuns)
               .set({
                 completedAt: syncedAtDate,
                 detail: null,
-                eventsEmitted: String(eventsEmitted),
+                eventsEmitted: String(emittedMailboxEvents.length),
                 nextCursor,
                 status: "completed",
               })
-              .where(eq(syncRuns.id, syncRunId));
+              .where(eq(syncRuns.id, syncRunId))
+              .returning({
+                id: syncRuns.id,
+              });
 
-            return true;
+            if (updatedSyncRun === undefined) {
+              throw new Error(`Sync run ${syncRunId} could not be finalized after sync application.`);
+            }
+
+            return {
+              applied: true,
+              mailboxEventIds: emittedMailboxEvents.map((event) => event.id),
+            } satisfies MailboxSyncCommitResult;
           });
         }),
     };

@@ -8,11 +8,12 @@ export const MailboxSyncStateSchema = Schema.Literal(
   "failed",
 );
 export const MailboxWatchStateSchema = Schema.Literal("active", "expiring", "expired", "unhealthy");
-export const WebhookEventTypeSchema = Schema.Literal(
+export const MailboxEventTypeSchema = Schema.Literal(
   "message.created",
   "message.updated",
   "thread.updated",
 );
+export const WebhookEventTypeSchema = MailboxEventTypeSchema;
 export const WebhookEndpointDeliveryStateSchema = Schema.Literal("healthy", "degraded", "failing");
 export const ReplayStatusSchema = Schema.Literal(
   "queued",
@@ -46,7 +47,8 @@ export const ControlJobDispatchRequestSchema = Schema.Struct({
 export type MailboxStatus = Schema.Schema.Type<typeof MailboxStatusSchema>;
 export type MailboxSyncState = Schema.Schema.Type<typeof MailboxSyncStateSchema>;
 export type MailboxWatchState = Schema.Schema.Type<typeof MailboxWatchStateSchema>;
-export type WebhookEventType = Schema.Schema.Type<typeof WebhookEventTypeSchema>;
+export type MailboxEventType = Schema.Schema.Type<typeof MailboxEventTypeSchema>;
+export type WebhookEventType = MailboxEventType;
 export type WebhookEndpointDeliveryState = Schema.Schema.Type<
   typeof WebhookEndpointDeliveryStateSchema
 >;
@@ -226,16 +228,59 @@ export interface ThreadListItemResource {
   readonly lastMessageAt: string;
 }
 
-export interface WebhookEventEnvelope {
+export interface MailboxMessageEventData {
+  readonly messageId: string;
+  readonly threadId: string;
+  readonly providerMessageId: string;
+  readonly providerThreadId: string;
+  readonly subject: string;
+  readonly snippet: string;
+  readonly receivedAt: string;
+  readonly labelIds: ReadonlyArray<string>;
+}
+
+export interface MailboxThreadEventData {
+  readonly threadId: string;
+  readonly providerThreadId: string;
+  readonly subject: string;
+  readonly lastMessageAt: string;
+}
+
+interface MailboxEventEnvelopeBase<
+  TType extends MailboxEventType,
+  TData extends MailboxMessageEventData | MailboxThreadEventData,
+> {
   readonly id: string;
-  readonly type: WebhookEventType;
+  readonly type: TType;
   readonly schemaVersion: 1;
   readonly occurredAt: string;
   readonly workspaceId: string;
   readonly tenantExternalId: string;
   readonly mailboxId: string;
-  readonly data: Readonly<Record<string, string>>;
+  readonly data: TData;
 }
+
+export type MessageCreatedMailboxEventEnvelope = MailboxEventEnvelopeBase<
+  "message.created",
+  MailboxMessageEventData
+>;
+
+export type MessageUpdatedMailboxEventEnvelope = MailboxEventEnvelopeBase<
+  "message.updated",
+  MailboxMessageEventData
+>;
+
+export type ThreadUpdatedMailboxEventEnvelope = MailboxEventEnvelopeBase<
+  "thread.updated",
+  MailboxThreadEventData
+>;
+
+export type MailboxEventEnvelope =
+  | MessageCreatedMailboxEventEnvelope
+  | MessageUpdatedMailboxEventEnvelope
+  | ThreadUpdatedMailboxEventEnvelope;
+
+export type WebhookEventEnvelope = MailboxEventEnvelope;
 
 export interface StartedSyncRun {
   readonly syncRunId: string;
@@ -300,6 +345,11 @@ export interface MailboxSyncLeaseAcquisition {
 export interface MailboxSyncLeaseRenewal {
   readonly renewed: boolean;
   readonly expiresAt: string | null;
+}
+
+export interface MailboxSyncCommitResult {
+  readonly applied: boolean;
+  readonly mailboxEventIds: ReadonlyArray<string>;
 }
 
 export interface WorkspaceApiKeyIdentity {
