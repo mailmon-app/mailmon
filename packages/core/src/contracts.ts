@@ -13,11 +13,7 @@ export const WebhookEventTypeSchema = Schema.Literal(
   "message.updated",
   "thread.updated",
 );
-export const WebhookEndpointDeliveryStateSchema = Schema.Literal(
-  "healthy",
-  "degraded",
-  "failing",
-);
+export const WebhookEndpointDeliveryStateSchema = Schema.Literal("healthy", "degraded", "failing");
 export const ReplayStatusSchema = Schema.Literal(
   "queued",
   "running",

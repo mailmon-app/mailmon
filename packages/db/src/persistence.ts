@@ -160,7 +160,9 @@ const toWebhookEndpointDeliveryState = (deliveryState: string): WebhookEndpointD
   }
 };
 
-const toWebhookEventTypes = (eventTypes: ReadonlyArray<string>): ReadonlyArray<WebhookEventType> => {
+const toWebhookEventTypes = (
+  eventTypes: ReadonlyArray<string>,
+): ReadonlyArray<WebhookEventType> => {
   return eventTypes.map((eventType) => {
     switch (eventType) {
       case "message.created":

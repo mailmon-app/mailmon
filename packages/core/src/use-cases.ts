@@ -85,9 +85,7 @@ const normalizeWebhookEventTypes = (
 ): ReadonlyArray<WebhookEventType> => {
   const requestedEventTypes = new Set(eventTypes);
 
-  return WEBHOOK_EVENT_TYPE_ORDER.filter((eventType) =>
-    requestedEventTypes.has(eventType),
-  );
+  return WEBHOOK_EVENT_TYPE_ORDER.filter((eventType) => requestedEventTypes.has(eventType));
 };
 
 const isConnectSessionExpired = (
@@ -303,10 +301,7 @@ export const createMailboxConnectSession = (
     return resource;
   });
 
-export const createWebhookEndpoint = (
-  workspaceId: string,
-  request: CreateWebhookEndpointRequest,
-) =>
+export const createWebhookEndpoint = (workspaceId: string, request: CreateWebhookEndpointRequest) =>
   Effect.gen(function* () {
     const webhookEndpointStore = yield* WebhookEndpointStore;
     const createdAt = new Date().toISOString();

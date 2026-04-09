@@ -139,9 +139,10 @@ export const webhookEndpointSubscriptions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    endpointMailboxUnique: unique(
-      "webhook_endpoint_subscriptions_endpoint_mailbox_unique",
-    ).on(table.webhookEndpointId, table.mailboxId),
+    endpointMailboxUnique: unique("webhook_endpoint_subscriptions_endpoint_mailbox_unique").on(
+      table.webhookEndpointId,
+      table.mailboxId,
+    ),
     mailboxIndex: index("webhook_endpoint_subscriptions_mailbox_id_idx").on(table.mailboxId),
     webhookEndpointIndex: index("webhook_endpoint_subscriptions_endpoint_id_idx").on(
       table.webhookEndpointId,

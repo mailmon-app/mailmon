@@ -176,43 +176,45 @@ const fetchStoredWebhookEndpoint = async (connectionString: string, webhookEndpo
 };
 
 describe("DB-backed webhook endpoint spine", () => {
-  it.effect("creates webhook endpoints, stores the secret durably, and omits it from read paths", () =>
-    withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+  it.effect(
+    "creates webhook endpoints, stores the secret durably, and omits it from read paths",
+    () =>
+      withIsolatedDatabase(({ connectionString }) => {
+        const persistenceLayer = createCorePersistenceLayer(connectionString);
 
-      return Effect.gen(function* () {
-        yield* Effect.promise(() => seedWebhookFixtures(connectionString));
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => seedWebhookFixtures(connectionString));
 
-        const createdWebhookEndpoint = yield* createWebhookEndpoint(primaryWorkspaceId, {
-          url: "https://app.example.com/webhooks/mailmon",
-          description: "production inbox events",
-        });
-        const readWebhookEndpoint = yield* getWebhookEndpointOrFail(createdWebhookEndpoint.id, {
-          workspaceId: primaryWorkspaceId,
-        });
-        const storedWebhookEndpoint = yield* Effect.promise(() =>
-          fetchStoredWebhookEndpoint(connectionString, createdWebhookEndpoint.id),
-        );
+          const createdWebhookEndpoint = yield* createWebhookEndpoint(primaryWorkspaceId, {
+            url: "https://app.example.com/webhooks/mailmon",
+            description: "production inbox events",
+          });
+          const readWebhookEndpoint = yield* getWebhookEndpointOrFail(createdWebhookEndpoint.id, {
+            workspaceId: primaryWorkspaceId,
+          });
+          const storedWebhookEndpoint = yield* Effect.promise(() =>
+            fetchStoredWebhookEndpoint(connectionString, createdWebhookEndpoint.id),
+          );
 
-        expect(createdWebhookEndpoint.id).toMatch(/^whe_/);
-        expect(createdWebhookEndpoint.secret).toMatch(/^whsec_/);
-        expect(readWebhookEndpoint).toEqual({
-          id: createdWebhookEndpoint.id,
-          object: "webhook_endpoint",
-          url: "https://app.example.com/webhooks/mailmon",
-          description: "production inbox events",
-          deliveryState: "healthy",
-          lastDeliveryAt: null,
-          lastDeliveryError: null,
-          createdAt: createdWebhookEndpoint.createdAt,
-        });
-        expect(Object.prototype.hasOwnProperty.call(readWebhookEndpoint, "secret")).toBe(false);
-        expect(storedWebhookEndpoint).toEqual({
-          deliveryState: "healthy",
-          signingSecret: createdWebhookEndpoint.secret,
-        });
-      }).pipe(Effect.provide(persistenceLayer));
-    }),
+          expect(createdWebhookEndpoint.id).toMatch(/^whe_/);
+          expect(createdWebhookEndpoint.secret).toMatch(/^whsec_/);
+          expect(readWebhookEndpoint).toEqual({
+            id: createdWebhookEndpoint.id,
+            object: "webhook_endpoint",
+            url: "https://app.example.com/webhooks/mailmon",
+            description: "production inbox events",
+            deliveryState: "healthy",
+            lastDeliveryAt: null,
+            lastDeliveryError: null,
+            createdAt: createdWebhookEndpoint.createdAt,
+          });
+          expect(Object.prototype.hasOwnProperty.call(readWebhookEndpoint, "secret")).toBe(false);
+          expect(storedWebhookEndpoint).toEqual({
+            deliveryState: "healthy",
+            signingSecret: createdWebhookEndpoint.secret,
+          });
+        }).pipe(Effect.provide(persistenceLayer));
+      }),
   );
 
   it.effect("collapses foreign-owned resources to not found in mailbox-scoped subscriptions", () =>
@@ -273,48 +275,50 @@ describe("DB-backed webhook endpoint spine", () => {
     }),
   );
 
-  it.effect("returns conflicts for duplicate endpoint urls and duplicate mailbox subscriptions", () =>
-    withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+  it.effect(
+    "returns conflicts for duplicate endpoint urls and duplicate mailbox subscriptions",
+    () =>
+      withIsolatedDatabase(({ connectionString }) => {
+        const persistenceLayer = createCorePersistenceLayer(connectionString);
 
-      return Effect.gen(function* () {
-        yield* Effect.promise(() => seedWebhookFixtures(connectionString));
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => seedWebhookFixtures(connectionString));
 
-        const primaryEndpoint = yield* createWebhookEndpoint(primaryWorkspaceId, {
-          url: "https://app.example.com/webhooks/mailmon",
-          description: "primary",
-        });
-        const duplicateEndpointProblem = yield* createWebhookEndpoint(primaryWorkspaceId, {
-          url: "https://app.example.com/webhooks/mailmon",
-          description: "duplicate primary",
-        }).pipe(Effect.flip);
-        const foreignWorkspaceEndpoint = yield* createWebhookEndpoint(foreignWorkspaceId, {
-          url: "https://app.example.com/webhooks/mailmon",
-          description: "foreign",
-        });
+          const primaryEndpoint = yield* createWebhookEndpoint(primaryWorkspaceId, {
+            url: "https://app.example.com/webhooks/mailmon",
+            description: "primary",
+          });
+          const duplicateEndpointProblem = yield* createWebhookEndpoint(primaryWorkspaceId, {
+            url: "https://app.example.com/webhooks/mailmon",
+            description: "duplicate primary",
+          }).pipe(Effect.flip);
+          const foreignWorkspaceEndpoint = yield* createWebhookEndpoint(foreignWorkspaceId, {
+            url: "https://app.example.com/webhooks/mailmon",
+            description: "foreign",
+          });
 
-        yield* createWebhookEndpointSubscription(primaryWorkspaceId, primaryEndpoint.id, {
-          mailboxIds: [primaryMailboxId],
-          eventTypes: ["message.created"],
-        });
-        const duplicateSubscriptionProblem = yield* createWebhookEndpointSubscription(
-          primaryWorkspaceId,
-          primaryEndpoint.id,
-          {
+          yield* createWebhookEndpointSubscription(primaryWorkspaceId, primaryEndpoint.id, {
             mailboxIds: [primaryMailboxId],
-            eventTypes: ["message.updated"],
-          },
-        ).pipe(Effect.flip);
+            eventTypes: ["message.created"],
+          });
+          const duplicateSubscriptionProblem = yield* createWebhookEndpointSubscription(
+            primaryWorkspaceId,
+            primaryEndpoint.id,
+            {
+              mailboxIds: [primaryMailboxId],
+              eventTypes: ["message.updated"],
+            },
+          ).pipe(Effect.flip);
 
-        expect(duplicateEndpointProblem.code).toBe("webhook_endpoint_already_exists");
-        expect(duplicateEndpointProblem.status).toBe(409);
-        expect(foreignWorkspaceEndpoint.id).toMatch(/^whe_/);
-        expect(duplicateSubscriptionProblem.code).toBe(
-          "webhook_endpoint_subscription_already_exists",
-        );
-        expect(duplicateSubscriptionProblem.status).toBe(409);
-      }).pipe(Effect.provide(persistenceLayer));
-    }),
+          expect(duplicateEndpointProblem.code).toBe("webhook_endpoint_already_exists");
+          expect(duplicateEndpointProblem.status).toBe(409);
+          expect(foreignWorkspaceEndpoint.id).toMatch(/^whe_/);
+          expect(duplicateSubscriptionProblem.code).toBe(
+            "webhook_endpoint_subscription_already_exists",
+          );
+          expect(duplicateSubscriptionProblem.status).toBe(409);
+        }).pipe(Effect.provide(persistenceLayer));
+      }),
   );
 
   it.effect("maps concurrent duplicate endpoint and subscription creates to 409 problems", () =>

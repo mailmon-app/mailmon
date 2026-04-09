@@ -2,11 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as TestClock from "effect/TestClock";
 
-import type {
-  CompletedSyncRun,
-  MailboxResource,
-  WebhookEndpointResource,
-} from "./contracts.js";
+import type { CompletedSyncRun, MailboxResource, WebhookEndpointResource } from "./contracts.js";
 import {
   MailboxCatalog,
   MailboxQueryCatalog,
@@ -106,10 +102,7 @@ const webhookEndpointFixtures = new Map([
 ]);
 
 const webhookEndpointCatalogLayer = Layer.succeed(WebhookEndpointCatalog, {
-  getWebhookEndpoint: (
-    webhookEndpointId: string,
-    options?: Readonly<{ workspaceId?: string }>,
-  ) =>
+  getWebhookEndpoint: (webhookEndpointId: string, options?: Readonly<{ workspaceId?: string }>) =>
     Effect.succeed(
       Option.fromNullable(webhookEndpointFixtures.get(webhookEndpointId)).pipe(
         Option.filter(

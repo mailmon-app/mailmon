@@ -46,6 +46,10 @@ const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 100;
 const INVALID_OPTIONAL_NULLABLE_STRING = Symbol("invalid_optional_nullable_string");
 
+const isReadonlyRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
+  return typeof value === "object" && value !== null;
+};
+
 const extractBearerApiKey = (authorizationHeader: string | undefined) => {
   if (authorizationHeader === undefined) {
     return null;
@@ -138,15 +142,15 @@ const getRequiredStringArrayProperty = (
   value: Readonly<Record<string, unknown>>,
   keys: ReadonlyArray<string>,
 ) => {
-  const property = keys
-    .map((key) => value[key])
-    .find((candidate) => candidate !== undefined);
+  const property = keys.map((key) => value[key]).find((candidate) => candidate !== undefined);
 
   if (!Array.isArray(property) || property.length === 0) {
     return null;
   }
 
-  const items = property.filter((item): item is string => typeof item === "string" && item.length > 0);
+  const items = property.filter(
+    (item): item is string => typeof item === "string" && item.length > 0,
+  );
 
   return items.length === property.length ? items : null;
 };
@@ -155,16 +159,13 @@ const isWebhookEventType = (value: string): value is WebhookEventType => {
   return value === "message.created" || value === "message.updated" || value === "thread.updated";
 };
 
-const parseCreateWebhookEndpointRequest = (
-  value: unknown,
-): CreateWebhookEndpointRequest | null => {
-  if (typeof value !== "object" || value === null) {
+const parseCreateWebhookEndpointRequest = (value: unknown): CreateWebhookEndpointRequest | null => {
+  if (!isReadonlyRecord(value)) {
     return null;
   }
 
-  const body = value as Readonly<Record<string, unknown>>;
-  const url = getOptionalStringProperty(body, ["url"]);
-  const description = getOptionalNullableStringProperty(body, ["description"]);
+  const url = getOptionalStringProperty(value, ["url"]);
+  const description = getOptionalNullableStringProperty(value, ["description"]);
 
   if (
     typeof url !== "string" ||
@@ -183,13 +184,12 @@ const parseCreateWebhookEndpointRequest = (
 const parseCreateWebhookEndpointSubscriptionRequest = (
   value: unknown,
 ): CreateWebhookEndpointSubscriptionRequest | null => {
-  if (typeof value !== "object" || value === null) {
+  if (!isReadonlyRecord(value)) {
     return null;
   }
 
-  const body = value as Readonly<Record<string, unknown>>;
-  const mailboxIds = getRequiredStringArrayProperty(body, ["mailboxIds", "mailbox_ids"]);
-  const eventTypes = getRequiredStringArrayProperty(body, ["eventTypes", "event_types"]);
+  const mailboxIds = getRequiredStringArrayProperty(value, ["mailboxIds", "mailbox_ids"]);
+  const eventTypes = getRequiredStringArrayProperty(value, ["eventTypes", "event_types"]);
 
   if (mailboxIds === null || eventTypes === null || !eventTypes.every(isWebhookEventType)) {
     return null;
@@ -425,9 +425,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
     const mailboxId = getMailboxIdQuery(context.req);
 
     if (mailboxId === null) {
-      return createProblemResponse(
-        invalidRequest("Query must include mailboxId or mailbox_id."),
-      );
+      return createProblemResponse(invalidRequest("Query must include mailboxId or mailbox_id."));
     }
 
     const limit = parseListLimit(context.req);
@@ -485,9 +483,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
     const mailboxId = getMailboxIdQuery(context.req);
 
     if (mailboxId === null) {
-      return createProblemResponse(
-        invalidRequest("Query must include mailboxId or mailbox_id."),
-      );
+      return createProblemResponse(invalidRequest("Query must include mailboxId or mailbox_id."));
     }
 
     const limit = parseListLimit(context.req);
