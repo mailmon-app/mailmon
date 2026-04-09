@@ -7,13 +7,19 @@ import {
   MailboxSyncCoordinator,
   MailboxStateStore,
   SyncRunStore,
+  WebhookEndpointCatalog,
+  WebhookEndpointStore,
+  WebhookEndpointSubscriptionStore,
   WorkspaceApiKeyStore,
   invalidPaginationCursor,
   mailboxAlreadyConnected,
+  webhookEndpointAlreadyExists,
+  webhookEndpointSubscriptionAlreadyExists,
   type CanonicalMessageRecord,
   type CanonicalThreadRecord,
   type CompletedMailboxConnectSession,
   type CompletedSyncRun,
+  type CreatedWebhookEndpointResource,
   type ListMailboxMessagesRequest,
   type ListMailboxThreadsRequest,
   type ListResource,
@@ -27,6 +33,11 @@ import {
   type ThreadListItemResource,
   type ThreadMessageSummaryResource,
   type ThreadResource,
+  type WebhookEndpointDeliveryState,
+  type WebhookEndpointOperationalError,
+  type WebhookEndpointResource,
+  type WebhookEndpointSubscriptionResource,
+  type WebhookEventType,
   type WorkspaceApiKeyIdentity,
 } from "@mailmon/core";
 import { GmailMailboxCredentialStore } from "@mailmon/gmail";
@@ -41,6 +52,8 @@ import {
   messages,
   syncRuns,
   threads,
+  webhookEndpoints,
+  webhookEndpointSubscriptions,
   workspaceApiKeys,
 } from "./schema.js";
 
@@ -49,6 +62,8 @@ type MailboxRow = typeof mailboxes.$inferSelect;
 type ConnectSessionRow = typeof mailboxConnectSessions.$inferSelect;
 type MessageRow = typeof messages.$inferSelect;
 type ThreadRow = typeof threads.$inferSelect;
+type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
+type WebhookEndpointSubscriptionRow = typeof webhookEndpointSubscriptions.$inferSelect;
 
 const hashApiKey = (apiKey: string) => {
   return createHash("sha256").update(apiKey).digest("hex");
@@ -134,6 +149,30 @@ const toMailboxWatchState = (watchState: string): MailboxResource["watchState"] 
   }
 };
 
+const toWebhookEndpointDeliveryState = (deliveryState: string): WebhookEndpointDeliveryState => {
+  switch (deliveryState) {
+    case "degraded":
+    case "failing":
+    case "healthy":
+      return deliveryState;
+    default:
+      throw new Error(`Unsupported webhook endpoint delivery state: ${deliveryState}`);
+  }
+};
+
+const toWebhookEventTypes = (eventTypes: ReadonlyArray<string>): ReadonlyArray<WebhookEventType> => {
+  return eventTypes.map((eventType) => {
+    switch (eventType) {
+      case "message.created":
+      case "message.updated":
+      case "thread.updated":
+        return eventType;
+      default:
+        throw new Error(`Unsupported webhook event type: ${eventType}`);
+    }
+  });
+};
+
 const toDate = (value: string) => {
   return new Date(value);
 };
@@ -142,7 +181,12 @@ const toIsoString = (value: Date | null) => {
   return value === null ? null : value.toISOString();
 };
 
-const toMailboxOperationalError = (row: MailboxRow): MailboxOperationalError | null => {
+const toOperationalError = (row: {
+  readonly lastErrorCode: string | null;
+  readonly lastErrorMessage: string | null;
+  readonly lastErrorOccurredAt: Date | null;
+  readonly lastErrorRetryable: boolean | null;
+}) => {
   if (
     row.lastErrorCode === null ||
     row.lastErrorMessage === null ||
@@ -160,6 +204,16 @@ const toMailboxOperationalError = (row: MailboxRow): MailboxOperationalError | n
   };
 };
 
+const toMailboxOperationalError = (row: MailboxRow): MailboxOperationalError | null => {
+  return toOperationalError(row);
+};
+
+const toWebhookEndpointOperationalError = (
+  row: WebhookEndpointRow,
+): WebhookEndpointOperationalError | null => {
+  return toOperationalError(row);
+};
+
 const toMailboxResource = (row: MailboxRow): MailboxResource => {
   return {
     id: row.id,
@@ -172,6 +226,41 @@ const toMailboxResource = (row: MailboxRow): MailboxResource => {
     initializedAt: toIsoString(row.initializedAt),
     lastSuccessfulSyncAt: toIsoString(row.lastSuccessfulSyncAt),
     lastError: toMailboxOperationalError(row),
+  };
+};
+
+const toWebhookEndpointResource = (row: WebhookEndpointRow): WebhookEndpointResource => {
+  return {
+    id: row.id,
+    object: "webhook_endpoint",
+    url: row.url,
+    description: row.description,
+    deliveryState: toWebhookEndpointDeliveryState(row.deliveryState),
+    lastDeliveryAt: toIsoString(row.lastDeliveryAt),
+    lastDeliveryError: toWebhookEndpointOperationalError(row),
+    createdAt: row.createdAt.toISOString(),
+  };
+};
+
+const toCreatedWebhookEndpointResource = (
+  row: WebhookEndpointRow,
+): CreatedWebhookEndpointResource => {
+  return {
+    ...toWebhookEndpointResource(row),
+    secret: row.signingSecret,
+  };
+};
+
+const toWebhookEndpointSubscriptionResource = (
+  row: WebhookEndpointSubscriptionRow,
+): WebhookEndpointSubscriptionResource => {
+  return {
+    id: row.id,
+    object: "webhook_endpoint_subscription",
+    webhookEndpointId: row.webhookEndpointId,
+    mailboxId: row.mailboxId,
+    eventTypes: toWebhookEventTypes(row.eventTypes),
+    createdAt: row.createdAt.toISOString(),
   };
 };
 
@@ -442,6 +531,151 @@ export const createWorkspaceApiKeyStoreLayer = Layer.effect(
           return Option.fromNullable(row).pipe(
             Option.map((value) => toWorkspaceApiKeyIdentity(value.workspaceId)),
           );
+        }),
+    };
+  }),
+);
+
+export const createWebhookEndpointCatalogLayer = Layer.effect(
+  WebhookEndpointCatalog,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      getWebhookEndpoint: (
+        webhookEndpointId: string,
+        options: Readonly<{
+          workspaceId?: string;
+        }> = {},
+      ) =>
+        Effect.promise(async () => {
+          const [row] = await database.db
+            .select()
+            .from(webhookEndpoints)
+            .where(
+              options.workspaceId === undefined
+                ? eq(webhookEndpoints.id, webhookEndpointId)
+                : and(
+                    eq(webhookEndpoints.id, webhookEndpointId),
+                    eq(webhookEndpoints.workspaceId, options.workspaceId),
+                  ),
+            )
+            .limit(1);
+
+          return Option.fromNullable(row).pipe(Option.map(toWebhookEndpointResource));
+        }),
+    };
+  }),
+);
+
+export const createWebhookEndpointStoreLayer = Layer.effect(
+  WebhookEndpointStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      createWebhookEndpoint: (params) =>
+        Effect.tryPromise({
+          catch: (error) => {
+            if (isProblemDetails(error)) {
+              return error;
+            }
+
+            throw error;
+          },
+          try: async () => {
+            const [row] = await database.db
+              .insert(webhookEndpoints)
+              .values({
+                id: params.id,
+                workspaceId: params.workspaceId,
+                url: params.url,
+                description: params.description,
+                signingSecret: params.secret,
+                deliveryState: "healthy",
+                createdAt: toDate(params.createdAt),
+                updatedAt: toDate(params.createdAt),
+              })
+              .onConflictDoNothing({
+                target: [webhookEndpoints.workspaceId, webhookEndpoints.url],
+              })
+              .returning();
+
+            if (row === undefined) {
+              throw webhookEndpointAlreadyExists(params.url);
+            }
+
+            return toCreatedWebhookEndpointResource(row);
+          },
+        }),
+    };
+  }),
+);
+
+export const createWebhookEndpointSubscriptionStoreLayer = Layer.effect(
+  WebhookEndpointSubscriptionStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      createWebhookEndpointSubscription: (params) =>
+        Effect.tryPromise({
+          catch: (error) => {
+            if (isProblemDetails(error)) {
+              return error;
+            }
+
+            throw error;
+          },
+          try: async () => {
+            return database.db.transaction(async (transaction) => {
+              const createdAt = toDate(params.createdAt);
+              const rows = await transaction
+                .insert(webhookEndpointSubscriptions)
+                .values(
+                  params.mailboxIds.map((mailboxId) => ({
+                    id: `whsub_${globalThis.crypto.randomUUID()}`,
+                    workspaceId: params.workspaceId,
+                    webhookEndpointId: params.webhookEndpointId,
+                    mailboxId,
+                    eventTypes: [...params.eventTypes],
+                    createdAt,
+                    updatedAt: createdAt,
+                  })),
+                )
+                .onConflictDoNothing({
+                  target: [
+                    webhookEndpointSubscriptions.webhookEndpointId,
+                    webhookEndpointSubscriptions.mailboxId,
+                  ],
+                })
+                .returning();
+
+              if (rows.length !== params.mailboxIds.length) {
+                const insertedMailboxIds = new Set(rows.map((row) => row.mailboxId));
+                const conflictingMailboxId = params.mailboxIds.find(
+                  (mailboxId) => !insertedMailboxIds.has(mailboxId),
+                );
+
+                if (conflictingMailboxId === undefined) {
+                  throw new Error(
+                    `Webhook endpoint subscription insert count mismatch for ${params.webhookEndpointId}.`,
+                  );
+                }
+
+                throw webhookEndpointSubscriptionAlreadyExists(
+                  params.webhookEndpointId,
+                  conflictingMailboxId,
+                );
+              }
+
+              return {
+                object: "list",
+                data: rows.map((row) => toWebhookEndpointSubscriptionResource(row)),
+                nextCursor: null,
+              } satisfies ListResource<WebhookEndpointSubscriptionResource>;
+            });
+          },
         }),
     };
   }),
@@ -1117,6 +1351,9 @@ export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxStateStoreLayer,
   createMailboxSyncCoordinatorLayer,
   createSyncRunStoreLayer,
+  createWebhookEndpointCatalogLayer,
+  createWebhookEndpointStoreLayer,
+  createWebhookEndpointSubscriptionStoreLayer,
   createWorkspaceApiKeyStoreLayer,
 );
 

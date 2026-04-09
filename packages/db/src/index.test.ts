@@ -14,6 +14,8 @@ describe("schema", () => {
     expect(schema.bootstrapState).toBeDefined();
     expect(schema.mailboxes).toBeDefined();
     expect(schema.gmailMailboxCredentials).toBeDefined();
+    expect(schema.webhookEndpoints).toBeDefined();
+    expect(schema.webhookEndpointSubscriptions).toBeDefined();
     expect(schema.threads).toBeDefined();
     expect(schema.messages).toBeDefined();
     expect(schema.syncRuns).toBeDefined();

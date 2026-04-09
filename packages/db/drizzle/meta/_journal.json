@@ -57,6 +57,13 @@
       "when": 1775683734635,
       "tag": "0007_lumpy_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1775724476838,
+      "tag": "0008_lethal_sandman",
+      "breakpoints": true
     }
   ]
 }

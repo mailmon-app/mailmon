@@ -94,6 +94,61 @@ export const gmailMailboxCredentials = pgTable("gmail_mailbox_credentials", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const webhookEndpoints = pgTable(
+  "webhook_endpoints",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    url: text("url").notNull(),
+    description: text("description"),
+    signingSecret: text("signing_secret").notNull(),
+    deliveryState: text("delivery_state").notNull(),
+    lastDeliveryAt: timestamp("last_delivery_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    lastErrorMessage: text("last_error_message"),
+    lastErrorOccurredAt: timestamp("last_error_occurred_at", { withTimezone: true }),
+    lastErrorRetryable: boolean("last_error_retryable"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    workspaceUrlUnique: unique("webhook_endpoints_workspace_url_unique").on(
+      table.workspaceId,
+      table.url,
+    ),
+  }),
+);
+
+export const webhookEndpointSubscriptions = pgTable(
+  "webhook_endpoint_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    webhookEndpointId: text("webhook_endpoint_id")
+      .notNull()
+      .references(() => webhookEndpoints.id),
+    mailboxId: text("mailbox_id")
+      .notNull()
+      .references(() => mailboxes.id),
+    eventTypes: jsonb("event_types").$type<string[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    endpointMailboxUnique: unique(
+      "webhook_endpoint_subscriptions_endpoint_mailbox_unique",
+    ).on(table.webhookEndpointId, table.mailboxId),
+    mailboxIndex: index("webhook_endpoint_subscriptions_mailbox_id_idx").on(table.mailboxId),
+    webhookEndpointIndex: index("webhook_endpoint_subscriptions_endpoint_id_idx").on(
+      table.webhookEndpointId,
+    ),
+  }),
+);
+
 export const threads = pgTable(
   "threads",
   {
