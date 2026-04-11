@@ -5,8 +5,8 @@ packages:
 catalog:
   "@effect/cli": ^0.75.0
   "@effect/language-service": ^0.83.1
-  "@effect/platform": ^0.96.0
   "@effect/platform-node": ^0.106.0
+  "@google-cloud/tasks": ^6.2.1
   "@types/node": ^25.5.0
   effect: ^3.21.0
   typescript: ^6.0.2

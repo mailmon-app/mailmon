@@ -15,8 +15,6 @@
     "format:check": "oxfmt --config ../../.oxfmtrc.json --check ."
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
-    "@effect/platform-node": "catalog:",
     "@hono/node-server": "^1.19.11",
     "@mailmon/config": "workspace:*",
     "@mailmon/core": "workspace:*",

@@ -12,21 +12,23 @@ const workerEnvFixture: WorkerEnv = {
   gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
   gcpProjectId: null,
   gcpRegion: null,
+  gcpTasksAudience: null,
+  gcpTasksServiceAccountEmail: null,
+  gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
   host: "127.0.0.1",
   nodeEnv: "test",
   port: 0,
   redisUrl: null,
+  workerBaseUrl: "http://127.0.0.1:3001",
 };
 
 describe("startWorkerRuntime", () => {
-  it("fails fast when gcp webhook delivery scheduling is requested", async () => {
+  it("requires redis when legacy bullmq mode is selected", async () => {
     await expect(
       startWorkerRuntime({
         ...workerEnvFixture,
-        asyncTransportMode: "gcp",
+        asyncTransportMode: "legacy_bullmq",
       }),
-    ).rejects.toThrow(
-      "MAILMON_ASYNC_TRANSPORT_MODE=gcp is not implemented for durable webhook delivery scheduling yet.",
-    );
+    ).rejects.toThrow("REDIS_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq");
   });
 });

@@ -9,7 +9,7 @@ import type {
   WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
 
-export interface WorkerHttpRuntimeOptions {
+interface WorkerHttpRuntimeOptions {
   readonly host: string;
   readonly port: number;
   readonly asyncTransportMode: AsyncTransportMode;
@@ -19,7 +19,7 @@ export interface WorkerHttpRuntimeOptions {
   ) => Promise<ProcessWebhookDeliveryResult>;
 }
 
-export interface WorkerHttpRuntimeHandle {
+interface WorkerHttpRuntimeHandle {
   readonly close: () => Promise<void>;
   readonly host: string;
   readonly port: number;

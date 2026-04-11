@@ -10,6 +10,7 @@ const nonEmptyString = (name: string) =>
 
 export type NodeEnv = "development" | "test" | "production";
 export type AsyncTransportMode = "local" | "gcp" | "legacy_bullmq";
+export const DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID = "mailmon-webhook-deliveries";
 
 const loadNodeEnv: Config.Config<NodeEnv> = Config.literal(
   "development",
@@ -36,18 +37,49 @@ const loadGmailOauthAuthorizeUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_AUTHORIZE
 const loadGmailOauthTokenUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_TOKEN_URL").pipe(
   Config.orElse(() => Config.succeed("https://oauth2.googleapis.com/token")),
 );
-const loadMailboxWorkerBaseUrl = nonEmptyString("MAILMON_WORKER_BASE_URL").pipe(
-  Config.orElse(() => Config.succeed("http://127.0.0.1:3001")),
-);
+const loadMailboxWorkerBaseUrl = Config.option(nonEmptyString("MAILMON_WORKER_BASE_URL"));
 const loadRedisUrl = Config.option(nonEmptyString("REDIS_URL"));
 const loadAsyncTransportMode: Config.Config<AsyncTransportMode> = Config.literal(
   "local",
   "gcp",
   "legacy_bullmq",
 )("MAILMON_ASYNC_TRANSPORT_MODE").pipe(Config.orElse(() => Config.succeed("local" as const)));
+const loadGcpWebhookDeliveryQueueId = nonEmptyString("MAILMON_GCP_WEBHOOK_DELIVERY_QUEUE_ID").pipe(
+  Config.orElse(() => Config.succeed(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID)),
+);
+const loadGcpTasksServiceAccountEmail = Config.option(
+  nonEmptyString("MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL"),
+);
+const loadGcpTasksAudience = Config.option(nonEmptyString("MAILMON_GCP_TASKS_AUDIENCE"));
 
 const normalizeOptional = <T>(value: Option.Option<T>) => {
   return Option.getOrNull(value);
+};
+
+const resolveWorkerBaseUrl = (
+  asyncTransportMode: AsyncTransportMode,
+  workerBaseUrl: Option.Option<string>,
+) => {
+  return Option.match(workerBaseUrl, {
+    onNone: () => {
+      if (asyncTransportMode === "gcp") {
+        throw new Error(
+          "MAILMON_WORKER_BASE_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp",
+        );
+      }
+
+      return "http://127.0.0.1:3001";
+    },
+    onSome: (value) => value,
+  });
+};
+
+const requireGcpValue = (value: string | null, name: string) => {
+  if (value === null) {
+    throw new Error(`${name} is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp`);
+  }
+
+  return value;
 };
 
 export interface CommonEnv {
@@ -55,6 +87,7 @@ export interface CommonEnv {
 }
 
 export interface ApiEnv extends CommonEnv {
+  readonly asyncTransportMode: AsyncTransportMode;
   readonly databaseUrl: string;
   readonly gmailApiBaseUrl: string;
   readonly gmailOauthAuthorizeUrl: string;
@@ -74,9 +107,13 @@ export interface WorkerEnv extends CommonEnv {
   readonly gmailOauthTokenUrl: string;
   readonly gcpProjectId: string | null;
   readonly gcpRegion: string | null;
+  readonly gcpTasksAudience: string | null;
+  readonly gcpTasksServiceAccountEmail: string | null;
+  readonly gcpWebhookDeliveryQueueId: string;
   readonly host: string;
   readonly port: number;
   readonly redisUrl: string | null;
+  readonly workerBaseUrl: string;
 }
 
 export interface CliEnv extends CommonEnv {
@@ -105,6 +142,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
   static readonly layer = Layer.effect(
     this,
     Effect.all({
+      asyncTransportMode: loadAsyncTransportMode,
       databaseUrl: loadDatabaseUrl,
       gmailApiBaseUrl: loadGmailApiBaseUrl,
       gmailOauthAuthorizeUrl: loadGmailOauthAuthorizeUrl,
@@ -116,6 +154,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
       workerBaseUrl: loadMailboxWorkerBaseUrl,
     }).pipe(
       Effect.map((config) => ({
+        asyncTransportMode: config.asyncTransportMode,
         databaseUrl: config.databaseUrl,
         gmailApiBaseUrl: config.gmailApiBaseUrl,
         gmailOauthAuthorizeUrl: config.gmailOauthAuthorizeUrl,
@@ -124,12 +163,13 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
         gmailOauthTokenUrl: config.gmailOauthTokenUrl,
         nodeEnv: config.nodeEnv,
         port: config.port,
-        workerBaseUrl: config.workerBaseUrl,
+        workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
       })),
     ),
   );
 
   static readonly testLayer = Layer.succeed(this, {
+    asyncTransportMode: "local",
     databaseUrl: "postgres://mailmon:mailmon@localhost:5432/mailmon",
     gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
     gmailOauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -157,10 +197,14 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
       gmailOauthTokenUrl: loadGmailOauthTokenUrl,
       gcpProjectId: loadGcpProjectId,
       gcpRegion: loadGcpRegion,
+      gcpTasksAudience: loadGcpTasksAudience,
+      gcpTasksServiceAccountEmail: loadGcpTasksServiceAccountEmail,
+      gcpWebhookDeliveryQueueId: loadGcpWebhookDeliveryQueueId,
       host: loadHost,
       nodeEnv: loadNodeEnv,
       port: loadPort(3001),
       redisUrl: loadRedisUrl,
+      workerBaseUrl: loadMailboxWorkerBaseUrl,
     }).pipe(
       Effect.map((config) => ({
         asyncTransportMode: config.asyncTransportMode,
@@ -171,6 +215,9 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
         gmailOauthTokenUrl: config.gmailOauthTokenUrl,
         gcpProjectId: normalizeOptional(config.gcpProjectId),
         gcpRegion: normalizeOptional(config.gcpRegion),
+        gcpTasksAudience: normalizeOptional(config.gcpTasksAudience),
+        gcpTasksServiceAccountEmail: normalizeOptional(config.gcpTasksServiceAccountEmail),
+        gcpWebhookDeliveryQueueId: config.gcpWebhookDeliveryQueueId,
         host: Option.match(config.host, {
           onNone: () => (config.asyncTransportMode === "gcp" ? "0.0.0.0" : "127.0.0.1"),
           onSome: (value) => value,
@@ -178,6 +225,18 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
         nodeEnv: config.nodeEnv,
         port: config.port,
         redisUrl: normalizeOptional(config.redisUrl),
+        workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
+      })),
+      Effect.map((config) => ({
+        ...config,
+        gcpProjectId:
+          config.asyncTransportMode === "gcp"
+            ? requireGcpValue(config.gcpProjectId, "GCP_PROJECT_ID")
+            : config.gcpProjectId,
+        gcpRegion:
+          config.asyncTransportMode === "gcp"
+            ? requireGcpValue(config.gcpRegion, "GCP_REGION")
+            : config.gcpRegion,
       })),
     ),
   );
@@ -191,10 +250,14 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
     gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
     gcpProjectId: null,
     gcpRegion: null,
+    gcpTasksAudience: null,
+    gcpTasksServiceAccountEmail: null,
+    gcpWebhookDeliveryQueueId: DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
     host: "127.0.0.1",
     nodeEnv: "test",
     port: 3001,
     redisUrl: null,
+    workerBaseUrl: "http://127.0.0.1:3001",
   } satisfies WorkerEnv);
 }
 
@@ -211,7 +274,7 @@ export class CliConfig extends Context.Tag("@mailmon/config/CliConfig")<CliConfi
         asyncTransportMode: config.asyncTransportMode,
         databaseUrl: normalizeOptional(config.databaseUrl),
         nodeEnv: config.nodeEnv,
-        workerBaseUrl: config.workerBaseUrl,
+        workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
       })),
     ),
   );

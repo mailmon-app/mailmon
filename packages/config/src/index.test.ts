@@ -1,7 +1,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 
-import { ApiConfig, CliConfig, WorkerConfig } from "./index.js";
+import {
+  ApiConfig,
+  CliConfig,
+  DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
+  WorkerConfig,
+} from "./index.js";
 
 describe("ApiConfig", () => {
   it.effect("loads config from a provider and applies defaults", () =>
@@ -9,6 +14,7 @@ describe("ApiConfig", () => {
       const config = yield* ApiConfig;
 
       expect(config).toEqual({
+        asyncTransportMode: "local",
         databaseUrl: "postgres://mailmon:mailmon@localhost:5432/mailmon",
         gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
         gmailOauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
@@ -45,10 +51,14 @@ describe("WorkerConfig", () => {
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         gcpProjectId: null,
         gcpRegion: null,
+        gcpTasksAudience: null,
+        gcpTasksServiceAccountEmail: null,
+        gcpWebhookDeliveryQueueId: DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
         host: "127.0.0.1",
         nodeEnv: "test",
         port: 3001,
         redisUrl: null,
+        workerBaseUrl: "http://127.0.0.1:3001",
       });
     }).pipe(
       Effect.provide(WorkerConfig.layer),
@@ -77,6 +87,66 @@ describe("WorkerConfig", () => {
           MAILMON_ASYNC_TRANSPORT_MODE: "legacy_bullmq",
           NODE_ENV: "test",
           REDIS_URL: "redis://localhost:6379",
+        }),
+      ),
+    ),
+  );
+
+  it("requires a worker base url when gcp mode is selected for the api", async () => {
+    await expect(
+      Effect.runPromise(
+        ApiConfig.pipe(
+          Effect.provide(ApiConfig.layer),
+          Effect.withConfigProvider(
+            ConfigProvider.fromJson({
+              DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+              MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
+              NODE_ENV: "test",
+            }),
+          ),
+        ),
+      ),
+    ).rejects.toThrow("MAILMON_WORKER_BASE_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp");
+  });
+
+  it("requires gcp routing values when worker gcp mode is selected", async () => {
+    await expect(
+      Effect.runPromise(
+        WorkerConfig.pipe(
+          Effect.provide(WorkerConfig.layer),
+          Effect.withConfigProvider(
+            ConfigProvider.fromJson({
+              DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+              MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
+              MAILMON_WORKER_BASE_URL: "https://worker.example.com",
+              NODE_ENV: "test",
+            }),
+          ),
+        ),
+      ),
+    ).rejects.toThrow("GCP_PROJECT_ID is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp");
+  });
+
+  it.effect("loads gcp worker scheduling defaults when configured", () =>
+    Effect.gen(function* () {
+      const config = yield* WorkerConfig;
+
+      expect(config.asyncTransportMode).toBe("gcp");
+      expect(config.gcpProjectId).toBe("mailmon-staging");
+      expect(config.gcpRegion).toBe("us-central1");
+      expect(config.gcpWebhookDeliveryQueueId).toBe(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID);
+      expect(config.workerBaseUrl).toBe("https://worker.example.com");
+      expect(config.host).toBe("0.0.0.0");
+    }).pipe(
+      Effect.provide(WorkerConfig.layer),
+      Effect.withConfigProvider(
+        ConfigProvider.fromJson({
+          DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+          GCP_PROJECT_ID: "mailmon-staging",
+          GCP_REGION: "us-central1",
+          MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
+          MAILMON_WORKER_BASE_URL: "https://worker.example.com",
+          NODE_ENV: "test",
         }),
       ),
     ),

@@ -1,12 +1,13 @@
 import type { ApiEnv } from "@mailmon/config";
 import { createCorePersistenceLayer } from "@mailmon/db";
 import { createHttpGmailConnectProviderLayer } from "@mailmon/gmail";
-import { createLocalAsyncTransportLayer } from "@mailmon/queue";
+import { createWorkerHttpMailboxSyncDispatcherLayer } from "@mailmon/queue";
 import { Layer, ManagedRuntime } from "effect";
 
-export const createApiRuntimeLayer = (
+const createApiRuntimeLayer = (
   env: Pick<
     ApiEnv,
+    | "asyncTransportMode"
     | "databaseUrl"
     | "gmailApiBaseUrl"
     | "gmailOauthAuthorizeUrl"
@@ -24,16 +25,27 @@ export const createApiRuntimeLayer = (
     oauthClientSecret: env.gmailOauthClientSecret,
     oauthTokenUrl: env.gmailOauthTokenUrl,
   });
-  const localAsyncTransportLayer = createLocalAsyncTransportLayer({
-    workerBaseUrl: env.workerBaseUrl,
-  });
+  const mailboxSyncDispatcherLayer = (() => {
+    switch (env.asyncTransportMode) {
+      case "local":
+      case "gcp":
+        return createWorkerHttpMailboxSyncDispatcherLayer({
+          workerBaseUrl: env.workerBaseUrl,
+        });
+      case "legacy_bullmq":
+        throw new Error(
+          "apps/api does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq; use local or gcp",
+        );
+    }
+  })();
 
-  return Layer.mergeAll(persistenceLayer, mailboxConnectProviderLayer, localAsyncTransportLayer);
+  return Layer.mergeAll(persistenceLayer, mailboxConnectProviderLayer, mailboxSyncDispatcherLayer);
 };
 
 export const createApiRuntime = (
   env: Pick<
     ApiEnv,
+    | "asyncTransportMode"
     | "databaseUrl"
     | "gmailApiBaseUrl"
     | "gmailOauthAuthorizeUrl"
@@ -45,5 +57,3 @@ export const createApiRuntime = (
 ) => {
   return ManagedRuntime.make(createApiRuntimeLayer(env));
 };
-
-export type ApiRuntime = ReturnType<typeof createApiRuntime>;

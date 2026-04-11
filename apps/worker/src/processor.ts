@@ -14,7 +14,7 @@ import {
   WebhookDeliveryStore,
 } from "@mailmon/core";
 
-export interface WorkerSyncProcessorRuntime {
+interface WorkerSyncProcessorRuntime {
   readonly runPromise: <A, E>(
     effect: import("effect").Effect.Effect<
       A,

@@ -18,10 +18,14 @@ const workerEnvFixture: WorkerEnv = {
   gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
   gcpProjectId: null,
   gcpRegion: null,
+  gcpTasksAudience: null,
+  gcpTasksServiceAccountEmail: null,
+  gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
   host: "127.0.0.1",
   nodeEnv: "test",
   port: 0,
   redisUrl: null,
+  workerBaseUrl: "http://127.0.0.1:3001",
 };
 
 describe("startWorkerHttpRuntime", () => {
@@ -186,16 +190,19 @@ describe("startWorkerHttpRuntime", () => {
     });
     activeRuntimeClosers.push(runtime.close);
 
-    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
+    const response = await fetch(
+      `http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          deliveryId: "del_demo",
+          notBefore: "2026-03-25T00:00:00.000Z",
+        }),
       },
-      body: JSON.stringify({
-        deliveryId: "del_demo",
-        notBefore: "2026-03-25T00:00:00.000Z",
-      }),
-    });
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -229,16 +236,19 @@ describe("startWorkerHttpRuntime", () => {
     });
     activeRuntimeClosers.push(runtime.close);
 
-    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
+    const response = await fetch(
+      `http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          deliveryId: "",
+          notBefore: "2026-03-25T00:00:00.000Z",
+        }),
       },
-      body: JSON.stringify({
-        deliveryId: "",
-        notBefore: "2026-03-25T00:00:00.000Z",
-      }),
-    });
+    );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({

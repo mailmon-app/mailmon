@@ -2,11 +2,9 @@ import { pathToFileURL } from "node:url";
 
 import type { WorkerEnv } from "@mailmon/config";
 import { loadWorkerEnv } from "@mailmon/config";
-import type {
-  ProcessWebhookDeliveryResult,
-  WebhookDeliveryScheduleRequest,
-} from "@mailmon/core";
+import type { ProcessWebhookDeliveryResult, WebhookDeliveryScheduleRequest } from "@mailmon/core";
 import { recoverWebhookDeliveryScheduling } from "@mailmon/core";
+import { createGcpWebhookDeliverySchedulerLayer } from "@mailmon/queue";
 import { Layer, ManagedRuntime } from "effect";
 
 import { createProcessSyncJob, createProcessWebhookDelivery } from "./processor.js";
@@ -21,6 +19,14 @@ export interface WorkerRuntimeHandle {
   readonly kind: "http" | "legacy_bullmq";
 }
 
+const requireGcpWorkerValue = (value: string | null, name: string) => {
+  if (value === null) {
+    throw new Error(`${name} is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp`);
+  }
+
+  return value;
+};
+
 const createWorkerProcessorRuntime = (
   env: Pick<
     WorkerEnv,
@@ -30,38 +36,64 @@ const createWorkerProcessorRuntime = (
     | "gmailOauthClientId"
     | "gmailOauthClientSecret"
     | "gmailOauthTokenUrl"
+    | "gcpProjectId"
+    | "gcpRegion"
+    | "gcpTasksAudience"
+    | "gcpTasksServiceAccountEmail"
+    | "gcpWebhookDeliveryQueueId"
+    | "workerBaseUrl"
   >,
 ) => {
-  if (env.asyncTransportMode === "gcp") {
-    throw new Error(
-      "MAILMON_ASYNC_TRANSPORT_MODE=gcp is not implemented for durable webhook delivery scheduling yet.",
-    );
-  }
-
-  let dispatchWebhookDelivery:
-    | ((request: WebhookDeliveryScheduleRequest) => Promise<ProcessWebhookDeliveryResult>)
+  let setDispatch:
+    | ((
+        dispatch: (
+          request: WebhookDeliveryScheduleRequest,
+        ) => Promise<ProcessWebhookDeliveryResult>,
+      ) => void)
     | null = null;
-  const schedulerLayer = createInProcessWebhookDeliverySchedulerLayer({
-    dispatch: (request) => {
-      if (dispatchWebhookDelivery === null) {
-        return Promise.reject(
-          new Error("Webhook delivery processor was not initialized before scheduling."),
-        );
-      }
+  const schedulerLayer =
+    env.asyncTransportMode === "gcp"
+      ? createGcpWebhookDeliverySchedulerLayer({
+          location: requireGcpWorkerValue(env.gcpRegion, "GCP_REGION"),
+          projectId: requireGcpWorkerValue(env.gcpProjectId, "GCP_PROJECT_ID"),
+          queueId: env.gcpWebhookDeliveryQueueId,
+          serviceAccountEmail: env.gcpTasksServiceAccountEmail,
+          workerAudience: env.gcpTasksAudience,
+          workerBaseUrl: env.workerBaseUrl,
+        })
+      : (() => {
+          let dispatchWebhookDelivery:
+            | ((request: WebhookDeliveryScheduleRequest) => Promise<ProcessWebhookDeliveryResult>)
+            | null = null;
 
-      return dispatchWebhookDelivery(request);
-    },
-    onDispatchError: (error, request) => {
-      console.error(`scheduled webhook delivery ${request.deliveryId} failed`, error);
-    },
-  });
+          setDispatch = (dispatch) => {
+            dispatchWebhookDelivery = dispatch;
+          };
+
+          return createInProcessWebhookDeliverySchedulerLayer({
+            dispatch: (request) => {
+              if (dispatchWebhookDelivery === null) {
+                return Promise.reject(
+                  new Error("Webhook delivery processor was not initialized before scheduling."),
+                );
+              }
+
+              return dispatchWebhookDelivery(request);
+            },
+            onDispatchError: (error, request) => {
+              console.error(`scheduled webhook delivery ${request.deliveryId} failed`, error);
+            },
+          });
+        })();
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(createWorkerRuntimeLayer(env), schedulerLayer),
   );
   const processSyncJob = createProcessSyncJob(runtime);
   const processWebhookDelivery = createProcessWebhookDelivery(runtime);
 
-  dispatchWebhookDelivery = processWebhookDelivery;
+  if (setDispatch !== null) {
+    setDispatch(processWebhookDelivery);
+  }
 
   return {
     recoverWebhookDeliveries: () => runtime.runPromise(recoverWebhookDeliveryScheduling()),

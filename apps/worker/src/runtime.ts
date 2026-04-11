@@ -10,7 +10,7 @@ import {
 } from "@mailmon/core";
 import { createWorkerPersistenceLayer } from "@mailmon/db";
 import { createHttpGmailSyncProviderLayer } from "@mailmon/gmail";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer } from "effect";
 
 const DEFAULT_WEBHOOK_DELIVERY_TIMEOUT_MS = 5_000;
 
@@ -97,15 +97,12 @@ const calculateWebhookDeliveryDelayMs = (notBefore: string, nowMs: number) => {
   return Math.max(0, Date.parse(notBefore) - nowMs);
 };
 
-export interface InProcessWebhookDeliverySchedulerOptions {
+interface InProcessWebhookDeliverySchedulerOptions {
   readonly dispatch: (
     request: WebhookDeliveryScheduleRequest,
   ) => Promise<ProcessWebhookDeliveryResult>;
   readonly now?: () => number;
-  readonly onDispatchError?: (
-    error: unknown,
-    request: WebhookDeliveryScheduleRequest,
-  ) => void;
+  readonly onDispatchError?: (error: unknown, request: WebhookDeliveryScheduleRequest) => void;
 }
 
 export const createInProcessWebhookDeliverySchedulerLayer = (
@@ -170,16 +167,3 @@ export const createWorkerRuntimeLayer = (
 
   return Layer.mergeAll(persistenceLayer, gmailSyncProviderLayer, webhookDeliverySenderLayer);
 };
-
-export const createWorkerRuntime = (
-  env: Pick<
-    WorkerEnv,
-    | "databaseUrl"
-    | "gmailApiBaseUrl"
-    | "gmailOauthClientId"
-    | "gmailOauthClientSecret"
-    | "gmailOauthTokenUrl"
-  >,
-) => ManagedRuntime.make(createWorkerRuntimeLayer(env));
-
-export type WorkerRuntime = ReturnType<typeof createWorkerRuntime>;

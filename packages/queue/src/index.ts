@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+
+import { CloudTasksClient } from "@google-cloud/tasks";
 import {
   ControlJobDispatcher,
   MailboxSyncDispatcher,
@@ -11,6 +14,10 @@ export { MailboxSyncJobDataSchema, type MailboxSyncJobData } from "@mailmon/core
 
 export const SYNC_MAILBOX_QUEUE = "mailmon.sync-mailbox";
 export const DEFAULT_LOCAL_WORKER_BASE_URL = "http://127.0.0.1:3001";
+export const DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID = "mailmon-webhook-deliveries";
+
+const WEBHOOK_DELIVERY_TASK_PATH = "/internal/webhook-deliveries";
+const MAILBOX_SYNC_TASK_PATH = "/internal/sync";
 
 export const createMailboxSyncJobData = (mailboxId: string) => {
   return {
@@ -68,15 +75,22 @@ const normalizeWorkerBaseUrl = (workerBaseUrl: string) => {
   return workerBaseUrl.endsWith("/") ? workerBaseUrl.slice(0, -1) : workerBaseUrl;
 };
 
+const createMailboxSyncWorkerUrl = (workerBaseUrl: string) => {
+  return `${normalizeWorkerBaseUrl(workerBaseUrl)}${MAILBOX_SYNC_TASK_PATH}`;
+};
+
+const createWebhookDeliveryWorkerUrl = (workerBaseUrl: string) => {
+  return `${normalizeWorkerBaseUrl(workerBaseUrl)}${WEBHOOK_DELIVERY_TASK_PATH}`;
+};
+
 const dispatchWorkerJson = (
   fetchImpl: typeof globalThis.fetch,
-  workerBaseUrl: string,
-  path: string,
+  url: string,
   body: unknown,
   failureMessage: string,
 ) =>
   Effect.promise(async () => {
-    const response = await fetchImpl(`${workerBaseUrl}${path}`, {
+    const response = await fetchImpl(url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -88,6 +102,177 @@ const dispatchWorkerJson = (
       throw new Error(`${failureMessage} ${response.status}: ${await response.text()}`);
     }
   });
+
+const dispatchMailboxSyncToWorker = (
+  fetchImpl: typeof globalThis.fetch,
+  workerBaseUrl: string,
+  mailboxId: string,
+) => {
+  return dispatchWorkerJson(
+    fetchImpl,
+    createMailboxSyncWorkerUrl(workerBaseUrl),
+    createMailboxSyncJobData(mailboxId),
+    "Mailbox sync dispatch failed with",
+  );
+};
+
+const dispatchWebhookDeliveryToWorker = (
+  fetchImpl: typeof globalThis.fetch,
+  workerBaseUrl: string,
+  request: WebhookDeliveryScheduleRequest,
+  failureMessage: string,
+) => {
+  return dispatchWorkerJson(
+    fetchImpl,
+    createWebhookDeliveryWorkerUrl(workerBaseUrl),
+    request,
+    failureMessage,
+  );
+};
+
+export interface WorkerHttpMailboxSyncDispatcherOptions {
+  readonly fetch?: typeof globalThis.fetch;
+  readonly workerBaseUrl?: string;
+}
+
+export const createWorkerHttpMailboxSyncDispatcherLayer = (
+  options: WorkerHttpMailboxSyncDispatcherOptions = {},
+) => {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const workerBaseUrl = normalizeWorkerBaseUrl(
+    options.workerBaseUrl ?? DEFAULT_LOCAL_WORKER_BASE_URL,
+  );
+
+  return Layer.succeed(MailboxSyncDispatcher, {
+    dispatchMailboxSync: (mailboxId: string) =>
+      dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId),
+  });
+};
+
+export interface CloudTasksClientLike {
+  readonly createTask: (request: {
+    readonly parent: string;
+    readonly task: {
+      readonly name: string;
+      readonly scheduleTime?: {
+        readonly nanos: number;
+        readonly seconds: number;
+      };
+      readonly httpRequest: {
+        readonly body: string;
+        readonly headers: Readonly<Record<string, string>>;
+        readonly httpMethod: "POST";
+        readonly oidcToken?: {
+          readonly audience?: string;
+          readonly serviceAccountEmail: string;
+        };
+        readonly url: string;
+      };
+    };
+  }) => Promise<unknown>;
+  readonly queuePath: (projectId: string, location: string, queueId: string) => string;
+}
+
+export interface GcpWebhookDeliverySchedulerOptions {
+  readonly location: string;
+  readonly projectId: string;
+  readonly queueId?: string;
+  readonly serviceAccountEmail?: string | null;
+  readonly taskClient?: CloudTasksClientLike;
+  readonly workerAudience?: string | null;
+  readonly workerBaseUrl: string;
+}
+
+const createWebhookDeliveryTaskId = (request: WebhookDeliveryScheduleRequest) => {
+  const digest = createHash("sha256")
+    .update(`${request.deliveryId}:${request.notBefore}`)
+    .digest("hex");
+
+  return `whd-${digest}`;
+};
+
+const createWebhookDeliveryTaskScheduleTime = (notBefore: string) => {
+  const scheduleMs = Date.parse(notBefore);
+
+  if (Number.isNaN(scheduleMs)) {
+    throw new Error(`Webhook delivery notBefore must be a valid ISO timestamp: ${notBefore}`);
+  }
+
+  if (scheduleMs <= Date.now()) {
+    return undefined;
+  }
+
+  return {
+    nanos: (scheduleMs % 1_000) * 1_000_000,
+    seconds: Math.floor(scheduleMs / 1_000),
+  };
+};
+
+const isCloudTasksAlreadyExistsError = (error: unknown) => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (("code" in error && error.code === 6) ||
+      ("message" in error &&
+        typeof error.message === "string" &&
+        error.message.includes("ALREADY_EXISTS")))
+  );
+};
+
+export const createGcpWebhookDeliverySchedulerLayer = (
+  options: GcpWebhookDeliverySchedulerOptions,
+) => {
+  const taskClient = options.taskClient ?? new CloudTasksClient();
+  const parent = taskClient.queuePath(
+    options.projectId,
+    options.location,
+    options.queueId ?? DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
+  );
+  const taskTargetUrl = createWebhookDeliveryWorkerUrl(options.workerBaseUrl);
+
+  return Layer.succeed(WebhookDeliveryScheduler, {
+    scheduleWebhookDelivery: (request: WebhookDeliveryScheduleRequest) =>
+      Effect.promise(async () => {
+        const payload = JSON.stringify(request);
+        const scheduleTime = createWebhookDeliveryTaskScheduleTime(request.notBefore);
+
+        try {
+          await taskClient.createTask({
+            parent,
+            task: {
+              name: `${parent}/tasks/${createWebhookDeliveryTaskId(request)}`,
+              ...(scheduleTime === undefined ? {} : { scheduleTime }),
+              httpRequest: {
+                body: Buffer.from(payload).toString("base64"),
+                headers: {
+                  "content-type": "application/json",
+                },
+                httpMethod: "POST",
+                ...(options.serviceAccountEmail === null ||
+                options.serviceAccountEmail === undefined
+                  ? {}
+                  : {
+                      oidcToken: {
+                        ...(options.workerAudience === null || options.workerAudience === undefined
+                          ? {}
+                          : { audience: options.workerAudience }),
+                        serviceAccountEmail: options.serviceAccountEmail,
+                      },
+                    }),
+                url: taskTargetUrl,
+              },
+            },
+          });
+        } catch (error) {
+          if (isCloudTasksAlreadyExistsError(error)) {
+            return;
+          }
+
+          throw error;
+        }
+      }),
+  });
+};
 
 export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptions = {}) =>
   Layer.unwrapEffect(
@@ -106,10 +291,9 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
           const delayMs = Math.max(0, Date.parse(request.notBefore) - Date.now());
 
           if (delayMs === 0) {
-            return dispatchWorkerJson(
+            return dispatchWebhookDeliveryToWorker(
               fetchImpl,
               workerBaseUrl,
-              "/internal/webhook-deliveries",
               request,
               "Local webhook delivery dispatch failed with",
             );
@@ -118,10 +302,9 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
           return Effect.sync(() => {
             globalThis.setTimeout(() => {
               void runPromise(
-                dispatchWorkerJson(
+                dispatchWebhookDeliveryToWorker(
                   fetchImpl,
                   workerBaseUrl,
-                  "/internal/webhook-deliveries",
                   request,
                   "Local webhook delivery dispatch failed with",
                 ),
@@ -139,15 +322,7 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
               ...snapshot,
               mailboxSyncMailboxIds: [...snapshot.mailboxSyncMailboxIds, mailboxId],
             })).pipe(
-              Effect.zipRight(
-                dispatchWorkerJson(
-                  fetchImpl,
-                  workerBaseUrl,
-                  "/internal/sync",
-                  createMailboxSyncJobData(mailboxId),
-                  "Local mailbox sync dispatch failed with",
-                ),
-              ),
+              Effect.zipRight(dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId)),
             ),
         }),
         Layer.succeed(WebhookDeliveryScheduler, {
@@ -155,9 +330,7 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
             Ref.update(snapshotRef, (snapshot) => ({
               ...snapshot,
               webhookDeliveries: [...snapshot.webhookDeliveries, request],
-            })).pipe(
-              Effect.zipRight(scheduleWebhookDeliveryDispatch(request)),
-            ),
+            })).pipe(Effect.zipRight(scheduleWebhookDeliveryDispatch(request))),
         }),
         Layer.succeed(ControlJobDispatcher, {
           dispatchControlJob: (request: ControlJobDispatchRequest) =>
