@@ -196,9 +196,11 @@ Break this phase into four implementation slices so event semantics and delivery
 - **Phase 6c: Local Delivery Runtime** (completed)
   - schedule webhook deliveries from durable mailbox events
   - implement local `/internal/webhook-deliveries` handling, retries, endpoint health transitions, and startup recovery for pending/in-flight deliveries
-- **Phase 6d: GCP Delivery Adapter**
+- **Phase 6d: GCP Delivery Adapter** (completed)
   - map the transport-neutral delivery scheduler onto Cloud Tasks semantics for staging/production
   - preserve the same core delivery workflow used in local mode
+  - use deterministic task IDs, scheduled `notBefore` dispatch, optional OIDC targeting, and idempotent `ALREADY_EXISTS` handling for delivery task creation
+  - keep API mailbox dispatch explicit by mode and fail fast in unsupported `legacy_bullmq` API configurations
 
 ### Acceptance criteria
 
@@ -209,7 +211,7 @@ Break this phase into four implementation slices so event semantics and delivery
 - [x] Delivery scheduling starts from durable mailbox event records and not from inline endpoint calls inside sync execution
 - [x] Webhook deliveries retry on timeout and `5xx`
 - [x] Endpoint health reflects repeated delivery failures without breaking unrelated API reads
-- [ ] Delivery scheduling is transport-neutral in core and can run through local adapters in development and Cloud Tasks in staging/production
+- [x] Delivery scheduling is transport-neutral in core and can run through local adapters in development and Cloud Tasks in staging/production
 
 ---
 
