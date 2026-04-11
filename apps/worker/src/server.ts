@@ -1,13 +1,22 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import type { AsyncTransportMode } from "@mailmon/config";
-import type { MailboxSyncJobData, ProblemDetails, SyncMailboxResult } from "@mailmon/core";
+import type {
+  MailboxSyncJobData,
+  ProblemDetails,
+  ProcessWebhookDeliveryResult,
+  SyncMailboxResult,
+  WebhookDeliveryScheduleRequest,
+} from "@mailmon/core";
 
 export interface WorkerHttpRuntimeOptions {
   readonly host: string;
   readonly port: number;
   readonly asyncTransportMode: AsyncTransportMode;
   readonly processSyncJob: (job: MailboxSyncJobData) => Promise<SyncMailboxResult>;
+  readonly processWebhookDelivery: (
+    request: WebhookDeliveryScheduleRequest,
+  ) => Promise<ProcessWebhookDeliveryResult>;
 }
 
 export interface WorkerHttpRuntimeHandle {
@@ -38,6 +47,21 @@ const isMailboxSyncJobData = (value: unknown): value is MailboxSyncJobData => {
     "mailboxId" in value &&
     typeof value.mailboxId === "string" &&
     value.mailboxId.length > 0
+  );
+};
+
+const isWebhookDeliveryScheduleRequest = (
+  value: unknown,
+): value is WebhookDeliveryScheduleRequest => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "deliveryId" in value &&
+    "notBefore" in value &&
+    typeof value.deliveryId === "string" &&
+    value.deliveryId.length > 0 &&
+    typeof value.notBefore === "string" &&
+    value.notBefore.length > 0
   );
 };
 
@@ -155,10 +179,31 @@ export const startWorkerHttpRuntime = async (
     }
 
     if (request.method === "POST" && request.url === "/internal/webhook-deliveries") {
-      sendJson(response, 501, {
-        code: "webhook_delivery_runtime_not_implemented",
-        detail: "Webhook delivery runtime handling is not implemented yet.",
-      });
+      try {
+        const payload = await readJsonBody(request);
+
+        if (!isWebhookDeliveryScheduleRequest(payload)) {
+          sendJson(response, 400, {
+            code: "invalid_webhook_delivery_request",
+            detail:
+              "Expected a webhook delivery payload with non-empty deliveryId and notBefore fields.",
+          });
+          return;
+        }
+
+        const result = await options.processWebhookDelivery(payload);
+        sendJson(response, 200, result);
+      } catch (error) {
+        if (isProblemDetails(error)) {
+          sendJson(response, error.status, error);
+          return;
+        }
+
+        sendJson(response, 500, {
+          code: "worker_internal_error",
+          detail: "The worker failed while processing the webhook delivery request.",
+        });
+      }
       return;
     }
 

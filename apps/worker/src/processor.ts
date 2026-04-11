@@ -5,7 +5,13 @@ import {
   MailboxStateStore,
   SyncRunStore,
   type MailboxSyncJobData,
+  type ProcessWebhookDeliveryResult,
+  type WebhookDeliveryScheduleRequest,
+  runWebhookDelivery,
   runMailboxSync,
+  WebhookDeliveryScheduler,
+  WebhookDeliverySender,
+  WebhookDeliveryStore,
 } from "@mailmon/core";
 
 export interface WorkerSyncProcessorRuntime {
@@ -18,6 +24,9 @@ export interface WorkerSyncProcessorRuntime {
       | MailboxSyncProvider
       | MailboxStateStore
       | SyncRunStore
+      | WebhookDeliveryScheduler
+      | WebhookDeliverySender
+      | WebhookDeliveryStore
     >,
     options?: {
       readonly signal?: AbortSignal;
@@ -27,4 +36,9 @@ export interface WorkerSyncProcessorRuntime {
 
 export const createProcessSyncJob = (runtime: WorkerSyncProcessorRuntime) => {
   return (job: MailboxSyncJobData) => runtime.runPromise(runMailboxSync(job.mailboxId));
+};
+
+export const createProcessWebhookDelivery = (runtime: WorkerSyncProcessorRuntime) => {
+  return (request: WebhookDeliveryScheduleRequest): Promise<ProcessWebhookDeliveryResult> =>
+    runtime.runPromise(runWebhookDelivery(request.deliveryId));
 };

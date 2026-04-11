@@ -5,7 +5,7 @@ import {
   type ControlJobDispatchRequest,
   type WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
-import { Context, Effect, Layer, Ref } from "effect";
+import { Context, Effect, Layer, Ref, Runtime } from "effect";
 
 export { MailboxSyncJobDataSchema, type MailboxSyncJobData } from "@mailmon/core";
 
@@ -57,12 +57,37 @@ export class LocalAsyncTransportProbe extends Context.Tag(
 
 export interface LocalAsyncTransportOptions {
   readonly fetch?: typeof globalThis.fetch;
+  readonly onWebhookDeliveryDispatchError?: (
+    error: unknown,
+    request: WebhookDeliveryScheduleRequest,
+  ) => void;
   readonly workerBaseUrl?: string;
 }
 
 const normalizeWorkerBaseUrl = (workerBaseUrl: string) => {
   return workerBaseUrl.endsWith("/") ? workerBaseUrl.slice(0, -1) : workerBaseUrl;
 };
+
+const dispatchWorkerJson = (
+  fetchImpl: typeof globalThis.fetch,
+  workerBaseUrl: string,
+  path: string,
+  body: unknown,
+  failureMessage: string,
+) =>
+  Effect.promise(async () => {
+    const response = await fetchImpl(`${workerBaseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`${failureMessage} ${response.status}: ${await response.text()}`);
+    }
+  });
 
 export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptions = {}) =>
   Layer.unwrapEffect(
@@ -71,9 +96,41 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
         emptyLocalAsyncTransportSnapshot(),
       );
       const fetchImpl = options.fetch ?? globalThis.fetch;
+      const runtime = yield* Effect.runtime();
+      const runPromise = Runtime.runPromise(runtime);
       const workerBaseUrl = normalizeWorkerBaseUrl(
         options.workerBaseUrl ?? DEFAULT_LOCAL_WORKER_BASE_URL,
       );
+      const scheduleWebhookDeliveryDispatch = (request: WebhookDeliveryScheduleRequest) =>
+        Effect.suspend(() => {
+          const delayMs = Math.max(0, Date.parse(request.notBefore) - Date.now());
+
+          if (delayMs === 0) {
+            return dispatchWorkerJson(
+              fetchImpl,
+              workerBaseUrl,
+              "/internal/webhook-deliveries",
+              request,
+              "Local webhook delivery dispatch failed with",
+            );
+          }
+
+          return Effect.sync(() => {
+            globalThis.setTimeout(() => {
+              void runPromise(
+                dispatchWorkerJson(
+                  fetchImpl,
+                  workerBaseUrl,
+                  "/internal/webhook-deliveries",
+                  request,
+                  "Local webhook delivery dispatch failed with",
+                ),
+              ).catch((error) => {
+                options.onWebhookDeliveryDispatchError?.(error, request);
+              });
+            }, delayMs);
+          });
+        });
 
       return Layer.mergeAll(
         Layer.succeed(MailboxSyncDispatcher, {
@@ -83,21 +140,13 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
               mailboxSyncMailboxIds: [...snapshot.mailboxSyncMailboxIds, mailboxId],
             })).pipe(
               Effect.zipRight(
-                Effect.promise(async () => {
-                  const response = await fetchImpl(`${workerBaseUrl}/internal/sync`, {
-                    method: "POST",
-                    headers: {
-                      "content-type": "application/json",
-                    },
-                    body: JSON.stringify(createMailboxSyncJobData(mailboxId)),
-                  });
-
-                  if (!response.ok) {
-                    throw new Error(
-                      `Local mailbox sync dispatch failed with ${response.status}: ${await response.text()}`,
-                    );
-                  }
-                }),
+                dispatchWorkerJson(
+                  fetchImpl,
+                  workerBaseUrl,
+                  "/internal/sync",
+                  createMailboxSyncJobData(mailboxId),
+                  "Local mailbox sync dispatch failed with",
+                ),
               ),
             ),
         }),
@@ -106,7 +155,9 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
             Ref.update(snapshotRef, (snapshot) => ({
               ...snapshot,
               webhookDeliveries: [...snapshot.webhookDeliveries, request],
-            })),
+            })).pipe(
+              Effect.zipRight(scheduleWebhookDeliveryDispatch(request)),
+            ),
         }),
         Layer.succeed(ControlJobDispatcher, {
           dispatchControlJob: (request: ControlJobDispatchRequest) =>

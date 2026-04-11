@@ -39,6 +39,7 @@ export const MailboxSyncJobDataSchema = Schema.Struct({
 });
 export const WebhookDeliveryScheduleRequestSchema = Schema.Struct({
   deliveryId: Schema.NonEmptyString,
+  notBefore: Schema.NonEmptyString,
 });
 export const ControlJobDispatchRequestSchema = Schema.Struct({
   kind: ControlJobKindSchema,
@@ -281,6 +282,47 @@ export type MailboxEventEnvelope =
   | ThreadUpdatedMailboxEventEnvelope;
 
 export type WebhookEventEnvelope = MailboxEventEnvelope;
+
+export interface PreparedWebhookDelivery {
+  readonly deliveryId: string;
+  readonly mailboxEventId: string;
+  readonly webhookEndpointId: string;
+  readonly attemptCount: number;
+  readonly processingStartedAt: string;
+  readonly url: string;
+  readonly signingSecret: string;
+  readonly event: WebhookEventEnvelope;
+}
+
+export interface WebhookDeliverySendResponse {
+  readonly statusCode: number;
+}
+
+export interface WebhookDeliverySendFailure {
+  readonly code: string;
+  readonly message: string;
+  readonly retryable: boolean;
+}
+
+export interface CompletedWebhookDeliveryAttempt {
+  readonly deliveryId: string;
+  readonly attemptCount: number;
+  readonly processingStartedAt: string;
+  readonly state: "pending" | "delivered" | "failed";
+  readonly completedAt: string;
+  readonly nextAttemptAt: string | null;
+  readonly responseStatusCode: number | null;
+  readonly errorCode: string | null;
+  readonly errorMessage: string | null;
+  readonly retryable: boolean | null;
+}
+
+export interface ProcessWebhookDeliveryResult {
+  readonly deliveryId: string;
+  readonly status: "delivered" | "failed" | "noop" | "scheduled_for_retry";
+  readonly attemptCount: number | null;
+  readonly nextAttemptAt: string | null;
+}
 
 export interface StartedSyncRun {
   readonly syncRunId: string;

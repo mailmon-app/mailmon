@@ -1,5 +1,14 @@
 import type { MailboxEventEnvelope, MailboxEventType } from "@mailmon/core";
-import { boolean, index, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
 
 export const bootstrapState = pgTable("bootstrap_state", {
   name: text("name").primaryKey(),
@@ -111,6 +120,7 @@ export const webhookEndpoints = pgTable(
     lastErrorMessage: text("last_error_message"),
     lastErrorOccurredAt: timestamp("last_error_occurred_at", { withTimezone: true }),
     lastErrorRetryable: boolean("last_error_retryable"),
+    consecutiveDeliveryFailures: integer("consecutive_delivery_failures").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -234,3 +244,40 @@ export const mailboxEvents = pgTable("mailbox_events", {
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
   payload: jsonb("payload").$type<MailboxEventEnvelope>().notNull(),
 });
+
+export const webhookDeliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: text("id").primaryKey(),
+    mailboxEventId: text("mailbox_event_id")
+      .notNull()
+      .references(() => mailboxEvents.id),
+    webhookEndpointId: text("webhook_endpoint_id")
+      .notNull()
+      .references(() => webhookEndpoints.id),
+    state: text("state").notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+    lastAttemptedAt: timestamp("last_attempted_at", { withTimezone: true }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    lastResponseStatus: integer("last_response_status"),
+    lastErrorCode: text("last_error_code"),
+    lastErrorMessage: text("last_error_message"),
+    lastErrorOccurredAt: timestamp("last_error_occurred_at", { withTimezone: true }),
+    lastErrorRetryable: boolean("last_error_retryable"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    mailboxEventEndpointUnique: unique("webhook_deliveries_mailbox_event_endpoint_unique").on(
+      table.mailboxEventId,
+      table.webhookEndpointId,
+    ),
+    nextAttemptIndex: index("webhook_deliveries_state_next_attempt_at_idx").on(
+      table.state,
+      table.nextAttemptAt,
+    ),
+    webhookEndpointIndex: index("webhook_deliveries_endpoint_id_idx").on(table.webhookEndpointId),
+  }),
+);

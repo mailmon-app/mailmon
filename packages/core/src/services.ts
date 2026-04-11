@@ -1,31 +1,35 @@
 import { Context, Effect, Option } from "effect";
 
 import type {
+  CompletedWebhookDeliveryAttempt,
   CompletedMailboxConnectSession,
+  CompletedSyncRun,
   CreatedWebhookEndpointResource,
   ListMailboxMessagesRequest,
   ListMailboxThreadsRequest,
   ListResource,
   MessageResource,
-  MailboxSyncRequest,
-  MailboxSyncSnapshot,
   MailboxConnectAuthorization,
-  MailboxSyncCommitResult,
-  CompletedSyncRun,
   ControlJobDispatchRequest,
   MailboxSyncLeaseAcquisition,
-  MailboxSyncLeaseRenewal,
   MailboxProviderSyncResult,
   MailboxResource,
+  MailboxSyncCommitResult,
+  MailboxSyncLeaseRenewal,
+  MailboxSyncRequest,
+  MailboxSyncSnapshot,
+  PreparedWebhookDelivery,
   ProblemDetails,
   StartedSyncRun,
   StoredConnectSession,
   ThreadListItemResource,
   ThreadResource,
+  WebhookDeliverySendFailure,
+  WebhookDeliverySendResponse,
   WebhookEndpointResource,
   WebhookEndpointSubscriptionResource,
-  WebhookEventType,
   WebhookDeliveryScheduleRequest,
+  WebhookEventType,
   WorkspaceApiKeyIdentity,
 } from "./contracts.js";
 
@@ -236,6 +240,35 @@ export class WebhookDeliveryScheduler extends Context.Tag("@mailmon/core/Webhook
     readonly scheduleWebhookDelivery: (
       request: WebhookDeliveryScheduleRequest,
     ) => Effect.Effect<void>;
+  }
+>() {}
+
+export class WebhookDeliveryStore extends Context.Tag("@mailmon/core/WebhookDeliveryStore")<
+  WebhookDeliveryStore,
+  {
+    readonly createWebhookDeliveriesForMailboxEvents: (
+      mailboxEventIds: ReadonlyArray<string>,
+    ) => Effect.Effect<ReadonlyArray<WebhookDeliveryScheduleRequest>>;
+    readonly listWebhookDeliveryRecoverySchedules: (
+      recoveredAt: string,
+    ) => Effect.Effect<ReadonlyArray<WebhookDeliveryScheduleRequest>>;
+    readonly prepareWebhookDeliveryAttempt: (
+      deliveryId: string,
+      attemptedAt: string,
+    ) => Effect.Effect<Option.Option<PreparedWebhookDelivery>>;
+    readonly completeWebhookDeliveryAttempt: (
+      attempt: CompletedWebhookDeliveryAttempt,
+    ) => Effect.Effect<boolean>;
+  }
+>() {}
+
+export class WebhookDeliverySender extends Context.Tag("@mailmon/core/WebhookDeliverySender")<
+  WebhookDeliverySender,
+  {
+    readonly send: (
+      delivery: PreparedWebhookDelivery,
+      attemptedAt: string,
+    ) => Effect.Effect<WebhookDeliverySendResponse, WebhookDeliverySendFailure>;
   }
 >() {}
 

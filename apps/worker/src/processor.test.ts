@@ -13,6 +13,8 @@ describe("processSyncJob", () => {
         bootstrap.createBootstrapMailboxSyncCoordinatorLayer,
         bootstrap.createBootstrapMailboxStateStoreLayer,
         bootstrap.createBootstrapSyncRunStoreLayer,
+        bootstrap.createBootstrapWebhookDeliveryStoreLayer,
+        bootstrap.createBootstrapWebhookDeliverySchedulerLayer,
         createStubMailboxSyncProviderLayer,
       ),
     );

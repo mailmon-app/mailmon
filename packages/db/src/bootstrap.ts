@@ -6,6 +6,8 @@ import {
   type MailboxResource,
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncLeaseRenewal,
+  WebhookDeliveryScheduler,
+  WebhookDeliveryStore,
 } from "@mailmon/core";
 import { Effect, Layer, Option, Ref } from "effect";
 
@@ -57,6 +59,26 @@ export const createBootstrapMailboxStateStoreLayer = Layer.succeed(MailboxStateS
       mailboxEventIds: Array.from({ length: eventsEmitted }, (_, index) => `evt_bootstrap_${index}`),
     }),
 });
+
+export const createBootstrapWebhookDeliveryStoreLayer = Layer.succeed(WebhookDeliveryStore, {
+  createWebhookDeliveriesForMailboxEvents: (mailboxEventIds) =>
+    Effect.succeed(
+      mailboxEventIds.map((mailboxEventId) => ({
+        deliveryId: `del_${mailboxEventId}`,
+        notBefore: new Date().toISOString(),
+      })),
+    ),
+  listWebhookDeliveryRecoverySchedules: () => Effect.succeed([]),
+  prepareWebhookDeliveryAttempt: () => Effect.succeed(Option.none()),
+  completeWebhookDeliveryAttempt: () => Effect.succeed(true),
+});
+
+export const createBootstrapWebhookDeliverySchedulerLayer = Layer.succeed(
+  WebhookDeliveryScheduler,
+  {
+    scheduleWebhookDelivery: () => Effect.void,
+  },
+);
 
 interface BootstrapMailboxLease {
   readonly leaseOwnerId: string;

@@ -2,7 +2,12 @@ import { describe, expect, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as TestClock from "effect/TestClock";
 
-import type { CompletedSyncRun, MailboxResource, WebhookEndpointResource } from "./contracts.js";
+import type {
+  CompletedSyncRun,
+  MailboxResource,
+  PreparedWebhookDelivery,
+  WebhookEndpointResource,
+} from "./contracts.js";
 import {
   MailboxCatalog,
   MailboxQueryCatalog,
@@ -11,6 +16,9 @@ import {
   MailboxSyncProvider,
   MailboxStateStore,
   SyncRunStore,
+  WebhookDeliveryScheduler,
+  WebhookDeliverySender,
+  WebhookDeliveryStore,
   WebhookEndpointCatalog,
   WebhookEndpointStore,
   WebhookEndpointSubscriptionStore,
@@ -24,7 +32,9 @@ import {
   getThreadOrFail,
   listMailboxMessages,
   listMailboxThreads,
+  recoverWebhookDeliveryScheduling,
   runMailboxSync,
+  runWebhookDelivery,
 } from "./use-cases.js";
 
 const primaryWorkspaceId = "ws_123";
@@ -224,6 +234,124 @@ const createSyncCoordinatorTestLayer = (
         params.releaseCalls?.push(lease);
       }),
   });
+
+const createWebhookDeliveryStoreTestLayer = (
+  params: Readonly<{
+    deliveryRequestsByEventId?: Readonly<
+      Record<
+        string,
+        ReadonlyArray<
+          Readonly<{
+            deliveryId: string;
+            notBefore?: string;
+          }>
+        >
+      >
+    >;
+    recoveredDeliveryRequests?: ReadonlyArray<
+      Readonly<{
+        deliveryId: string;
+        notBefore: string;
+      }>
+    >;
+    observedMailboxEventIds?: Array<ReadonlyArray<string>>;
+    observedRecoveredAt?: Array<string>;
+    preparedDelivery?: PreparedWebhookDelivery | null;
+    prepareCalls?: Array<{
+      deliveryId: string;
+      attemptedAt: string;
+    }>;
+    completedAttempts?: Array<{
+      deliveryId: string;
+      attemptCount: number;
+      processingStartedAt: string;
+      state: "pending" | "delivered" | "failed";
+      nextAttemptAt: string | null;
+      responseStatusCode: number | null;
+      errorCode: string | null;
+      errorMessage: string | null;
+      retryable: boolean | null;
+    }>;
+    completeAttemptResult?: boolean;
+  }> = {},
+) =>
+  Layer.succeed(WebhookDeliveryStore, {
+    createWebhookDeliveriesForMailboxEvents: (mailboxEventIds) =>
+      Effect.sync(() => {
+        params.observedMailboxEventIds?.push([...mailboxEventIds]);
+
+        return mailboxEventIds.flatMap((mailboxEventId) =>
+          (params.deliveryRequestsByEventId?.[mailboxEventId] ?? []).map((request) => ({
+            deliveryId: request.deliveryId,
+            notBefore: request.notBefore ?? "2026-03-24T00:00:00.000Z",
+          })),
+        );
+      }),
+    listWebhookDeliveryRecoverySchedules: (recoveredAt) =>
+      Effect.sync(() => {
+        params.observedRecoveredAt?.push(recoveredAt);
+
+        return [...(params.recoveredDeliveryRequests ?? [])];
+      }),
+    prepareWebhookDeliveryAttempt: (deliveryId, attemptedAt) =>
+      Effect.sync(() => {
+        params.prepareCalls?.push({
+          deliveryId,
+          attemptedAt,
+        });
+
+        return Option.fromNullable(params.preparedDelivery).pipe(
+          Option.filter((delivery) => delivery.deliveryId === deliveryId),
+        );
+      }),
+    completeWebhookDeliveryAttempt: (attempt) =>
+      Effect.sync(() => {
+        params.completedAttempts?.push({
+          deliveryId: attempt.deliveryId,
+          attemptCount: attempt.attemptCount,
+          processingStartedAt: attempt.processingStartedAt,
+          state: attempt.state,
+          nextAttemptAt: attempt.nextAttemptAt,
+          responseStatusCode: attempt.responseStatusCode,
+          errorCode: attempt.errorCode,
+          errorMessage: attempt.errorMessage,
+          retryable: attempt.retryable,
+        });
+
+        return params.completeAttemptResult ?? true;
+      }),
+  });
+
+const createWebhookDeliverySchedulerTestLayer = (
+  scheduledRequests: Array<{
+    deliveryId: string;
+    notBefore: string;
+  }> = [],
+) =>
+  Layer.succeed(WebhookDeliveryScheduler, {
+    scheduleWebhookDelivery: ({ deliveryId, notBefore }) =>
+      Effect.sync(() => {
+        scheduledRequests.push({
+          deliveryId,
+          notBefore,
+        });
+      }),
+  });
+
+const createWebhookDeliverySenderTestLayer = (
+  send: (
+    delivery: PreparedWebhookDelivery,
+    attemptedAt: string,
+  ) => Effect.Effect<{ statusCode: number }, { code: string; message: string; retryable: boolean }>,
+) =>
+  Layer.succeed(WebhookDeliverySender, {
+    send,
+  });
+
+const noopWebhookDeliverySchedulingLayer = Layer.mergeAll(
+  createWebhookDeliveryStoreTestLayer(),
+  createWebhookDeliverySchedulerTestLayer(),
+);
 
 const createSyncProviderTestLayer = (
   observedCursors: Array<string | null>,
@@ -653,6 +781,53 @@ describe("webhook endpoint use cases", () => {
   );
 });
 
+describe("recoverWebhookDeliveryScheduling", () => {
+  it.effect("re-arms durable webhook deliveries from store recovery schedules", () =>
+    Effect.gen(function* () {
+      const observedRecoveredAt: string[] = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
+      const recoveredAt = "2026-03-24T00:05:00.000Z";
+
+      const result = yield* recoverWebhookDeliveryScheduling(recoveredAt).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            createWebhookDeliveryStoreTestLayer({
+              recoveredDeliveryRequests: [
+                {
+                  deliveryId: "del_recover_1",
+                  notBefore: "2026-03-24T00:05:05.000Z",
+                },
+                {
+                  deliveryId: "del_recover_2",
+                  notBefore: "2026-03-24T00:05:30.000Z",
+                },
+              ],
+              observedRecoveredAt,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+          ),
+        ),
+      );
+
+      expect(observedRecoveredAt).toEqual([recoveredAt]);
+      expect(result).toEqual([
+        {
+          deliveryId: "del_recover_1",
+          notBefore: "2026-03-24T00:05:05.000Z",
+        },
+        {
+          deliveryId: "del_recover_2",
+          notBefore: "2026-03-24T00:05:30.000Z",
+        },
+      ]);
+      expect(scheduledDeliveryRequests).toEqual(result);
+    }),
+  );
+});
+
 describe("runMailboxSync", () => {
   it.effect("coordinates mailbox lookup, provider sync, and sync run completion", () =>
     Effect.gen(function* () {
@@ -695,6 +870,7 @@ describe("runMailboxSync", () => {
             createSyncRunStoreTestLayer(completedSyncRuns),
             createSyncCoordinatorTestLayer(),
             createSyncProviderTestLayer(observedCursors),
+            noopWebhookDeliverySchedulingLayer,
           ),
         ),
       );
@@ -763,6 +939,7 @@ describe("runMailboxSync", () => {
             createSyncRunStoreTestLayer([]),
             createSyncCoordinatorTestLayer(),
             providerLayer,
+            noopWebhookDeliverySchedulingLayer,
           ),
         ),
       );
@@ -779,6 +956,67 @@ describe("runMailboxSync", () => {
           threadCount: 1,
           messageCount: 1,
           nextCursor: "hist_2",
+        },
+      ]);
+    }),
+  );
+
+  it.effect("schedules durable webhook deliveries from committed mailbox events", () =>
+    Effect.gen(function* () {
+      const appliedSnapshots: Array<{
+        eventsEmitted: number;
+        mailboxId: string;
+        leaseOwnerId: string;
+        syncRunId: string;
+        threadCount: number;
+        messageCount: number;
+        nextCursor: string | null;
+      }> = [];
+      const observedMailboxEventIds: Array<ReadonlyArray<string>> = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
+
+      const result = yield* runMailboxSync(mailboxFixture.id).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            catalogLayer,
+            createMailboxStateStoreTestLayer(null, appliedSnapshots, {
+              mailboxEventCount: 2,
+            }),
+            createSyncRunStoreTestLayer([]),
+            createSyncCoordinatorTestLayer(),
+            createSyncProviderTestLayer([]),
+            createWebhookDeliveryStoreTestLayer({
+              deliveryRequestsByEventId: {
+                evt_sr_mbx_demo_0: [
+                  { deliveryId: "del_evt_0_whe_0" },
+                  { deliveryId: "del_evt_0_whe_1" },
+                ],
+                evt_sr_mbx_demo_1: [{ deliveryId: "del_evt_1_whe_0" }],
+              },
+              observedMailboxEventIds,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+          ),
+        ),
+      );
+
+      expect(result.status).toBe("completed");
+      expect(observedMailboxEventIds).toEqual([["evt_sr_mbx_demo_0", "evt_sr_mbx_demo_1"]]);
+      expect(scheduledDeliveryRequests).toEqual([
+        {
+          deliveryId: "del_evt_0_whe_0",
+          notBefore: "2026-03-24T00:00:00.000Z",
+        },
+        {
+          deliveryId: "del_evt_0_whe_1",
+          notBefore: "2026-03-24T00:00:00.000Z",
+        },
+        {
+          deliveryId: "del_evt_1_whe_0",
+          notBefore: "2026-03-24T00:00:00.000Z",
         },
       ]);
     }),
@@ -821,6 +1059,7 @@ describe("runMailboxSync", () => {
             createSyncRunStoreTestLayer([]),
             createSyncCoordinatorTestLayer(),
             createSyncProviderTestLayer(observedCursors),
+            noopWebhookDeliverySchedulingLayer,
           ),
         ),
       );
@@ -899,6 +1138,7 @@ describe("runMailboxSync", () => {
           createSyncRunStoreTestLayer([]),
           createSyncCoordinatorTestLayer(),
           providerLayer,
+          noopWebhookDeliverySchedulingLayer,
         );
 
         const firstResult = yield* runMailboxSync(mailboxFixture.id).pipe(
@@ -979,6 +1219,7 @@ describe("runMailboxSync", () => {
               acquisitionSucceeds: false,
             }),
             createSyncProviderTestLayer(observedCursors),
+            noopWebhookDeliverySchedulingLayer,
           ),
         ),
       );
@@ -1023,6 +1264,7 @@ describe("runMailboxSync", () => {
                 renewCalls,
               }),
               createSyncProviderTestLayer(observedCursors),
+              noopWebhookDeliverySchedulingLayer,
             ),
           ),
         ),
@@ -1090,6 +1332,7 @@ describe("runMailboxSync", () => {
                 renewResults: [false],
               }),
               createSyncProviderTestLayer(observedCursors),
+              noopWebhookDeliverySchedulingLayer,
             ),
           ),
           Effect.either,
@@ -1119,6 +1362,301 @@ describe("runMailboxSync", () => {
         }),
       ]);
       expect(releaseCalls).toHaveLength(1);
+    }),
+  );
+});
+
+describe("runWebhookDelivery", () => {
+  const deliveryFixture: PreparedWebhookDelivery = {
+    deliveryId: "del_demo",
+    mailboxEventId: "evt_demo",
+    webhookEndpointId: "whe_demo",
+    attemptCount: 1,
+    processingStartedAt: "2026-03-24T00:00:05.000Z",
+    url: "https://app.example.com/webhooks/mailmon",
+    signingSecret: "whsec_demo",
+    event: {
+      id: "evt_demo",
+      type: "message.created",
+      occurredAt: "2026-03-24T00:00:00.000Z",
+      workspaceId: primaryWorkspaceId,
+      tenantExternalId: "tenant_123",
+      mailboxId: mailboxFixture.id,
+      schemaVersion: 1,
+      data: {
+        messageId: "msg_demo",
+        threadId: "thr_demo",
+        providerMessageId: "gmail_msg_demo",
+        providerThreadId: "gmail_thr_demo",
+        subject: "Demo thread",
+        snippet: "Mailbox message fixture",
+        receivedAt: "2026-03-24T00:00:00.000Z",
+        labelIds: ["INBOX"],
+      },
+    },
+  };
+
+  it.effect("marks successful deliveries as delivered without scheduling a retry", () =>
+    Effect.gen(function* () {
+      const completedAttempts: Array<{
+        deliveryId: string;
+        attemptCount: number;
+        processingStartedAt: string;
+        state: "pending" | "delivered" | "failed";
+        nextAttemptAt: string | null;
+        responseStatusCode: number | null;
+        errorCode: string | null;
+        errorMessage: string | null;
+        retryable: boolean | null;
+      }> = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
+
+      const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            createWebhookDeliveryStoreTestLayer({
+              preparedDelivery: deliveryFixture,
+              completedAttempts,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+            createWebhookDeliverySenderTestLayer(() =>
+              Effect.succeed({
+                statusCode: 202,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      expect(result).toEqual({
+        deliveryId: deliveryFixture.deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      });
+      expect(completedAttempts).toEqual([
+        {
+          deliveryId: deliveryFixture.deliveryId,
+          attemptCount: deliveryFixture.attemptCount,
+          processingStartedAt: deliveryFixture.processingStartedAt,
+          state: "delivered",
+          nextAttemptAt: null,
+          responseStatusCode: 202,
+          errorCode: null,
+          errorMessage: null,
+          retryable: null,
+        },
+      ]);
+      expect(scheduledDeliveryRequests).toEqual([]);
+    }),
+  );
+
+  it.effect("retries timeout failures by rescheduling the durable delivery", () =>
+    Effect.gen(function* () {
+      const completedAttempts: Array<{
+        deliveryId: string;
+        attemptCount: number;
+        processingStartedAt: string;
+        state: "pending" | "delivered" | "failed";
+        nextAttemptAt: string | null;
+        responseStatusCode: number | null;
+        errorCode: string | null;
+        errorMessage: string | null;
+        retryable: boolean | null;
+      }> = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
+
+      const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            createWebhookDeliveryStoreTestLayer({
+              preparedDelivery: deliveryFixture,
+              completedAttempts,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+            createWebhookDeliverySenderTestLayer(() =>
+              Effect.fail({
+                code: "webhook_delivery_timeout",
+                message: "Webhook delivery timed out after 5 seconds.",
+                retryable: true,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      expect(result.deliveryId).toBe(deliveryFixture.deliveryId);
+      expect(result.status).toBe("scheduled_for_retry");
+      expect(result.attemptCount).toBe(1);
+      expect(result.nextAttemptAt).toEqual(expect.any(String));
+      expect(completedAttempts).toEqual([
+        {
+          deliveryId: deliveryFixture.deliveryId,
+          attemptCount: deliveryFixture.attemptCount,
+          processingStartedAt: deliveryFixture.processingStartedAt,
+          state: "pending",
+          nextAttemptAt: expect.any(String),
+          responseStatusCode: null,
+          errorCode: "webhook_delivery_timeout",
+          errorMessage: "Webhook delivery timed out after 5 seconds.",
+          retryable: true,
+        },
+      ]);
+      expect(scheduledDeliveryRequests).toEqual([
+        {
+          deliveryId: deliveryFixture.deliveryId,
+          notBefore: completedAttempts[0].nextAttemptAt!,
+        },
+      ]);
+    }),
+  );
+
+  it.effect("fails non-retryable endpoint responses without rescheduling", () =>
+    Effect.gen(function* () {
+      const completedAttempts: Array<{
+        deliveryId: string;
+        attemptCount: number;
+        processingStartedAt: string;
+        state: "pending" | "delivered" | "failed";
+        nextAttemptAt: string | null;
+        responseStatusCode: number | null;
+        errorCode: string | null;
+        errorMessage: string | null;
+        retryable: boolean | null;
+      }> = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
+
+      const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            createWebhookDeliveryStoreTestLayer({
+              preparedDelivery: deliveryFixture,
+              completedAttempts,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+            createWebhookDeliverySenderTestLayer(() =>
+              Effect.succeed({
+                statusCode: 422,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      expect(result).toEqual({
+        deliveryId: deliveryFixture.deliveryId,
+        status: "failed",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      });
+      expect(completedAttempts).toEqual([
+        {
+          deliveryId: deliveryFixture.deliveryId,
+          attemptCount: deliveryFixture.attemptCount,
+          processingStartedAt: deliveryFixture.processingStartedAt,
+          state: "failed",
+          nextAttemptAt: null,
+          responseStatusCode: 422,
+          errorCode: "webhook_endpoint_http_422",
+          errorMessage: "Webhook endpoint responded with HTTP 422.",
+          retryable: false,
+        },
+      ]);
+      expect(scheduledDeliveryRequests).toEqual([]);
+    }),
+  );
+
+  it.effect("no-ops when the delivery is no longer pending", () =>
+    runWebhookDelivery("del_missing").pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          createWebhookDeliveryStoreTestLayer({
+            preparedDelivery: null,
+          }),
+          createWebhookDeliverySchedulerTestLayer(),
+          createWebhookDeliverySenderTestLayer(() =>
+            Effect.succeed({
+              statusCode: 200,
+            }),
+          ),
+        ),
+      ),
+      Effect.map((result) => {
+        expect(result).toEqual({
+          deliveryId: "del_missing",
+          status: "noop",
+          attemptCount: null,
+          nextAttemptAt: null,
+        });
+      }),
+    ),
+  );
+
+  it.effect("returns noop when a stale completion loses the compare-and-swap race", () =>
+    Effect.gen(function* () {
+      const completedAttempts: Array<{
+        deliveryId: string;
+        attemptCount: number;
+        processingStartedAt: string;
+        state: "pending" | "delivered" | "failed";
+        nextAttemptAt: string | null;
+        responseStatusCode: number | null;
+        errorCode: string | null;
+        errorMessage: string | null;
+        retryable: boolean | null;
+      }> = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
+
+      const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            createWebhookDeliveryStoreTestLayer({
+              preparedDelivery: deliveryFixture,
+              completedAttempts,
+              completeAttemptResult: false,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+            createWebhookDeliverySenderTestLayer(() =>
+              Effect.succeed({
+                statusCode: 204,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      expect(result).toEqual({
+        deliveryId: deliveryFixture.deliveryId,
+        status: "noop",
+        attemptCount: null,
+        nextAttemptAt: null,
+      });
+      expect(completedAttempts).toEqual([
+        {
+          deliveryId: deliveryFixture.deliveryId,
+          attemptCount: deliveryFixture.attemptCount,
+          processingStartedAt: deliveryFixture.processingStartedAt,
+          state: "delivered",
+          nextAttemptAt: null,
+          responseStatusCode: 204,
+          errorCode: null,
+          errorMessage: null,
+          retryable: null,
+        },
+      ]);
+      expect(scheduledDeliveryRequests).toEqual([]);
     }),
   );
 });

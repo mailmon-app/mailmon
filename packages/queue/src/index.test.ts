@@ -4,7 +4,7 @@ import {
   WebhookDeliveryScheduler,
 } from "@mailmon/core";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createLocalAsyncTransportLayer,
@@ -13,6 +13,10 @@ import {
   LocalAsyncTransportProbe,
   SYNC_MAILBOX_QUEUE,
 } from "./index.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("SYNC_MAILBOX_QUEUE", () => {
   it("uses a stable queue name", () => {
@@ -45,6 +49,7 @@ describe("createLocalAsyncTransportLayer", () => {
       yield* mailboxSyncDispatcher.dispatchMailboxSync("mbx_123");
       yield* webhookDeliveryScheduler.scheduleWebhookDelivery({
         deliveryId: "del_123",
+        notBefore: "2026-03-24T00:00:00.000Z",
       });
       yield* controlJobDispatcher.dispatchControlJob({
         kind: "repair_mailboxes",
@@ -78,7 +83,12 @@ describe("createLocalAsyncTransportLayer", () => {
       ),
     ).resolves.toEqual({
       mailboxSyncMailboxIds: ["mbx_123"],
-      webhookDeliveries: [{ deliveryId: "del_123" }],
+      webhookDeliveries: [
+        {
+          deliveryId: "del_123",
+          notBefore: "2026-03-24T00:00:00.000Z",
+        },
+      ],
       controlJobs: [{ kind: "repair_mailboxes" }],
     });
 
@@ -92,6 +102,17 @@ describe("createLocalAsyncTransportLayer", () => {
         },
         method: "POST",
         url: `${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/sync`,
+      },
+      {
+        body: JSON.stringify({
+          deliveryId: "del_123",
+          notBefore: "2026-03-24T00:00:00.000Z",
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+        url: `${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/webhook-deliveries`,
       },
     ]);
   });
@@ -125,5 +146,53 @@ describe("createLocalAsyncTransportLayer", () => {
       webhookDeliveries: [],
       controlJobs: [],
     });
+  });
+
+  it("delays webhook delivery dispatches until the durable due time", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-24T00:00:00.000Z"));
+
+    const requests: string[] = [];
+    const program = Effect.gen(function* () {
+      const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
+      const probe = yield* LocalAsyncTransportProbe;
+
+      yield* webhookDeliveryScheduler.scheduleWebhookDelivery({
+        deliveryId: "del_456",
+        notBefore: "2026-03-24T00:00:05.000Z",
+      });
+
+      return yield* probe.getSnapshot;
+    });
+
+    const snapshot = await Effect.runPromise(
+      program.pipe(
+        Effect.provide(
+          createLocalAsyncTransportLayer({
+            fetch: async (url) => {
+              requests.push(
+                typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url,
+              );
+
+              return new Response(null, {
+                status: 200,
+              });
+            },
+          }),
+        ),
+      ),
+    );
+
+    expect(snapshot.webhookDeliveries).toEqual([
+      {
+        deliveryId: "del_456",
+        notBefore: "2026-03-24T00:00:05.000Z",
+      },
+    ]);
+    expect(requests).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(requests).toEqual([`${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/webhook-deliveries`]);
   });
 });

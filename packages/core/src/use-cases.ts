@@ -1,15 +1,18 @@
 import { Duration, Effect, Option } from "effect";
 
 import type {
+  CompletedWebhookDeliveryAttempt,
   CompletedSyncRun,
   ConnectSessionResource,
   CreateConnectSessionRequest,
   CreateWebhookEndpointRequest,
   CreateWebhookEndpointSubscriptionRequest,
   MailboxResource,
+  ProcessWebhookDeliveryResult,
   StoredConnectSession,
   SyncMailboxResult,
   SyncRunOutcome,
+  WebhookDeliverySendFailure,
   WebhookEventType,
 } from "./contracts.js";
 import {
@@ -32,6 +35,9 @@ import {
   MailboxSyncProvider,
   MailboxStateStore,
   SyncRunStore,
+  WebhookDeliveryScheduler,
+  WebhookDeliverySender,
+  WebhookDeliveryStore,
   WebhookEndpointCatalog,
   WebhookEndpointStore,
   WebhookEndpointSubscriptionStore,
@@ -41,6 +47,9 @@ import {
 const DEFAULT_CONNECT_SESSION_TTL_MS = 15 * 60_000;
 const DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS = 90_000;
 const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
+const DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS = 5;
+const DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 5_000;
+const MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 15 * 60_000;
 
 const addMillisecondsToIsoTimestamp = (timestamp: string, milliseconds: number) => {
   return new Date(Date.parse(timestamp) + milliseconds).toISOString();
@@ -117,6 +126,39 @@ const createSyncRunCompletion = (
     eventsEmitted: params.eventsEmitted,
     nextCursor: params.nextCursor,
     detail: params.detail ?? null,
+  };
+};
+
+const calculateWebhookDeliveryRetryDelayMs = (attemptCount: number) => {
+  return Math.min(
+    MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS,
+    DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS * 2 ** Math.max(0, attemptCount - 1),
+  );
+};
+
+const createWebhookDeliveryCompletion = (params: {
+  readonly deliveryId: string;
+  readonly attemptCount: number;
+  readonly processingStartedAt: string;
+  readonly state: CompletedWebhookDeliveryAttempt["state"];
+  readonly completedAt: string;
+  readonly nextAttemptAt?: string | null;
+  readonly responseStatusCode?: number | null;
+  readonly errorCode?: string | null;
+  readonly errorMessage?: string | null;
+  readonly retryable?: boolean | null;
+}): CompletedWebhookDeliveryAttempt => {
+  return {
+    deliveryId: params.deliveryId,
+    attemptCount: params.attemptCount,
+    processingStartedAt: params.processingStartedAt,
+    state: params.state,
+    completedAt: params.completedAt,
+    nextAttemptAt: params.nextAttemptAt ?? null,
+    responseStatusCode: params.responseStatusCode ?? null,
+    errorCode: params.errorCode ?? null,
+    errorMessage: params.errorMessage ?? null,
+    retryable: params.retryable ?? null,
   };
 };
 
@@ -423,6 +465,253 @@ export const completeGmailMailboxConnectSession = (
     return completedSession;
   });
 
+export const scheduleMailboxEventDeliveries = (mailboxEventIds: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    if (mailboxEventIds.length === 0) {
+      return [] as const;
+    }
+
+    const webhookDeliveryStore = yield* WebhookDeliveryStore;
+    const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
+    const deliveryRequests =
+      yield* webhookDeliveryStore.createWebhookDeliveriesForMailboxEvents(mailboxEventIds);
+
+    yield* Effect.forEach(
+      deliveryRequests,
+      (request) => webhookDeliveryScheduler.scheduleWebhookDelivery(request),
+      { discard: true },
+    );
+
+    return deliveryRequests;
+  });
+
+export const recoverWebhookDeliveryScheduling = (recoveredAt = new Date().toISOString()) =>
+  Effect.gen(function* () {
+    const webhookDeliveryStore = yield* WebhookDeliveryStore;
+    const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
+    const deliveryRequests =
+      yield* webhookDeliveryStore.listWebhookDeliveryRecoverySchedules(recoveredAt);
+
+    if (deliveryRequests.length === 0) {
+      return [] as const;
+    }
+
+    yield* Effect.forEach(
+      deliveryRequests,
+      (request) => webhookDeliveryScheduler.scheduleWebhookDelivery(request),
+      { discard: true },
+    );
+
+    return deliveryRequests;
+  });
+
+const classifyWebhookDeliveryFailure = (
+  delivery: Readonly<{
+    deliveryId: string;
+    attemptCount: number;
+    processingStartedAt: string;
+  }>,
+  completedAt: string,
+  failure: WebhookDeliverySendFailure,
+) => {
+  const nextAttemptAt =
+    failure.retryable && delivery.attemptCount < DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS
+      ? addMillisecondsToIsoTimestamp(
+          completedAt,
+          calculateWebhookDeliveryRetryDelayMs(delivery.attemptCount),
+        )
+      : null;
+
+  if (nextAttemptAt !== null) {
+    return {
+      completion: createWebhookDeliveryCompletion({
+        deliveryId: delivery.deliveryId,
+        attemptCount: delivery.attemptCount,
+        processingStartedAt: delivery.processingStartedAt,
+        state: "pending",
+        completedAt,
+        nextAttemptAt,
+        errorCode: failure.code,
+        errorMessage: failure.message,
+        retryable: true,
+      }),
+      result: {
+        deliveryId: delivery.deliveryId,
+        status: "scheduled_for_retry",
+        attemptCount: delivery.attemptCount,
+        nextAttemptAt,
+      } satisfies ProcessWebhookDeliveryResult,
+    } as const;
+  }
+
+  return {
+    completion: createWebhookDeliveryCompletion({
+      deliveryId: delivery.deliveryId,
+      attemptCount: delivery.attemptCount,
+      processingStartedAt: delivery.processingStartedAt,
+      state: "failed",
+      completedAt,
+      errorCode: failure.code,
+      errorMessage: failure.message,
+      retryable: failure.retryable,
+    }),
+    result: {
+      deliveryId: delivery.deliveryId,
+      status: "failed",
+      attemptCount: delivery.attemptCount,
+      nextAttemptAt: null,
+    } satisfies ProcessWebhookDeliveryResult,
+  } as const;
+};
+
+const classifyWebhookDeliveryResponse = (
+  delivery: Readonly<{
+    deliveryId: string;
+    attemptCount: number;
+    processingStartedAt: string;
+  }>,
+  completedAt: string,
+  statusCode: number,
+) => {
+  if (statusCode >= 200 && statusCode < 300) {
+    return {
+      completion: createWebhookDeliveryCompletion({
+        deliveryId: delivery.deliveryId,
+        attemptCount: delivery.attemptCount,
+        processingStartedAt: delivery.processingStartedAt,
+        state: "delivered",
+        completedAt,
+        responseStatusCode: statusCode,
+      }),
+      result: {
+        deliveryId: delivery.deliveryId,
+        status: "delivered",
+        attemptCount: delivery.attemptCount,
+        nextAttemptAt: null,
+      } satisfies ProcessWebhookDeliveryResult,
+    } as const;
+  }
+
+  const nextAttemptAt =
+    statusCode >= 500 && delivery.attemptCount < DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS
+      ? addMillisecondsToIsoTimestamp(
+          completedAt,
+          calculateWebhookDeliveryRetryDelayMs(delivery.attemptCount),
+        )
+      : null;
+
+  if (nextAttemptAt !== null) {
+    return {
+      completion: createWebhookDeliveryCompletion({
+        deliveryId: delivery.deliveryId,
+        attemptCount: delivery.attemptCount,
+        processingStartedAt: delivery.processingStartedAt,
+        state: "pending",
+        completedAt,
+        nextAttemptAt,
+        responseStatusCode: statusCode,
+        errorCode: `webhook_endpoint_http_${statusCode}`,
+        errorMessage: `Webhook endpoint responded with HTTP ${statusCode}.`,
+        retryable: true,
+      }),
+      result: {
+        deliveryId: delivery.deliveryId,
+        status: "scheduled_for_retry",
+        attemptCount: delivery.attemptCount,
+        nextAttemptAt,
+      } satisfies ProcessWebhookDeliveryResult,
+    } as const;
+  }
+
+  return {
+    completion: createWebhookDeliveryCompletion({
+      deliveryId: delivery.deliveryId,
+      attemptCount: delivery.attemptCount,
+      processingStartedAt: delivery.processingStartedAt,
+      state: "failed",
+      completedAt,
+      responseStatusCode: statusCode,
+      errorCode: `webhook_endpoint_http_${statusCode}`,
+      errorMessage: `Webhook endpoint responded with HTTP ${statusCode}.`,
+      retryable: statusCode >= 500,
+    }),
+    result: {
+      deliveryId: delivery.deliveryId,
+      status: "failed",
+      attemptCount: delivery.attemptCount,
+      nextAttemptAt: null,
+    } satisfies ProcessWebhookDeliveryResult,
+  } as const;
+};
+
+const finalizeWebhookDelivery = (
+  completion: CompletedWebhookDeliveryAttempt,
+  result: ProcessWebhookDeliveryResult,
+) =>
+  Effect.gen(function* () {
+    const webhookDeliveryStore = yield* WebhookDeliveryStore;
+    const applied = yield* webhookDeliveryStore.completeWebhookDeliveryAttempt(completion);
+
+    if (!applied) {
+      return {
+        deliveryId: completion.deliveryId,
+        status: "noop",
+        attemptCount: null,
+        nextAttemptAt: null,
+      } satisfies ProcessWebhookDeliveryResult;
+    }
+
+    if (completion.state === "pending") {
+      const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
+
+      yield* webhookDeliveryScheduler.scheduleWebhookDelivery({
+        deliveryId: completion.deliveryId,
+        notBefore: completion.nextAttemptAt ?? completion.completedAt,
+      });
+    }
+
+    return result;
+  });
+
+export const runWebhookDelivery = (deliveryId: string) =>
+  Effect.gen(function* () {
+    const webhookDeliveryStore = yield* WebhookDeliveryStore;
+    const webhookDeliverySender = yield* WebhookDeliverySender;
+    const attemptedAt = new Date().toISOString();
+    const preparedDelivery = yield* webhookDeliveryStore.prepareWebhookDeliveryAttempt(
+      deliveryId,
+      attemptedAt,
+    );
+
+    return yield* Option.match(preparedDelivery, {
+      onNone: () =>
+        Effect.succeed({
+          deliveryId,
+          status: "noop",
+          attemptCount: null,
+          nextAttemptAt: null,
+        } satisfies ProcessWebhookDeliveryResult),
+      onSome: (delivery) =>
+        webhookDeliverySender.send(delivery, attemptedAt).pipe(
+          Effect.match({
+            onFailure: (failure) =>
+              classifyWebhookDeliveryFailure(
+                delivery,
+                new Date().toISOString(),
+                failure,
+              ),
+            onSuccess: (response) =>
+              classifyWebhookDeliveryResponse(
+                delivery,
+                new Date().toISOString(),
+                response.statusCode,
+              ),
+          }),
+          Effect.flatMap(({ completion, result }) => finalizeWebhookDelivery(completion, result)),
+        ),
+    });
+  });
+
 export const runMailboxSync = (mailboxId: string) =>
   Effect.gen(function* () {
     const mailbox = yield* getMailboxOrFail(mailboxId);
@@ -503,13 +792,15 @@ export const runMailboxSync = (mailboxId: string) =>
           .pipe(
             Effect.flatMap((commitResult) =>
               commitResult.applied
-                ? Effect.succeed({
-                    ...syncRun,
-                    status: "completed",
-                    completedAt,
-                    eventsEmitted: commitResult.mailboxEventIds.length,
-                    nextCursor: providerResult.nextCursor,
-                  } satisfies SyncMailboxResult)
+                ? scheduleMailboxEventDeliveries(commitResult.mailboxEventIds).pipe(
+                    Effect.as({
+                      ...syncRun,
+                      status: "completed",
+                      completedAt,
+                      eventsEmitted: commitResult.mailboxEventIds.length,
+                      nextCursor: providerResult.nextCursor,
+                    } satisfies SyncMailboxResult),
+                  )
                 : Effect.fail(mailboxSyncLeaseLost(mailbox.id)),
             ),
           );

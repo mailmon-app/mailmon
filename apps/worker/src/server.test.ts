@@ -39,6 +39,12 @@ describe("startWorkerHttpRuntime", () => {
         eventsEmitted: 1,
         nextCursor: "hist_123",
       }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
     });
     activeRuntimeClosers.push(runtime.close);
 
@@ -64,6 +70,12 @@ describe("startWorkerHttpRuntime", () => {
         completedAt: "2026-03-25T00:00:01.000Z",
         eventsEmitted: 2,
         nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
       }),
     });
     activeRuntimeClosers.push(runtime.close);
@@ -100,6 +112,12 @@ describe("startWorkerHttpRuntime", () => {
         eventsEmitted: 2,
         nextCursor: "hist_456",
       }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
     });
     activeRuntimeClosers.push(runtime.close);
 
@@ -133,9 +151,98 @@ describe("startWorkerHttpRuntime", () => {
         eventsEmitted: 2,
         nextCursor: "hist_456",
       }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
     });
 
     await expect(runtime.close()).resolves.toBeUndefined();
     await expect(runtime.close()).resolves.toBeUndefined();
+  });
+
+  it("runs the webhook delivery workflow through /internal/webhook-deliveries", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "scheduled_for_retry",
+        attemptCount: 2,
+        nextAttemptAt: "2026-03-25T00:00:10.000Z",
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        deliveryId: "del_demo",
+        notBefore: "2026-03-25T00:00:00.000Z",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      deliveryId: "del_demo",
+      status: "scheduled_for_retry",
+      attemptCount: 2,
+      nextAttemptAt: "2026-03-25T00:00:10.000Z",
+    });
+  });
+
+  it("rejects invalid webhook delivery payloads", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        deliveryId: "",
+        notBefore: "2026-03-25T00:00:00.000Z",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_webhook_delivery_request",
+    });
   });
 });

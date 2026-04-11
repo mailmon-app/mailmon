@@ -64,6 +64,13 @@
       "when": 1775724476838,
       "tag": "0008_lethal_sandman",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1775800000000,
+      "tag": "0009_odd_phantom_reporter",
+      "breakpoints": true
     }
   ]
 }

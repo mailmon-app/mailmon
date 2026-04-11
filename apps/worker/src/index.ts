@@ -2,9 +2,18 @@ import { pathToFileURL } from "node:url";
 
 import type { WorkerEnv } from "@mailmon/config";
 import { loadWorkerEnv } from "@mailmon/config";
+import type {
+  ProcessWebhookDeliveryResult,
+  WebhookDeliveryScheduleRequest,
+} from "@mailmon/core";
+import { recoverWebhookDeliveryScheduling } from "@mailmon/core";
+import { Layer, ManagedRuntime } from "effect";
 
-import { createProcessSyncJob } from "./processor.js";
-import { createWorkerRuntime } from "./runtime.js";
+import { createProcessSyncJob, createProcessWebhookDelivery } from "./processor.js";
+import {
+  createInProcessWebhookDeliverySchedulerLayer,
+  createWorkerRuntimeLayer,
+} from "./runtime.js";
 import { startWorkerHttpRuntime } from "./server.js";
 
 export interface WorkerRuntimeHandle {
@@ -12,13 +21,69 @@ export interface WorkerRuntimeHandle {
   readonly kind: "http" | "legacy_bullmq";
 }
 
+const createWorkerProcessorRuntime = (
+  env: Pick<
+    WorkerEnv,
+    | "asyncTransportMode"
+    | "databaseUrl"
+    | "gmailApiBaseUrl"
+    | "gmailOauthClientId"
+    | "gmailOauthClientSecret"
+    | "gmailOauthTokenUrl"
+  >,
+) => {
+  if (env.asyncTransportMode === "gcp") {
+    throw new Error(
+      "MAILMON_ASYNC_TRANSPORT_MODE=gcp is not implemented for durable webhook delivery scheduling yet.",
+    );
+  }
+
+  let dispatchWebhookDelivery:
+    | ((request: WebhookDeliveryScheduleRequest) => Promise<ProcessWebhookDeliveryResult>)
+    | null = null;
+  const schedulerLayer = createInProcessWebhookDeliverySchedulerLayer({
+    dispatch: (request) => {
+      if (dispatchWebhookDelivery === null) {
+        return Promise.reject(
+          new Error("Webhook delivery processor was not initialized before scheduling."),
+        );
+      }
+
+      return dispatchWebhookDelivery(request);
+    },
+    onDispatchError: (error, request) => {
+      console.error(`scheduled webhook delivery ${request.deliveryId} failed`, error);
+    },
+  });
+  const runtime = ManagedRuntime.make(
+    Layer.mergeAll(createWorkerRuntimeLayer(env), schedulerLayer),
+  );
+  const processSyncJob = createProcessSyncJob(runtime);
+  const processWebhookDelivery = createProcessWebhookDelivery(runtime);
+
+  dispatchWebhookDelivery = processWebhookDelivery;
+
+  return {
+    recoverWebhookDeliveries: () => runtime.runPromise(recoverWebhookDeliveryScheduling()),
+    runtime,
+    processSyncJob,
+    processWebhookDelivery,
+  };
+};
+
 const startLegacyBullmqWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHandle> => {
   if (env.redisUrl === null) {
     throw new Error("REDIS_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq");
   }
 
-  const runtime = createWorkerRuntime(env);
-  const processSyncJob = createProcessSyncJob(runtime);
+  const effectRuntime = createWorkerProcessorRuntime(env);
+  const recoveredWebhookDeliveries = await effectRuntime.recoverWebhookDeliveries();
+
+  if (recoveredWebhookDeliveries.length > 0) {
+    console.log(
+      `recovered ${recoveredWebhookDeliveries.length} durable webhook deliveries for retry scheduling`,
+    );
+  }
   const [{ Worker }, { createRedisConnectionOptions, SYNC_MAILBOX_QUEUE }] = await Promise.all([
     import("bullmq"),
     import("@mailmon/queue"),
@@ -28,7 +93,7 @@ const startLegacyBullmqWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRun
   const worker = new Worker(
     SYNC_MAILBOX_QUEUE,
     async (job) => {
-      await processSyncJob(job.data);
+      await effectRuntime.processSyncJob(job.data);
     },
     {
       connection,
@@ -46,19 +111,27 @@ const startLegacyBullmqWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRun
   return {
     close: async () => {
       await worker.close();
-      await runtime.dispose();
+      await effectRuntime.runtime.dispose();
     },
     kind: "legacy_bullmq",
   };
 };
 
 const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHandle> => {
-  const effectRuntime = createWorkerRuntime(env);
+  const effectRuntime = createWorkerProcessorRuntime(env);
+  const recoveredWebhookDeliveries = await effectRuntime.recoverWebhookDeliveries();
+
+  if (recoveredWebhookDeliveries.length > 0) {
+    console.log(
+      `recovered ${recoveredWebhookDeliveries.length} durable webhook deliveries for retry scheduling`,
+    );
+  }
   const httpRuntime = await startWorkerHttpRuntime({
     asyncTransportMode: env.asyncTransportMode,
     host: env.host,
     port: env.port,
-    processSyncJob: createProcessSyncJob(effectRuntime),
+    processSyncJob: effectRuntime.processSyncJob,
+    processWebhookDelivery: effectRuntime.processWebhookDelivery,
   });
 
   console.log(
@@ -68,7 +141,7 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
   return {
     close: async () => {
       await httpRuntime.close();
-      await effectRuntime.dispose();
+      await effectRuntime.runtime.dispose();
     },
     kind: "http",
   };
