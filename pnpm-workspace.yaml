@@ -10,19 +10,20 @@ catalog:
   "@types/node": ^25.5.0
   effect: ^3.21.0
   typescript: ^6.0.2
+enableGlobalVirtualStore: true
 
 engineStrict: true
-packageManagerStrictVersion: true
-verifyDepsBeforeRun: error
-enableGlobalVirtualStore: true
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
   - esbuild
   - msgpackr-extract
+  - protobufjs
 
 packageExtensions:
   drizzle-kit:
     dependencies:
       drizzle-orm: "*"
       postgres: "*"
+packageManagerStrictVersion: true
+verifyDepsBeforeRun: error
