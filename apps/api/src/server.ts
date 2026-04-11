@@ -20,7 +20,7 @@ import {
 import { Effect, ManagedRuntime } from "effect";
 import { Hono } from "hono";
 
-export type ApiServerRuntime = Pick<ManagedRuntime.ManagedRuntime<any, any>, "runPromise">;
+type ApiServerRuntime = Pick<ManagedRuntime.ManagedRuntime<any, any>, "runPromise">;
 
 const createProblemResponse = (problem: ProblemDetails) => {
   return new Response(JSON.stringify(problem), {

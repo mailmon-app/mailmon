@@ -15,6 +15,8 @@
     "db:migrate": "turbo run db:migrate --filter=@mailmon/db",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
+    "effect-solutions:list": "effect-solutions list",
+    "effect-solutions:show": "effect-solutions show",
     "lint-staged": "lint-staged",
     "prepare": "effect-language-service patch && husky"
   },

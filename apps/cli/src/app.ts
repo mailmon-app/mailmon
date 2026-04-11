@@ -5,16 +5,12 @@ import { createCorePersistenceLayer } from "@mailmon/db";
 import { createLocalAsyncTransportLayer } from "@mailmon/queue";
 import { Console, Effect, Layer, ManagedRuntime, Option } from "effect";
 
-export interface ListenCommandOptions {
-  readonly forwardTo: Option.Option<string>;
-}
-
-export const forwardToOption = Options.text("forward-to").pipe(
+const forwardToOption = Options.text("forward-to").pipe(
   Options.optional,
   Options.withDescription("Forward webhook deliveries to a local HTTP endpoint"),
 );
 
-export const getListenMessage = (options: ListenCommandOptions) =>
+export const getListenMessage = (options: { readonly forwardTo: Option.Option<string> }) =>
   Effect.gen(function* () {
     const config = yield* MailmonCliConfig;
     const transportDescription =
@@ -29,17 +25,13 @@ export const getListenMessage = (options: ListenCommandOptions) =>
     });
   });
 
-export const runListen = (options: ListenCommandOptions) =>
+const runListen = (options: { readonly forwardTo: Option.Option<string> }) =>
   Effect.gen(function* () {
     const message = yield* getListenMessage(options);
     yield* Console.log(message);
   });
 
-export interface SyncMailboxCommandOptions {
-  readonly mailboxId: string;
-}
-
-export const runSyncMailbox = (options: SyncMailboxCommandOptions) =>
+const runSyncMailbox = (options: { readonly mailboxId: string }) =>
   Effect.gen(function* () {
     const config = yield* MailmonCliConfig;
 
@@ -74,11 +66,11 @@ export const runSyncMailbox = (options: SyncMailboxCommandOptions) =>
     yield* Console.log(`dispatched mailbox sync for ${options.mailboxId}`);
   });
 
-export const listenCommand = Command.make("listen", { forwardTo: forwardToOption }, (options) =>
+const listenCommand = Command.make("listen", { forwardTo: forwardToOption }, (options) =>
   runListen(options),
 ).pipe(Command.withDescription("Listen for local mailmon events"));
 
-export const syncMailboxCommand = Command.make(
+const syncMailboxCommand = Command.make(
   "sync-mailbox",
   {
     mailboxId: Args.text({

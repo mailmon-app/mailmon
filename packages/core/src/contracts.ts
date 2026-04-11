@@ -13,7 +13,11 @@ export const MailboxEventTypeSchema = Schema.Literal(
   "message.updated",
   "thread.updated",
 );
-export const WebhookEventTypeSchema = MailboxEventTypeSchema;
+export const WebhookEventTypeSchema = Schema.Literal(
+  "message.created",
+  "message.updated",
+  "thread.updated",
+);
 export const WebhookEndpointDeliveryStateSchema = Schema.Literal("healthy", "degraded", "failing");
 export const ReplayStatusSchema = Schema.Literal(
   "queued",
@@ -49,7 +53,7 @@ export type MailboxStatus = Schema.Schema.Type<typeof MailboxStatusSchema>;
 export type MailboxSyncState = Schema.Schema.Type<typeof MailboxSyncStateSchema>;
 export type MailboxWatchState = Schema.Schema.Type<typeof MailboxWatchStateSchema>;
 export type MailboxEventType = Schema.Schema.Type<typeof MailboxEventTypeSchema>;
-export type WebhookEventType = MailboxEventType;
+export type WebhookEventType = Schema.Schema.Type<typeof WebhookEventTypeSchema>;
 export type WebhookEndpointDeliveryState = Schema.Schema.Type<
   typeof WebhookEndpointDeliveryStateSchema
 >;
