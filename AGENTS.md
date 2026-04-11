@@ -36,7 +36,7 @@ The repo is organized as:
 - `packages/queue`: async/runtime adapter package. It now contains local async transport layers and still retains Redis/BullMQ compatibility helpers as transitional scaffolding.
 - `packages/config`: shared environment/config layers. It now models async transport mode explicitly (`local`, `gcp`, `legacy_bullmq`) instead of treating Redis as part of common runtime config.
 - `apps/api`: thin Hono HTTP adapter. It should decode requests, call core use cases, and map failures to HTTP.
-- `apps/worker`: thin async execution adapter. It now defaults to an internal HTTP runtime for `local`/`gcp` modes and only uses BullMQ in the explicit `legacy_bullmq` fallback mode.
+- `apps/worker`: thin async execution adapter. It now uses an internal HTTP runtime for `local`, fails fast for `gcp` until the Phase 6d delivery adapter exists, and only uses BullMQ in the explicit `legacy_bullmq` fallback mode.
 - `apps/cli`: Effect CLI for local development and operator flows.
 
 ## Architecture Rules
@@ -50,7 +50,7 @@ The repo is organized as:
 - Structured API problems live in core and should remain problem-details style.
 - Production async execution is GCP-first: Pub/Sub for wake-ups and mailbox dispatch, Cloud Tasks for directed webhook delivery, Cloud Run Jobs for scheduled control work.
 - Local development should use lightweight local adapters instead of requiring Pub/Sub, Cloud Tasks, or Cloud Scheduler emulation.
-- Worker runtime mode is chosen through `MAILMON_ASYNC_TRANSPORT_MODE`; prefer `local` or `gcp`, and treat `legacy_bullmq` as fallback scaffolding only.
+- Worker runtime mode is chosen through `MAILMON_ASYNC_TRANSPORT_MODE`; use `local` today, treat `gcp` as reserved until the real Phase 6d delivery adapter exists, and keep `legacy_bullmq` only as fallback scaffolding.
 - Internal worker HTTP routes (`/health`, `/internal/sync`, `/internal/gmail-push`, `/internal/webhook-deliveries`) are transport/runtime interfaces, not domain logic boundaries.
 
 ## Terminology Rules
@@ -83,9 +83,10 @@ Current bootstrap note:
 - Mailbox creation and hosted Gmail OAuth/connect-session flow are now real: the API authenticates workspace-scoped API keys, persists DB-backed connect sessions, exchanges Gmail OAuth codes for refresh tokens, creates workspace-scoped mailboxes, and dispatches the initial sync automatically.
 - Webhook endpoint registration and mailbox-scoped subscription creation are now real: the API exposes `POST /v1/webhook-endpoints` and `POST /v1/webhook-endpoints/{endpoint_id}/subscriptions`, core owns the shared contracts and use cases, and `packages/db` persists delivery secrets and subscriptions.
 - Durable mailbox event emission is now real: sync finalization diffs canonical pre-state, persists `message.created`, `message.updated`, and `thread.updated` rows into `mailbox_events` with stable `evt_...` IDs, and commits mailbox state, cursor advancement, sync run completion, and mailbox event insertion atomically.
+- Local webhook delivery is now real: durable `webhook_deliveries` are scheduled from mailbox events, retries and endpoint health transitions run through the shared core workflow, and worker startup re-arms pending or stale in-flight deliveries from Postgres.
 - Local verification for the connect flow still uses a mock Gmail OAuth/API server rather than live Google credentials.
 - `packages/queue` now contains usable local transport adapters, but BullMQ/Redis helpers are still present for compatibility.
-- `apps/worker` now defaults to HTTP runtime modes, but the BullMQ path is still present as `legacy_bullmq` scaffolding.
+- `apps/worker` now runs the local HTTP runtime with in-process retry scheduling and startup recovery, fails fast in `gcp` mode until the Cloud Tasks-backed adapter exists, and still retains the BullMQ path as `legacy_bullmq` scaffolding.
 - Treat all of those as scaffolding to replace, not as the final production design.
 
 Current planning note:

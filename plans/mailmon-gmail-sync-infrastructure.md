@@ -193,9 +193,9 @@ Break this phase into four implementation slices so event semantics and delivery
 - **Phase 6b: Durable Event Emission** (completed)
   - diff sync-applied canonical state into `message.created`, `message.updated`, and `thread.updated`
   - persist mailbox events transactionally with sync finalization
-- **Phase 6c: Local Delivery Runtime**
+- **Phase 6c: Local Delivery Runtime** (completed)
   - schedule webhook deliveries from durable mailbox events
-  - implement local `/internal/webhook-deliveries` handling, retries, and endpoint health transitions
+  - implement local `/internal/webhook-deliveries` handling, retries, endpoint health transitions, and startup recovery for pending/in-flight deliveries
 - **Phase 6d: GCP Delivery Adapter**
   - map the transport-neutral delivery scheduler onto Cloud Tasks semantics for staging/production
   - preserve the same core delivery workflow used in local mode
@@ -206,9 +206,9 @@ Break this phase into four implementation slices so event semantics and delivery
 - [x] `POST /v1/webhook-endpoints/{endpoint_id}/subscriptions` stores mailbox-scoped subscriptions
 - [x] Sync-generated state changes create durable mailbox events with stable IDs
 - [x] Mailbox state writes, mailbox event inserts, cursor advancement, and sync run completion commit transactionally
-- [ ] Delivery scheduling starts from durable mailbox event records and not from inline endpoint calls inside sync execution
-- [ ] Webhook deliveries retry on timeout and `5xx`
-- [ ] Endpoint health reflects repeated delivery failures without breaking unrelated API reads
+- [x] Delivery scheduling starts from durable mailbox event records and not from inline endpoint calls inside sync execution
+- [x] Webhook deliveries retry on timeout and `5xx`
+- [x] Endpoint health reflects repeated delivery failures without breaking unrelated API reads
 - [ ] Delivery scheduling is transport-neutral in core and can run through local adapters in development and Cloud Tasks in staging/production
 
 ---
