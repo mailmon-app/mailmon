@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 
 import { describe, expect, it } from "@effect/vitest";
-import { MailboxStateStore, type MailboxEventEnvelope, type MailboxSyncSnapshot } from "@mailmon/core";
+import {
+  MailboxStateStore,
+  type MailboxEventEnvelope,
+  type MailboxSyncSnapshot,
+} from "@mailmon/core";
 import { asc, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import postgres from "postgres";
@@ -143,10 +147,9 @@ const createDatabaseName = () => {
 
 const readMigrationStatements = async () => {
   const entries = await readdir(migrationDirectory);
+  const migrationFiles = entries.filter((entry) => entry.endsWith(".sql"));
   // oxlint-disable-next-line unicorn/no-array-sort
-  const migrationFiles = entries
-    .filter((entry) => entry.endsWith(".sql"))
-    .toSorted((left, right) => left.localeCompare(right));
+  migrationFiles.sort((left, right) => left.localeCompare(right));
 
   const statements = await Promise.all(
     migrationFiles.map(async (migrationFile: string) => {
@@ -372,7 +375,10 @@ const fetchCanonicalStateCounts = async (connectionString: string) => {
   }
 };
 
-const findMailboxEvent = (events: ReadonlyArray<typeof schema.mailboxEvents.$inferSelect>, id: string) => {
+const findMailboxEvent = (
+  events: ReadonlyArray<typeof schema.mailboxEvents.$inferSelect>,
+  id: string,
+) => {
   const event = events.find((candidate) => candidate.id === id);
 
   if (event === undefined) {
@@ -414,7 +420,9 @@ describe("DB-backed durable mailbox event emission", () => {
 
         return Effect.gen(function* () {
           yield* Effect.promise(() => seedMailboxFixture(connectionString));
-          yield* Effect.promise(() => armMailboxSync(connectionString, { syncRunId, leaseOwnerId }));
+          yield* Effect.promise(() =>
+            armMailboxSync(connectionString, { syncRunId, leaseOwnerId }),
+          );
 
           const commitResult = yield* applyMailboxSyncResult(connectionString, {
             mailboxId,
@@ -437,12 +445,10 @@ describe("DB-backed durable mailbox event emission", () => {
           expect(new Set(storedEvents.map((event) => event.id))).toEqual(
             new Set(commitResult.mailboxEventIds),
           );
+          const storedEventTypes = storedEvents.map((event) => event.eventType);
           // oxlint-disable-next-line unicorn/no-array-sort
-          expect(
-            storedEvents
-              .map((event) => event.eventType)
-              .toSorted((left, right) => left.localeCompare(right)),
-          ).toEqual(["message.created", "thread.updated"]);
+          storedEventTypes.sort((left, right) => left.localeCompare(right));
+          expect(storedEventTypes).toEqual(["message.created", "thread.updated"]);
 
           const messageCreatedId = commitResult.mailboxEventIds.find((eventId) => {
             return findMailboxEvent(storedEvents, eventId).eventType === "message.created";
@@ -505,77 +511,79 @@ describe("DB-backed durable mailbox event emission", () => {
     "emits only real canonical changes during incremental sync finalization",
     () =>
       withIsolatedDatabase(({ connectionString }) => {
-      const initialSyncRunId = "sr_initial";
-      const incrementalSyncRunId = "sr_incremental";
+        const initialSyncRunId = "sr_initial";
+        const incrementalSyncRunId = "sr_incremental";
 
-      return Effect.gen(function* () {
-        yield* Effect.promise(() => seedMailboxFixture(connectionString));
-        yield* Effect.promise(() =>
-          armMailboxSync(connectionString, {
-            syncRunId: initialSyncRunId,
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => seedMailboxFixture(connectionString));
+          yield* Effect.promise(() =>
+            armMailboxSync(connectionString, {
+              syncRunId: initialSyncRunId,
+              leaseOwnerId: "lease_initial",
+            }),
+          );
+          yield* applyMailboxSyncResult(connectionString, {
+            mailboxId,
             leaseOwnerId: "lease_initial",
-          }),
-        );
-        yield* applyMailboxSyncResult(connectionString, {
-          mailboxId,
-          leaseOwnerId: "lease_initial",
-          nextCursor: "hist_1",
-          snapshot: baselineSnapshot,
-          syncRunId: initialSyncRunId,
-          syncedAt: "2026-04-09T09:30:05.000Z",
-        });
-        yield* Effect.promise(() =>
-          armMailboxSync(connectionString, {
-            syncRunId: incrementalSyncRunId,
+            nextCursor: "hist_1",
+            snapshot: baselineSnapshot,
+            syncRunId: initialSyncRunId,
+            syncedAt: "2026-04-09T09:30:05.000Z",
+          });
+          yield* Effect.promise(() =>
+            armMailboxSync(connectionString, {
+              syncRunId: incrementalSyncRunId,
+              leaseOwnerId: "lease_incremental",
+            }),
+          );
+
+          const commitResult = yield* applyMailboxSyncResult(connectionString, {
+            mailboxId,
             leaseOwnerId: "lease_incremental",
-          }),
-        );
+            nextCursor: "hist_2",
+            snapshot: updatedMessageSnapshot,
+            syncRunId: incrementalSyncRunId,
+            syncedAt: "2026-04-09T09:31:00.000Z",
+          });
+          const storedEvents = yield* Effect.promise(() => fetchMailboxEvents(connectionString));
+          const [incrementalEventId] = commitResult.mailboxEventIds;
 
-        const commitResult = yield* applyMailboxSyncResult(connectionString, {
-          mailboxId,
-          leaseOwnerId: "lease_incremental",
-          nextCursor: "hist_2",
-          snapshot: updatedMessageSnapshot,
-          syncRunId: incrementalSyncRunId,
-          syncedAt: "2026-04-09T09:31:00.000Z",
+          if (incrementalEventId === undefined) {
+            throw new Error("Expected the incremental sync to emit a mailbox event.");
+          }
+
+          const incrementalEvent = findMailboxEvent(storedEvents, incrementalEventId);
+
+          expect(commitResult).toEqual({
+            applied: true,
+            mailboxEventIds: [expect.stringMatching(/^evt_/)],
+          });
+          expect(incrementalEvent.eventType).toBe("message.updated");
+          expectMailboxEventPayload(incrementalEvent.payload, {
+            id: incrementalEvent.id,
+            type: "message.updated",
+            occurredAt: "2026-04-09T09:31:00.000Z",
+            data: {
+              messageId: "msg_demo",
+              threadId: "thr_demo",
+              providerMessageId: "gmail_msg_demo",
+              providerThreadId: "gmail_thr_demo",
+              subject: "Welcome to Mailmon",
+              snippet: "Your mailbox baseline sync is now durable.",
+              receivedAt: "2026-04-09T09:30:00.000Z",
+              labelIds: ["INBOX", "UNREAD"],
+            },
+          });
+          const storedEventTypes = storedEvents.map((event) => event.eventType);
+          // oxlint-disable-next-line unicorn/no-array-sort
+          storedEventTypes.sort((left, right) => left.localeCompare(right));
+          expect(storedEventTypes).toEqual([
+            "message.created",
+            "message.updated",
+            "thread.updated",
+          ]);
         });
-        const storedEvents = yield* Effect.promise(() => fetchMailboxEvents(connectionString));
-        const [incrementalEventId] = commitResult.mailboxEventIds;
-
-        if (incrementalEventId === undefined) {
-          throw new Error("Expected the incremental sync to emit a mailbox event.");
-        }
-
-        const incrementalEvent = findMailboxEvent(storedEvents, incrementalEventId);
-
-        expect(commitResult).toEqual({
-          applied: true,
-          mailboxEventIds: [expect.stringMatching(/^evt_/)],
-        });
-        expect(incrementalEvent.eventType).toBe("message.updated");
-        expectMailboxEventPayload(incrementalEvent.payload, {
-          id: incrementalEvent.id,
-          type: "message.updated",
-          occurredAt: "2026-04-09T09:31:00.000Z",
-          data: {
-            messageId: "msg_demo",
-            threadId: "thr_demo",
-            providerMessageId: "gmail_msg_demo",
-            providerThreadId: "gmail_thr_demo",
-            subject: "Welcome to Mailmon",
-            snippet: "Your mailbox baseline sync is now durable.",
-            receivedAt: "2026-04-09T09:30:00.000Z",
-            labelIds: ["INBOX", "UNREAD"],
-          },
-        });
-        // oxlint-disable-next-line unicorn/no-array-sort
-        expect(
-          storedEvents
-            .map((event) => event.eventType)
-            .toSorted((left, right) => left.localeCompare(right)),
-        ).toEqual(["message.created", "message.updated", "thread.updated"]);
-      });
-    }),
+      }),
     15_000,
   );
 

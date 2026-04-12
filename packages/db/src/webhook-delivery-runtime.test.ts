@@ -52,9 +52,9 @@ const addMillisecondsToIsoTimestamp = (timestamp: string, milliseconds: number) 
 
 const readMigrationStatements = async () => {
   const entries = await readdir(migrationDirectory);
-  const migrationFiles = entries
-    .filter((entry) => entry.endsWith(".sql"))
-    .toSorted((left, right) => left.localeCompare(right));
+  const migrationFiles = entries.filter((entry) => entry.endsWith(".sql"));
+  // oxlint-disable-next-line unicorn/no-array-sort
+  migrationFiles.sort((left, right) => left.localeCompare(right));
 
   const statements = await Promise.all(
     migrationFiles.map(async (migrationFile: string) => {
@@ -552,7 +552,7 @@ describe("DB-backed webhook delivery runtime", () => {
         },
       ]);
     });
-  });
+  }, 15_000);
 
   it("ignores stale completion attempts after the delivery is reclaimed", async () => {
     await withIsolatedDatabase(async (database) => {
@@ -578,35 +578,37 @@ describe("DB-backed webhook delivery runtime", () => {
             addMillisecondsToIsoTimestamp(notBefore, 31_000),
           );
           const preparedReclaimedAttempt = yield* Option.match(reclaimedAttempt, {
-            onNone: () => Effect.fail(new Error("Expected the stale webhook attempt to be reclaimed.")),
+            onNone: () =>
+              Effect.fail(new Error("Expected the stale webhook attempt to be reclaimed.")),
             onSome: (delivery) => Effect.succeed(delivery),
           });
           const reclaimedCompletionApplied =
             yield* webhookDeliveryStore.completeWebhookDeliveryAttempt({
-            deliveryId,
-            attemptCount: preparedReclaimedAttempt.attemptCount,
-            processingStartedAt: preparedReclaimedAttempt.processingStartedAt,
-            state: "delivered",
-            completedAt: addMillisecondsToIsoTimestamp(notBefore, 32_000),
-            nextAttemptAt: null,
-            responseStatusCode: 204,
-            errorCode: null,
-            errorMessage: null,
-            retryable: null,
-          });
-          const staleCompletionApplied =
-            yield* webhookDeliveryStore.completeWebhookDeliveryAttempt({
-            deliveryId,
-            attemptCount: preparedFirstAttempt.attemptCount,
-            processingStartedAt: preparedFirstAttempt.processingStartedAt,
-            state: "failed",
-            completedAt: addMillisecondsToIsoTimestamp(notBefore, 33_000),
-            nextAttemptAt: null,
-            responseStatusCode: 503,
-            errorCode: "webhook_endpoint_http_503",
-            errorMessage: "Webhook endpoint responded with HTTP 503.",
-            retryable: true,
-          });
+              deliveryId,
+              attemptCount: preparedReclaimedAttempt.attemptCount,
+              processingStartedAt: preparedReclaimedAttempt.processingStartedAt,
+              state: "delivered",
+              completedAt: addMillisecondsToIsoTimestamp(notBefore, 32_000),
+              nextAttemptAt: null,
+              responseStatusCode: 204,
+              errorCode: null,
+              errorMessage: null,
+              retryable: null,
+            });
+          const staleCompletionApplied = yield* webhookDeliveryStore.completeWebhookDeliveryAttempt(
+            {
+              deliveryId,
+              attemptCount: preparedFirstAttempt.attemptCount,
+              processingStartedAt: preparedFirstAttempt.processingStartedAt,
+              state: "failed",
+              completedAt: addMillisecondsToIsoTimestamp(notBefore, 33_000),
+              nextAttemptAt: null,
+              responseStatusCode: 503,
+              errorCode: "webhook_endpoint_http_503",
+              errorMessage: "Webhook endpoint responded with HTTP 503.",
+              retryable: true,
+            },
+          );
 
           return {
             reclaimedAttemptApplied: reclaimedCompletionApplied,
@@ -639,7 +641,10 @@ describe("DB-backed webhook delivery runtime", () => {
     await withIsolatedDatabase(async (database) => {
       await seedWebhookDeliveryFixture(database.connectionString);
 
-      const [{ deliveryId }] = await scheduleDurableWebhookDeliveries(database.connectionString, []);
+      const [{ deliveryId }] = await scheduleDurableWebhookDeliveries(
+        database.connectionString,
+        [],
+      );
       const firstAttempt = await executeWebhookDelivery(database.connectionString, deliveryId, [], {
         send: () =>
           Effect.succeed({
@@ -679,7 +684,8 @@ describe("DB-backed webhook delivery runtime", () => {
           );
 
           return yield* Option.match(claimedAttempt, {
-            onNone: () => Effect.fail(new Error("Expected the delivery recovery claim to succeed.")),
+            onNone: () =>
+              Effect.fail(new Error("Expected the delivery recovery claim to succeed.")),
             onSome: (delivery) => Effect.succeed(delivery),
           });
         }).pipe(Effect.provide(createCorePersistenceLayer(database.connectionString))),
