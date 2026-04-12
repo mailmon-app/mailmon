@@ -56,7 +56,10 @@ export const createBootstrapMailboxStateStoreLayer = Layer.succeed(MailboxStateS
   applySyncResult: ({ eventsEmitted }) =>
     Effect.succeed({
       applied: true,
-      mailboxEventIds: Array.from({ length: eventsEmitted }, (_, index) => `evt_bootstrap_${index}`),
+      mailboxEventIds: Array.from(
+        { length: eventsEmitted },
+        (_, index) => `evt_bootstrap_${index}`,
+      ),
     }),
 });
 

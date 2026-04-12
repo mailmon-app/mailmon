@@ -695,11 +695,7 @@ export const runWebhookDelivery = (deliveryId: string) =>
         webhookDeliverySender.send(delivery, attemptedAt).pipe(
           Effect.match({
             onFailure: (failure) =>
-              classifyWebhookDeliveryFailure(
-                delivery,
-                new Date().toISOString(),
-                failure,
-              ),
+              classifyWebhookDeliveryFailure(delivery, new Date().toISOString(), failure),
             onSuccess: (response) =>
               classifyWebhookDeliveryResponse(
                 delivery,

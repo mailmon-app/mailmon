@@ -475,10 +475,7 @@ const normalizeLabelIds = (labelIds: ReadonlyArray<string>) => {
   return [...new Set(labelIds)].toSorted();
 };
 
-const hasSameStringArrayValues = (
-  left: ReadonlyArray<string>,
-  right: ReadonlyArray<string>,
-) => {
+const hasSameStringArrayValues = (left: ReadonlyArray<string>, right: ReadonlyArray<string>) => {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 };
 
@@ -987,10 +984,9 @@ export const createWebhookDeliveryStoreLayer = Layer.effect(
             })
             .from(webhookEndpointSubscriptions)
             .where(
-              inArray(
-                webhookEndpointSubscriptions.mailboxId,
-                [...new Set(eventRows.map((event) => event.mailboxId))],
-              ),
+              inArray(webhookEndpointSubscriptions.mailboxId, [
+                ...new Set(eventRows.map((event) => event.mailboxId)),
+              ]),
             );
 
           const createdAt = new Date();
@@ -1600,10 +1596,9 @@ export const createMailboxStateStoreLayer = Layer.effect(
                     .where(
                       and(
                         eq(messages.mailboxId, mailboxId),
-                        inArray(
-                          messages.providerMessageId,
-                          [...snapshot.deletedProviderMessageIds],
-                        ),
+                        inArray(messages.providerMessageId, [
+                          ...snapshot.deletedProviderMessageIds,
+                        ]),
                       ),
                     );
             const existingMessageRows =
@@ -1615,10 +1610,9 @@ export const createMailboxStateStoreLayer = Layer.effect(
                     .where(
                       and(
                         eq(messages.mailboxId, mailboxId),
-                        inArray(
-                          messages.providerMessageId,
-                          [...new Set(snapshot.messages.map((message) => message.providerMessageId))],
-                        ),
+                        inArray(messages.providerMessageId, [
+                          ...new Set(snapshot.messages.map((message) => message.providerMessageId)),
+                        ]),
                       ),
                     );
             const existingMessagesByProviderMessageId = new Map(
@@ -1735,7 +1729,11 @@ export const createMailboxStateStoreLayer = Layer.effect(
                         inArray(messages.providerThreadId, affectedProviderThreadIds),
                       ),
                     )
-                    .orderBy(asc(messages.providerThreadId), desc(messages.receivedAt), desc(messages.id))
+                    .orderBy(
+                      asc(messages.providerThreadId),
+                      desc(messages.receivedAt),
+                      desc(messages.id),
+                    )
                     .then((rows) => {
                       const recalculatedThreads = new Map<string, CanonicalThreadRecord>();
 
@@ -1818,7 +1816,9 @@ export const createMailboxStateStoreLayer = Layer.effect(
               });
 
             if (updatedMailbox === undefined) {
-              throw new Error(`Mailbox ${mailboxId} could not be finalized after sync application.`);
+              throw new Error(
+                `Mailbox ${mailboxId} could not be finalized after sync application.`,
+              );
             }
 
             const [updatedSyncRun] = await transaction
@@ -1836,7 +1836,9 @@ export const createMailboxStateStoreLayer = Layer.effect(
               });
 
             if (updatedSyncRun === undefined) {
-              throw new Error(`Sync run ${syncRunId} could not be finalized after sync application.`);
+              throw new Error(
+                `Sync run ${syncRunId} could not be finalized after sync application.`,
+              );
             }
 
             return {
