@@ -261,7 +261,7 @@ Harden the system for production behavior under failure and scale. This slice fo
 
 ### Acceptance criteria
 
-- [ ] Revoked or unrefreshable Gmail tokens move mailboxes into `reconnect_required`
+- [x] Revoked or unrefreshable Gmail tokens, and unreadable or missing persisted Gmail credentials, move mailboxes into `reconnect_required`
 - [x] Persisted Gmail refresh tokens are encrypted before any staging or production rollout
 - [ ] Legacy plaintext Gmail refresh tokens can be identified and either migrated to encrypted envelopes or moved into a controlled reconnect flow before production rollout
 - [ ] Refresh-token encryption supports key rotation or rewrap without leaving persisted mailbox credentials unreadable
