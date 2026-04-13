@@ -59,7 +59,7 @@ Durable decisions that apply across all phases:
   - sync run outcomes distinguish executed, skipped-due-to-active-lease, failed-after-acquisition, and lease-lost paths
 - **Provider boundary**: Gmail-specific behavior stays in `@mailmon/gmail`; no app should call Gmail APIs directly.
 - **Error model**: synchronous API failures use problem-details style envelopes; mailbox and delivery degradation are represented on resources.
-- **Secrets and token handling**: application secrets live in Secret Manager; Gmail refresh tokens are encrypted with Cloud KMS-backed application logic before persistence.
+- **Secrets and token handling**: application secrets live in Secret Manager; Gmail refresh tokens are encrypted in application logic before persistence, and staging/production key material should be managed through GCP secret infrastructure rather than stored inline with application config.
 - **Read model**:
   - public `messages` and `threads` reads are mailbox-scoped, newest-first, and paginated with opaque cursors
   - mailbox-scoped read paths require supporting database indexes so API pagination does not regress as mailbox size grows
@@ -262,7 +262,9 @@ Harden the system for production behavior under failure and scale. This slice fo
 ### Acceptance criteria
 
 - [ ] Revoked or unrefreshable Gmail tokens move mailboxes into `reconnect_required`
-- [ ] Persisted Gmail refresh tokens are encrypted before any staging or production rollout
+- [x] Persisted Gmail refresh tokens are encrypted before any staging or production rollout
+- [ ] Legacy plaintext Gmail refresh tokens can be identified and either migrated to encrypted envelopes or moved into a controlled reconnect flow before production rollout
+- [ ] Refresh-token encryption supports key rotation or rewrap without leaving persisted mailbox credentials unreadable
 - [ ] Watch expiration is detected and mailboxes move through `expiring` and `expired` states appropriately
 - [ ] Staging and production include Gmail watch registration, renewal, and Pub/Sub push ingress handling
 - [ ] Gmail `429` and `403` rate limits degrade mailbox sync state without surfacing as unrelated synchronous API failures
