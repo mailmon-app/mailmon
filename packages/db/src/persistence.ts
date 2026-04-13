@@ -762,12 +762,59 @@ const toWebhookDeliveryRecoverySchedule = (
 
 const getMailboxSyncFailureState = (
   result: CompletedSyncRun,
-): Pick<
-  MailboxRow,
-  "lastErrorCode" | "lastErrorMessage" | "lastErrorOccurredAt" | "lastErrorRetryable" | "syncState"
+): Partial<
+  Pick<
+    MailboxRow,
+    | "lastErrorCode"
+    | "lastErrorMessage"
+    | "lastErrorOccurredAt"
+    | "lastErrorRetryable"
+    | "status"
+    | "syncState"
+  >
 > | null => {
-  if (result.status === "completed" || result.status === "skipped_due_to_active_lease") {
+  if (
+    result.status === "completed" ||
+    result.status === "skipped_due_to_active_lease" ||
+    (result.status === "reconnect_required" && result.detail === "mailbox_reconnect_required")
+  ) {
     return null;
+  }
+
+  if (result.detail === "gmail_token_refresh_reconnect_required") {
+    return {
+      lastErrorCode: result.detail,
+      lastErrorMessage:
+        "Refreshing the Gmail access token failed because the stored Gmail refresh token is invalid or revoked. The mailbox must be reconnected.",
+      lastErrorOccurredAt: toDate(result.completedAt),
+      lastErrorRetryable: false,
+      status: "reconnect_required",
+      syncState: "failed",
+    };
+  }
+
+  if (result.detail === "gmail_mailbox_credential_unreadable") {
+    return {
+      lastErrorCode: result.detail,
+      lastErrorMessage:
+        "Mailbox has a stored Gmail refresh token that could not be decrypted. The mailbox must be reconnected.",
+      lastErrorOccurredAt: toDate(result.completedAt),
+      lastErrorRetryable: false,
+      status: "reconnect_required",
+      syncState: "failed",
+    };
+  }
+
+  if (result.detail === "gmail_mailbox_credentials_missing") {
+    return {
+      lastErrorCode: result.detail,
+      lastErrorMessage:
+        "Mailbox has no stored Gmail refresh token. The mailbox must be reconnected.",
+      lastErrorOccurredAt: toDate(result.completedAt),
+      lastErrorRetryable: false,
+      status: "reconnect_required",
+      syncState: "failed",
+    };
   }
 
   return {
@@ -1977,7 +2024,11 @@ export const createSyncRunStoreLayer = Layer.effect(
               })
               .where(eq(syncRuns.id, result.syncRunId));
 
-            if (result.status === "skipped_due_to_active_lease") {
+            if (
+              result.status === "skipped_due_to_active_lease" ||
+              (result.status === "reconnect_required" &&
+                result.detail === "mailbox_reconnect_required")
+            ) {
               return;
             }
 

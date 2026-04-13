@@ -408,6 +408,63 @@ describe("createHttpGmailSyncProviderLayer", () => {
     });
   });
 
+  it("classifies revoked refresh tokens as reconnect_required failures", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        return new Response(
+          JSON.stringify({
+            error: "invalid_grant",
+            error_description:
+              "Token has been expired or revoked. The mailbox must be reconnected.",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 400,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxSyncProvider;
+
+        return yield* provider.syncMailbox({
+          mailbox: mailboxFixture,
+          cursor: null,
+        }).pipe(
+          Effect.match({
+            onFailure: (problem) => problem,
+            onSuccess: () => {
+              throw new Error("Expected syncMailbox to fail for revoked refresh tokens.");
+            },
+          }),
+        );
+      }).pipe(
+        Effect.provide(
+          createHttpGmailSyncProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }).pipe(Layer.provide(credentialStoreLayer)),
+        ),
+      ),
+    );
+
+    expect(result).toMatchObject({
+      code: "gmail_token_refresh_reconnect_required",
+      retryable: false,
+      status: 401,
+      title: "Gmail reconnect required",
+    });
+  });
+
   it("deduplicates repeated history references and keeps deletes dominant", async () => {
     const fetchedMessageIds: Array<string> = [];
     const fetchImpl: typeof fetch = async (input) => {

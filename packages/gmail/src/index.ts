@@ -282,6 +282,10 @@ const isStringArray = (value: unknown): value is ReadonlyArray<string> => {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 };
 
+const isReadonlyRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
+  return typeof value === "object" && value !== null;
+};
+
 const isGmailHeader = (value: unknown): value is GmailHeader => {
   return isRecord(value) && typeof value.name === "string" && typeof value.value === "string";
 };
@@ -586,6 +590,20 @@ const makeGmailConnectProblem = (params: {
   });
 };
 
+const isReconnectRequiredTokenRefreshPayload = (
+  payload: unknown,
+): payload is Readonly<{
+  error: "invalid_grant";
+  error_description?: string;
+}> => {
+  return (
+    isReadonlyRecord(payload) &&
+    "error" in payload &&
+    payload.error === "invalid_grant" &&
+    (!("error_description" in payload) || typeof payload.error_description === "string")
+  );
+};
+
 const createPkceCodeChallenge = (codeVerifier: string) => {
   return createHash("sha256").update(codeVerifier).digest("base64url");
 };
@@ -784,6 +802,21 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
     });
 
     if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+
+      if (isReconnectRequiredTokenRefreshPayload(payload)) {
+        throw makeGmailProblem({
+          code: "gmail_token_refresh_reconnect_required",
+          detail:
+            payload.error_description ??
+            "Refreshing the Gmail access token failed because the stored refresh token is invalid or revoked. The mailbox must be reconnected.",
+          mailboxId: params.mailboxId,
+          retryable: false,
+          status: 401,
+          title: "Gmail reconnect required",
+        });
+      }
+
       throw makeGmailProblem({
         code: "gmail_token_refresh_failed",
         detail: `Refreshing the Gmail access token failed with HTTP ${response.status}.`,

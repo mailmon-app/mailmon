@@ -29,6 +29,7 @@ export const ReplayStatusSchema = Schema.Literal(
 export const SyncRunOutcomeSchema = Schema.Literal(
   "completed",
   "skipped_due_to_active_lease",
+  "reconnect_required",
   "failed_after_lease_acquired",
   "lease_lost",
 );
@@ -428,4 +429,14 @@ export interface SkippedSyncMailboxResult extends StartedSyncRun {
   readonly nextCursor: null;
 }
 
-export type SyncMailboxResult = CompletedSyncMailboxResult | SkippedSyncMailboxResult;
+export interface ReconnectRequiredSyncMailboxResult extends StartedSyncRun {
+  readonly status: "reconnect_required";
+  readonly completedAt: string;
+  readonly eventsEmitted: 0;
+  readonly nextCursor: null;
+}
+
+export type SyncMailboxResult =
+  | CompletedSyncMailboxResult
+  | ReconnectRequiredSyncMailboxResult
+  | SkippedSyncMailboxResult;

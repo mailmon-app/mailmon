@@ -50,6 +50,11 @@ const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS = 5;
 const DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 5_000;
 const MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 15 * 60_000;
+const TERMINAL_MAILBOX_SYNC_PROBLEM_CODES = new Set([
+  "gmail_mailbox_credentials_missing",
+  "gmail_mailbox_credential_unreadable",
+  "gmail_token_refresh_reconnect_required",
+]);
 
 const addMillisecondsToIsoTimestamp = (timestamp: string, milliseconds: number) => {
   return new Date(Date.parse(timestamp) + milliseconds).toISOString();
@@ -127,6 +132,10 @@ const createSyncRunCompletion = (
     nextCursor: params.nextCursor,
     detail: params.detail ?? null,
   };
+};
+
+const isTerminalMailboxSyncProblem = (code: string) => {
+  return TERMINAL_MAILBOX_SYNC_PROBLEM_CODES.has(code);
 };
 
 const calculateWebhookDeliveryRetryDelayMs = (attemptCount: number) => {
@@ -712,6 +721,31 @@ export const runMailboxSync = (mailboxId: string) =>
   Effect.gen(function* () {
     const mailbox = yield* getMailboxOrFail(mailboxId);
     const syncRunStore = yield* SyncRunStore;
+
+    if (mailbox.status === "reconnect_required") {
+      const syncRun = yield* syncRunStore.startSyncRun(mailbox.id);
+      const completedAt = new Date().toISOString();
+      const completion = createSyncRunCompletion({
+        syncRunId: syncRun.syncRunId,
+        mailboxId: mailbox.id,
+        completedAt,
+        status: "reconnect_required",
+        eventsEmitted: 0,
+        nextCursor: null,
+        detail: "mailbox_reconnect_required",
+      });
+
+      yield* syncRunStore.completeSyncRun(completion);
+
+      return {
+        ...syncRun,
+        status: "reconnect_required",
+        completedAt,
+        eventsEmitted: 0,
+        nextCursor: null,
+      } satisfies SyncMailboxResult;
+    }
+
     const syncCoordinator = yield* MailboxSyncCoordinator;
     const mailboxProvider = yield* MailboxSyncProvider;
     const mailboxStateStore = yield* MailboxStateStore;
@@ -810,8 +844,9 @@ export const runMailboxSync = (mailboxId: string) =>
           syncRunId: syncRun.syncRunId,
           mailboxId: mailbox.id,
           completedAt,
-          status:
-            problem.code === "mailbox_sync_lease_lost"
+          status: isTerminalMailboxSyncProblem(problem.code)
+            ? "reconnect_required"
+            : problem.code === "mailbox_sync_lease_lost"
               ? "lease_lost"
               : "failed_after_lease_acquired",
           eventsEmitted: 0,
@@ -819,7 +854,19 @@ export const runMailboxSync = (mailboxId: string) =>
           detail: problem.code,
         });
 
-        return syncRunStore.completeSyncRun(completion).pipe(Effect.zipRight(Effect.fail(problem)));
+        return syncRunStore.completeSyncRun(completion).pipe(
+          Effect.flatMap(() =>
+            isTerminalMailboxSyncProblem(problem.code)
+              ? Effect.succeed({
+                  ...syncRun,
+                  status: "reconnect_required",
+                  completedAt,
+                  eventsEmitted: 0,
+                  nextCursor: null,
+                } satisfies SyncMailboxResult)
+              : Effect.fail(problem),
+          ),
+        );
       }),
       Effect.ensuring(
         syncCoordinator.releaseMailboxSyncLease({
