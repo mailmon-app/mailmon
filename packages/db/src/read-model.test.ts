@@ -8,7 +8,8 @@ import {
   listMailboxMessages,
   listMailboxThreads,
 } from "@mailmon/core";
-import { Effect } from "effect";
+import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
+import { Effect, Layer } from "effect";
 import postgres from "postgres";
 
 import { createCorePersistenceLayer, createDb, schema } from "./index.js";
@@ -20,6 +21,10 @@ const foreignWorkspaceId = "ws_foreign";
 const primaryMailboxId = "mbx_primary";
 const foreignMailboxId = "mbx_foreign";
 const migrationDirectory = new URL("../drizzle/", import.meta.url);
+const testGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+  allowPlaintextFallback: true,
+  encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+});
 
 interface IsolatedDatabase {
   readonly adminConnectionString: string;
@@ -305,7 +310,9 @@ describe("DB-backed mailbox read hardening", () => {
 
   it.effect("paginates mailbox messages newest-first with opaque cursors", () =>
     withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      );
 
       return Effect.gen(function* () {
         yield* Effect.promise(() => seedReadModelFixtures(connectionString));
@@ -338,7 +345,9 @@ describe("DB-backed mailbox read hardening", () => {
 
   it.effect("paginates mailbox threads newest-first with opaque cursors", () =>
     withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      );
 
       return Effect.gen(function* () {
         yield* Effect.promise(() => seedReadModelFixtures(connectionString));
@@ -371,7 +380,9 @@ describe("DB-backed mailbox read hardening", () => {
 
   it.effect("enforces workspace ownership for mailbox message reads", () =>
     withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      );
 
       return Effect.gen(function* () {
         yield* Effect.promise(() => seedReadModelFixtures(connectionString));
@@ -396,7 +407,9 @@ describe("DB-backed mailbox read hardening", () => {
 
   it.effect("enforces workspace ownership for mailbox thread reads", () =>
     withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      );
 
       return Effect.gen(function* () {
         yield* Effect.promise(() => seedReadModelFixtures(connectionString));

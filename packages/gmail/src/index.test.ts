@@ -3,10 +3,12 @@ import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
+  createAesGcmGmailRefreshTokenCipherLayer,
   createHttpGmailConnectProviderLayer,
   createHttpGmailSyncProviderLayer,
   createStubMailboxSyncProviderLayer,
   GmailMailboxCredentialStore,
+  GmailRefreshTokenCipher,
 } from "./index.js";
 
 const getInputUrl = (input: URL | RequestInfo) => {
@@ -127,6 +129,50 @@ describe("createStubMailboxSyncProviderLayer", () => {
       eventsEmitted: 1,
       nextCursor: "hist_incremental_2",
     });
+  });
+});
+
+describe("createAesGcmGmailRefreshTokenCipherLayer", () => {
+  it("encrypts refresh tokens into an envelope and decrypts them back", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+        const encryptedRefreshToken = yield* cipher.encryptRefreshToken("refresh-token");
+        const decryptedRefreshToken = yield* cipher.decryptRefreshToken(encryptedRefreshToken);
+
+        expect(encryptedRefreshToken).not.toBe("refresh-token");
+        expect(encryptedRefreshToken).toMatch(/^mmrt_v1:/);
+
+        return decryptedRefreshToken;
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+          }),
+        ),
+      ),
+    );
+
+    expect(result).toBe("refresh-token");
+  });
+
+  it("supports legacy plaintext reads when the fallback is enabled", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+
+        return yield* cipher.decryptRefreshToken("legacy-refresh-token");
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            allowPlaintextFallback: true,
+            encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+          }),
+        ),
+      ),
+    );
+
+    expect(result).toBe("legacy-refresh-token");
   });
 });
 

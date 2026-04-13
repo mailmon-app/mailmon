@@ -15,6 +15,7 @@ const workerEnvFixture: WorkerEnv = {
   gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
   gmailOauthClientId: null,
   gmailOauthClientSecret: null,
+  gmailRefreshTokenEncryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
   gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
   gcpProjectId: null,
   gcpRegion: null,

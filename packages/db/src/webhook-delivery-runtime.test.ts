@@ -10,6 +10,7 @@ import {
   WebhookDeliverySender,
   WebhookDeliveryStore,
 } from "@mailmon/core";
+import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 import postgres from "postgres";
@@ -24,6 +25,10 @@ const workspaceId = "ws_delivery";
 const mailboxId = "mbx_delivery";
 const webhookEndpointId = "whe_delivery";
 const mailboxEventId = "evt_delivery";
+const testGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+  allowPlaintextFallback: true,
+  encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+});
 
 interface IsolatedDatabase {
   readonly adminConnectionString: string;
@@ -263,7 +268,9 @@ const scheduleDurableWebhookDeliveries = async (
     scheduleMailboxEventDeliveries([mailboxEventId]).pipe(
       Effect.provide(
         Layer.mergeAll(
-          createCorePersistenceLayer(connectionString),
+          createCorePersistenceLayer(connectionString).pipe(
+            Layer.provide(testGmailRefreshTokenCipherLayer),
+          ),
           Layer.succeed(WebhookDeliveryScheduler, {
             scheduleWebhookDelivery: ({ deliveryId, notBefore }) =>
               Effect.sync(() => {
@@ -291,7 +298,9 @@ const recoverDurableWebhookDeliveries = async (
     recoverWebhookDeliveryScheduling(recoveredAt).pipe(
       Effect.provide(
         Layer.mergeAll(
-          createCorePersistenceLayer(connectionString),
+          createCorePersistenceLayer(connectionString).pipe(
+            Layer.provide(testGmailRefreshTokenCipherLayer),
+          ),
           Layer.succeed(WebhookDeliveryScheduler, {
             scheduleWebhookDelivery: ({ deliveryId, notBefore }) =>
               Effect.sync(() => {
@@ -334,7 +343,9 @@ const executeWebhookDelivery = async (
     runWebhookDelivery(deliveryId).pipe(
       Effect.provide(
         Layer.mergeAll(
-          createCorePersistenceLayer(connectionString),
+          createCorePersistenceLayer(connectionString).pipe(
+            Layer.provide(testGmailRefreshTokenCipherLayer),
+          ),
           Layer.succeed(WebhookDeliveryScheduler, {
             scheduleWebhookDelivery: ({ deliveryId: rescheduledDeliveryId, notBefore }) =>
               Effect.sync(() => {
@@ -614,7 +625,13 @@ describe("DB-backed webhook delivery runtime", () => {
             reclaimedAttemptApplied: reclaimedCompletionApplied,
             staleAttemptApplied: staleCompletionApplied,
           };
-        }).pipe(Effect.provide(createCorePersistenceLayer(database.connectionString))),
+        }).pipe(
+          Effect.provide(
+            createCorePersistenceLayer(database.connectionString).pipe(
+              Layer.provide(testGmailRefreshTokenCipherLayer),
+            ),
+          ),
+        ),
       );
       const delivery = await fetchWebhookDelivery(database.connectionString, deliveryId);
       const endpoint = await fetchWebhookEndpoint(database.connectionString);
@@ -688,7 +705,13 @@ describe("DB-backed webhook delivery runtime", () => {
               Effect.fail(new Error("Expected the delivery recovery claim to succeed.")),
             onSome: (delivery) => Effect.succeed(delivery),
           });
-        }).pipe(Effect.provide(createCorePersistenceLayer(database.connectionString))),
+        }).pipe(
+          Effect.provide(
+            createCorePersistenceLayer(database.connectionString).pipe(
+              Layer.provide(testGmailRefreshTokenCipherLayer),
+            ),
+          ),
+        ),
       );
       const recoveredProcessingRequests: Array<{
         deliveryId: string;

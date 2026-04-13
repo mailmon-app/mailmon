@@ -7,8 +7,9 @@ import {
   createWebhookEndpointSubscription,
   getWebhookEndpointOrFail,
 } from "@mailmon/core";
+import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Layer } from "effect";
 import postgres from "postgres";
 
 import { createCorePersistenceLayer, createDb, schema } from "./index.js";
@@ -20,6 +21,10 @@ const foreignWorkspaceId = "ws_foreign";
 const primaryMailboxId = "mbx_primary";
 const foreignMailboxId = "mbx_foreign";
 const migrationDirectory = new URL("../drizzle/", import.meta.url);
+const testGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+  allowPlaintextFallback: true,
+  encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+});
 
 interface IsolatedDatabase {
   readonly adminConnectionString: string;
@@ -182,7 +187,9 @@ describe("DB-backed webhook endpoint spine", () => {
     "creates webhook endpoints, stores the secret durably, and omits it from read paths",
     () =>
       withIsolatedDatabase(({ connectionString }) => {
-        const persistenceLayer = createCorePersistenceLayer(connectionString);
+        const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+          Layer.provide(testGmailRefreshTokenCipherLayer),
+        );
 
         return Effect.gen(function* () {
           yield* Effect.promise(() => seedWebhookFixtures(connectionString));
@@ -221,7 +228,9 @@ describe("DB-backed webhook endpoint spine", () => {
 
   it.effect("collapses foreign-owned resources to not found in mailbox-scoped subscriptions", () =>
     withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      );
 
       return Effect.gen(function* () {
         yield* Effect.promise(() => seedWebhookFixtures(connectionString));
@@ -281,7 +290,9 @@ describe("DB-backed webhook endpoint spine", () => {
     "returns conflicts for duplicate endpoint urls and duplicate mailbox subscriptions",
     () =>
       withIsolatedDatabase(({ connectionString }) => {
-        const persistenceLayer = createCorePersistenceLayer(connectionString);
+        const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+          Layer.provide(testGmailRefreshTokenCipherLayer),
+        );
 
         return Effect.gen(function* () {
           yield* Effect.promise(() => seedWebhookFixtures(connectionString));
@@ -325,7 +336,9 @@ describe("DB-backed webhook endpoint spine", () => {
 
   it.effect("maps concurrent duplicate endpoint and subscription creates to 409 problems", () =>
     withIsolatedDatabase(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString);
+      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      );
 
       return Effect.gen(function* () {
         yield* Effect.promise(() => seedWebhookFixtures(connectionString));

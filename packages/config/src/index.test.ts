@@ -8,6 +8,8 @@ import {
   WorkerConfig,
 } from "./index.js";
 
+const TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
+
 describe("ApiConfig", () => {
   it.effect("loads config from a provider and applies defaults", () =>
     Effect.gen(function* () {
@@ -20,6 +22,7 @@ describe("ApiConfig", () => {
         gmailOauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
         gmailOauthClientId: null,
         gmailOauthClientSecret: null,
+        gmailRefreshTokenEncryptionKey: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         nodeEnv: "test",
         port: 3000,
@@ -30,6 +33,7 @@ describe("ApiConfig", () => {
       Effect.withConfigProvider(
         ConfigProvider.fromJson({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           NODE_ENV: "test",
         }),
       ),
@@ -48,6 +52,7 @@ describe("WorkerConfig", () => {
         gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
         gmailOauthClientId: null,
         gmailOauthClientSecret: null,
+        gmailRefreshTokenEncryptionKey: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         gcpProjectId: null,
         gcpRegion: null,
@@ -65,6 +70,7 @@ describe("WorkerConfig", () => {
       Effect.withConfigProvider(
         ConfigProvider.fromJson({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           NODE_ENV: "test",
         }),
       ),
@@ -85,6 +91,7 @@ describe("WorkerConfig", () => {
         ConfigProvider.fromJson({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_ASYNC_TRANSPORT_MODE: "legacy_bullmq",
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           NODE_ENV: "test",
           REDIS_URL: "redis://localhost:6379",
         }),
@@ -101,6 +108,7 @@ describe("WorkerConfig", () => {
             ConfigProvider.fromJson({
               DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
               MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
+              MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
               NODE_ENV: "test",
             }),
           ),
@@ -118,6 +126,7 @@ describe("WorkerConfig", () => {
             ConfigProvider.fromJson({
               DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
               MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
+              MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
               MAILMON_WORKER_BASE_URL: "https://worker.example.com",
               NODE_ENV: "test",
             }),
@@ -137,6 +146,7 @@ describe("WorkerConfig", () => {
       expect(config.gcpWebhookDeliveryQueueId).toBe(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID);
       expect(config.workerBaseUrl).toBe("https://worker.example.com");
       expect(config.host).toBe("0.0.0.0");
+      expect(config.gmailRefreshTokenEncryptionKey).toBe(TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY);
     }).pipe(
       Effect.provide(WorkerConfig.layer),
       Effect.withConfigProvider(
@@ -145,6 +155,7 @@ describe("WorkerConfig", () => {
           GCP_PROJECT_ID: "mailmon-staging",
           GCP_REGION: "us-central1",
           MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           MAILMON_WORKER_BASE_URL: "https://worker.example.com",
           NODE_ENV: "test",
         }),
@@ -161,6 +172,7 @@ describe("CliConfig", () => {
       expect(config).toEqual({
         asyncTransportMode: "local",
         databaseUrl: null,
+        gmailRefreshTokenEncryptionKey: null,
         nodeEnv: "test",
         workerBaseUrl: "http://127.0.0.1:3001",
       });

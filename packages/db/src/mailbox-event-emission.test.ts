@@ -7,8 +7,9 @@ import {
   type MailboxEventEnvelope,
   type MailboxSyncSnapshot,
 } from "@mailmon/core";
+import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { asc, eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import postgres from "postgres";
 
 import { createCorePersistenceLayer, createDb, schema } from "./index.js";
@@ -19,6 +20,10 @@ const workspaceId = "ws_events";
 const mailboxId = "mbx_events";
 const tenantExternalId = "tenant_events";
 const migrationDirectory = new URL("../drizzle/", import.meta.url);
+const testGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+  allowPlaintextFallback: true,
+  encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+});
 
 const baselineSnapshot: MailboxSyncSnapshot = {
   deletedProviderMessageIds: [],
@@ -311,7 +316,13 @@ const applyMailboxSyncResult = (
       syncRunId: params.syncRunId,
       syncedAt: params.syncedAt,
     });
-  }).pipe(Effect.provide(createCorePersistenceLayer(connectionString)));
+  }).pipe(
+    Effect.provide(
+      createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      ),
+    ),
+  );
 };
 
 const fetchMailboxEvents = async (connectionString: string) => {
