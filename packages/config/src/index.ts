@@ -34,6 +34,9 @@ const loadGmailOauthClientSecret = Config.option(
 const loadGmailOauthAuthorizeUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_AUTHORIZE_URL").pipe(
   Config.orElse(() => Config.succeed("https://accounts.google.com/o/oauth2/v2/auth")),
 );
+const loadGmailRefreshTokenEncryptionKey = nonEmptyString(
+  "MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY",
+);
 const loadGmailOauthTokenUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_TOKEN_URL").pipe(
   Config.orElse(() => Config.succeed("https://oauth2.googleapis.com/token")),
 );
@@ -93,6 +96,7 @@ export interface ApiEnv extends CommonEnv {
   readonly gmailOauthAuthorizeUrl: string;
   readonly gmailOauthClientId: string | null;
   readonly gmailOauthClientSecret: string | null;
+  readonly gmailRefreshTokenEncryptionKey: string;
   readonly gmailOauthTokenUrl: string;
   readonly port: number;
   readonly workerBaseUrl: string;
@@ -104,6 +108,7 @@ export interface WorkerEnv extends CommonEnv {
   readonly gmailApiBaseUrl: string;
   readonly gmailOauthClientId: string | null;
   readonly gmailOauthClientSecret: string | null;
+  readonly gmailRefreshTokenEncryptionKey: string;
   readonly gmailOauthTokenUrl: string;
   readonly gcpProjectId: string | null;
   readonly gcpRegion: string | null;
@@ -119,6 +124,7 @@ export interface WorkerEnv extends CommonEnv {
 export interface CliEnv extends CommonEnv {
   readonly asyncTransportMode: AsyncTransportMode;
   readonly databaseUrl: string | null;
+  readonly gmailRefreshTokenEncryptionKey: string | null;
   readonly workerBaseUrl: string;
 }
 
@@ -148,6 +154,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
       gmailOauthAuthorizeUrl: loadGmailOauthAuthorizeUrl,
       gmailOauthClientId: loadGmailOauthClientId,
       gmailOauthClientSecret: loadGmailOauthClientSecret,
+      gmailRefreshTokenEncryptionKey: loadGmailRefreshTokenEncryptionKey,
       gmailOauthTokenUrl: loadGmailOauthTokenUrl,
       nodeEnv: loadNodeEnv,
       port: loadPort(3000),
@@ -160,6 +167,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
         gmailOauthAuthorizeUrl: config.gmailOauthAuthorizeUrl,
         gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
         gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
+        gmailRefreshTokenEncryptionKey: config.gmailRefreshTokenEncryptionKey,
         gmailOauthTokenUrl: config.gmailOauthTokenUrl,
         nodeEnv: config.nodeEnv,
         port: config.port,
@@ -175,6 +183,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
     gmailOauthAuthorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     gmailOauthClientId: null,
     gmailOauthClientSecret: null,
+    gmailRefreshTokenEncryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
     gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
     nodeEnv: "test",
     port: 3000,
@@ -194,6 +203,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
       gmailApiBaseUrl: loadGmailApiBaseUrl,
       gmailOauthClientId: loadGmailOauthClientId,
       gmailOauthClientSecret: loadGmailOauthClientSecret,
+      gmailRefreshTokenEncryptionKey: loadGmailRefreshTokenEncryptionKey,
       gmailOauthTokenUrl: loadGmailOauthTokenUrl,
       gcpProjectId: loadGcpProjectId,
       gcpRegion: loadGcpRegion,
@@ -212,6 +222,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
         gmailApiBaseUrl: config.gmailApiBaseUrl,
         gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
         gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
+        gmailRefreshTokenEncryptionKey: config.gmailRefreshTokenEncryptionKey,
         gmailOauthTokenUrl: config.gmailOauthTokenUrl,
         gcpProjectId: normalizeOptional(config.gcpProjectId),
         gcpRegion: normalizeOptional(config.gcpRegion),
@@ -247,6 +258,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
     gmailApiBaseUrl: "https://gmail.googleapis.com/gmail/v1",
     gmailOauthClientId: null,
     gmailOauthClientSecret: null,
+    gmailRefreshTokenEncryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
     gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
     gcpProjectId: null,
     gcpRegion: null,
@@ -267,12 +279,14 @@ export class CliConfig extends Context.Tag("@mailmon/config/CliConfig")<CliConfi
     Effect.all({
       asyncTransportMode: loadAsyncTransportMode,
       databaseUrl: Config.option(loadDatabaseUrl),
+      gmailRefreshTokenEncryptionKey: Config.option(loadGmailRefreshTokenEncryptionKey),
       nodeEnv: loadNodeEnv,
       workerBaseUrl: loadMailboxWorkerBaseUrl,
     }).pipe(
       Effect.map((config) => ({
         asyncTransportMode: config.asyncTransportMode,
         databaseUrl: normalizeOptional(config.databaseUrl),
+        gmailRefreshTokenEncryptionKey: normalizeOptional(config.gmailRefreshTokenEncryptionKey),
         nodeEnv: config.nodeEnv,
         workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
       })),
@@ -282,6 +296,7 @@ export class CliConfig extends Context.Tag("@mailmon/config/CliConfig")<CliConfi
   static readonly testLayer = Layer.succeed(this, {
     asyncTransportMode: "local",
     databaseUrl: null,
+    gmailRefreshTokenEncryptionKey: null,
     nodeEnv: "test",
     workerBaseUrl: "http://127.0.0.1:3001",
   } satisfies CliEnv);

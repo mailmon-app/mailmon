@@ -1,6 +1,9 @@
 import type { ApiEnv } from "@mailmon/config";
 import { createCorePersistenceLayer } from "@mailmon/db";
-import { createHttpGmailConnectProviderLayer } from "@mailmon/gmail";
+import {
+  createAesGcmGmailRefreshTokenCipherLayer,
+  createHttpGmailConnectProviderLayer,
+} from "@mailmon/gmail";
 import { createWorkerHttpMailboxSyncDispatcherLayer } from "@mailmon/queue";
 import { Layer, ManagedRuntime } from "effect";
 
@@ -13,11 +16,19 @@ const createApiRuntimeLayer = (
     | "gmailOauthAuthorizeUrl"
     | "gmailOauthClientId"
     | "gmailOauthClientSecret"
+    | "gmailRefreshTokenEncryptionKey"
     | "gmailOauthTokenUrl"
+    | "nodeEnv"
     | "workerBaseUrl"
   >,
 ) => {
-  const persistenceLayer = createCorePersistenceLayer(env.databaseUrl);
+  const gmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+    allowPlaintextFallback: env.nodeEnv !== "production",
+    encryptionKey: env.gmailRefreshTokenEncryptionKey,
+  });
+  const persistenceLayer = createCorePersistenceLayer(env.databaseUrl).pipe(
+    Layer.provide(gmailRefreshTokenCipherLayer),
+  );
   const mailboxConnectProviderLayer = createHttpGmailConnectProviderLayer({
     apiBaseUrl: env.gmailApiBaseUrl,
     oauthAuthorizeUrl: env.gmailOauthAuthorizeUrl,
@@ -51,7 +62,9 @@ export const createApiRuntime = (
     | "gmailOauthAuthorizeUrl"
     | "gmailOauthClientId"
     | "gmailOauthClientSecret"
+    | "gmailRefreshTokenEncryptionKey"
     | "gmailOauthTokenUrl"
+    | "nodeEnv"
     | "workerBaseUrl"
   >,
 ) => {

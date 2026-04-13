@@ -121,6 +121,9 @@ importers:
       '@mailmon/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@mailmon/gmail':
+        specifier: workspace:*
+        version: link:../../packages/gmail
       '@mailmon/queue':
         specifier: workspace:*
         version: link:../../packages/queue

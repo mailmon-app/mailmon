@@ -35,12 +35,14 @@ const createWorkerProcessorRuntime = (
     | "gmailApiBaseUrl"
     | "gmailOauthClientId"
     | "gmailOauthClientSecret"
+    | "gmailRefreshTokenEncryptionKey"
     | "gmailOauthTokenUrl"
     | "gcpProjectId"
     | "gcpRegion"
     | "gcpTasksAudience"
     | "gcpTasksServiceAccountEmail"
     | "gcpWebhookDeliveryQueueId"
+    | "nodeEnv"
     | "workerBaseUrl"
   >,
 ) => {

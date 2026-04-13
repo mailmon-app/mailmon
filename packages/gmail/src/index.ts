@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import {
   MailboxConnectProvider,
@@ -21,6 +21,28 @@ export interface GmailMailboxCredential {
   readonly refreshToken: string;
 }
 
+type GmailRefreshTokenCipherOperation = "decrypt" | "encrypt";
+
+export interface GmailRefreshTokenCipherError {
+  readonly _tag: "GmailRefreshTokenCipherError";
+  readonly message: string;
+  readonly operation: GmailRefreshTokenCipherOperation;
+}
+
+export class GmailRefreshTokenCipher extends Context.Tag(
+  "@mailmon/gmail/GmailRefreshTokenCipher",
+)<
+  GmailRefreshTokenCipher,
+  {
+    readonly decryptRefreshToken: (
+      storedRefreshToken: string,
+    ) => Effect.Effect<string, GmailRefreshTokenCipherError>;
+    readonly encryptRefreshToken: (
+      refreshToken: string,
+    ) => Effect.Effect<string, GmailRefreshTokenCipherError>;
+  }
+>() {}
+
 export class GmailMailboxCredentialStore extends Context.Tag(
   "@mailmon/gmail/GmailMailboxCredentialStore",
 )<
@@ -28,9 +50,173 @@ export class GmailMailboxCredentialStore extends Context.Tag(
   {
     readonly getGmailMailboxCredential: (
       mailboxId: string,
-    ) => Effect.Effect<GmailMailboxCredential | null>;
+    ) => Effect.Effect<GmailMailboxCredential | null, ProblemDetails>;
   }
 >() {}
+
+export interface GmailRefreshTokenCipherConfig {
+  readonly allowPlaintextFallback?: boolean;
+  readonly encryptionKey: string;
+}
+
+interface GmailRefreshTokenEnvelopeV1 {
+  readonly alg: "aes-256-gcm";
+  readonly ciphertext: string;
+  readonly iv: string;
+  readonly tag: string;
+  readonly v: 1;
+}
+
+const GMAIL_REFRESH_TOKEN_ENVELOPE_PREFIX = "mmrt_v1:";
+const GMAIL_REFRESH_TOKEN_ENVELOPE_VERSION = 1;
+const GMAIL_REFRESH_TOKEN_IV_BYTES = 12;
+
+const createGmailRefreshTokenCipherError = (
+  operation: GmailRefreshTokenCipherOperation,
+  message: string,
+): GmailRefreshTokenCipherError => {
+  return {
+    _tag: "GmailRefreshTokenCipherError",
+    message,
+    operation,
+  };
+};
+
+const isGmailRefreshTokenEnvelopeV1 = (value: unknown): value is GmailRefreshTokenEnvelopeV1 => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "v" in value &&
+    value.v === GMAIL_REFRESH_TOKEN_ENVELOPE_VERSION &&
+    "alg" in value &&
+    value.alg === "aes-256-gcm" &&
+    "ciphertext" in value &&
+    typeof value.ciphertext === "string" &&
+    "iv" in value &&
+    typeof value.iv === "string" &&
+    "tag" in value &&
+    typeof value.tag === "string"
+  );
+};
+
+const parseGmailRefreshTokenEncryptionKey = (encryptionKey: string) => {
+  const decodedKey = Buffer.from(encryptionKey, "base64");
+
+  if (decodedKey.byteLength !== 32) {
+    throw new Error(
+      "MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.",
+    );
+  }
+
+  return decodedKey;
+};
+
+const serializeGmailRefreshTokenEnvelope = (envelope: GmailRefreshTokenEnvelopeV1) => {
+  return `${GMAIL_REFRESH_TOKEN_ENVELOPE_PREFIX}${Buffer.from(
+    JSON.stringify(envelope),
+    "utf8",
+  ).toString("base64url")}`;
+};
+
+const parseGmailRefreshTokenEnvelope = (
+  storedRefreshToken: string,
+  allowPlaintextFallback: boolean,
+) => {
+  if (!storedRefreshToken.startsWith(GMAIL_REFRESH_TOKEN_ENVELOPE_PREFIX)) {
+    if (allowPlaintextFallback) {
+      return {
+        kind: "plaintext" as const,
+        refreshToken: storedRefreshToken,
+      };
+    }
+
+    throw new Error("Stored Gmail refresh token is not in the encrypted envelope format.");
+  }
+
+  const encodedEnvelope = storedRefreshToken.slice(GMAIL_REFRESH_TOKEN_ENVELOPE_PREFIX.length);
+  const parsedEnvelope = JSON.parse(
+    Buffer.from(encodedEnvelope, "base64url").toString("utf8"),
+  ) as unknown;
+
+  if (!isGmailRefreshTokenEnvelopeV1(parsedEnvelope)) {
+    throw new Error("Stored Gmail refresh token envelope is invalid.");
+  }
+
+  return {
+    envelope: parsedEnvelope,
+    kind: "encrypted" as const,
+  };
+};
+
+export const createAesGcmGmailRefreshTokenCipherLayer = (
+  config: GmailRefreshTokenCipherConfig,
+) =>
+  Layer.effect(
+    GmailRefreshTokenCipher,
+    Effect.sync(() => {
+      const encryptionKey = parseGmailRefreshTokenEncryptionKey(config.encryptionKey);
+      const allowPlaintextFallback = config.allowPlaintextFallback ?? false;
+
+      return {
+        decryptRefreshToken: (storedRefreshToken: string) =>
+          Effect.try({
+            catch: (error) =>
+              createGmailRefreshTokenCipherError(
+                "decrypt",
+                error instanceof Error
+                  ? error.message
+                  : "Stored Gmail refresh token could not be decrypted.",
+              ),
+            try: () => {
+              const parsedRefreshToken = parseGmailRefreshTokenEnvelope(
+                storedRefreshToken,
+                allowPlaintextFallback,
+              );
+
+              if (parsedRefreshToken.kind === "plaintext") {
+                return parsedRefreshToken.refreshToken;
+              }
+
+              const decipher = createDecipheriv(
+                "aes-256-gcm",
+                encryptionKey,
+                Buffer.from(parsedRefreshToken.envelope.iv, "base64url"),
+              );
+
+              decipher.setAuthTag(Buffer.from(parsedRefreshToken.envelope.tag, "base64url"));
+
+              return Buffer.concat([
+                decipher.update(Buffer.from(parsedRefreshToken.envelope.ciphertext, "base64url")),
+                decipher.final(),
+              ]).toString("utf8");
+            },
+          }),
+        encryptRefreshToken: (refreshToken: string) =>
+          Effect.try({
+            catch: (error) =>
+              createGmailRefreshTokenCipherError(
+                "encrypt",
+                error instanceof Error
+                  ? error.message
+                  : "Gmail refresh token could not be encrypted.",
+              ),
+            try: () => {
+              const iv = randomBytes(GMAIL_REFRESH_TOKEN_IV_BYTES);
+              const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
+              const ciphertext = Buffer.concat([cipher.update(refreshToken, "utf8"), cipher.final()]);
+
+              return serializeGmailRefreshTokenEnvelope({
+                alg: "aes-256-gcm",
+                ciphertext: ciphertext.toString("base64url"),
+                iv: iv.toString("base64url"),
+                tag: cipher.getAuthTag().toString("base64url"),
+                v: GMAIL_REFRESH_TOKEN_ENVELOPE_VERSION,
+              });
+            },
+          }),
+      };
+    }),
+  );
 
 export interface GmailSyncProviderConfig {
   readonly apiBaseUrl?: string;

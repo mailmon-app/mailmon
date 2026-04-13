@@ -16,6 +16,7 @@ import {
   mailboxAlreadyConnected,
   webhookEndpointAlreadyExists,
   webhookEndpointSubscriptionAlreadyExists,
+  makeProblem,
   type CanonicalMessageRecord,
   type CanonicalThreadRecord,
   type CompletedMailboxConnectSession,
@@ -47,7 +48,7 @@ import {
   type WebhookEventType,
   type WorkspaceApiKeyIdentity,
 } from "@mailmon/core";
-import { GmailMailboxCredentialStore } from "@mailmon/gmail";
+import { GmailMailboxCredentialStore, GmailRefreshTokenCipher } from "@mailmon/gmail";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
@@ -87,6 +88,48 @@ const normalizeEmailAddress = (emailAddress: string) => {
 
 const createMailboxId = () => {
   return `mbx_${globalThis.crypto.randomUUID()}`;
+};
+
+const gmailMailboxCredentialEncryptionFailed = (connectSessionId: string) => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/gmail-mailbox-credential-encryption-failed",
+    title: "Gmail mailbox credential encryption failed",
+    status: 500,
+    code: "gmail_mailbox_credential_encryption_failed",
+    detail: "Persisting the Gmail refresh token securely failed.",
+    resource: {
+      connect_session_id: connectSessionId,
+    },
+    retryable: false,
+  });
+};
+
+const gmailMailboxCredentialUnreadable = (mailboxId: string) => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/gmail-mailbox-credential-unreadable",
+    title: "Gmail mailbox credential unreadable",
+    status: 409,
+    code: "gmail_mailbox_credential_unreadable",
+    detail: `Mailbox ${mailboxId} has a stored Gmail refresh token that could not be decrypted.`,
+    resource: {
+      mailbox_id: mailboxId,
+    },
+    retryable: false,
+  });
+};
+
+const gmailMailboxCredentialReadFailed = (mailboxId: string) => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/gmail-mailbox-credential-read-failed",
+    title: "Gmail mailbox credential read failed",
+    status: 500,
+    code: "gmail_mailbox_credential_read_failed",
+    detail: `Mailbox ${mailboxId} could not load its stored Gmail refresh token.`,
+    resource: {
+      mailbox_id: mailboxId,
+    },
+    retryable: true,
+  });
 };
 
 const isProblemDetails = (
@@ -1383,6 +1426,7 @@ export const createMailboxConnectSessionStoreLayer = Layer.effect(
   MailboxConnectSessionStore,
   Effect.gen(function* () {
     const database = yield* MailmonDatabase;
+    const gmailRefreshTokenCipher = yield* GmailRefreshTokenCipher;
 
     return {
       createConnectSession: (params) =>
@@ -1418,116 +1462,122 @@ export const createMailboxConnectSessionStoreLayer = Layer.effect(
           return Option.fromNullable(row).pipe(Option.map(toStoredConnectSession));
         }),
       completeConnectSession: (params) =>
-        Effect.tryPromise({
-          catch: (error) => {
-            if (isProblemDetails(error)) {
-              return error;
-            }
+        Effect.gen(function* () {
+          const encryptedRefreshToken = yield* gmailRefreshTokenCipher
+            .encryptRefreshToken(params.refreshToken)
+            .pipe(Effect.mapError(() => gmailMailboxCredentialEncryptionFailed(params.connectSessionId)));
 
-            throw error;
-          },
-          try: async () => {
-            return database.db.transaction(async (transaction) => {
-              const [connectSession] = await transaction
-                .select()
-                .from(mailboxConnectSessions)
-                .where(eq(mailboxConnectSessions.id, params.connectSessionId))
-                .limit(1);
-
-              if (connectSession === undefined) {
-                throw new Error(`Connect session ${params.connectSessionId} does not exist.`);
+          return yield* Effect.tryPromise({
+            catch: (error) => {
+              if (isProblemDetails(error)) {
+                return error;
               }
 
-              if (connectSession.mailboxId !== null) {
+              throw error;
+            },
+            try: async () => {
+              return database.db.transaction(async (transaction) => {
+                const [connectSession] = await transaction
+                  .select()
+                  .from(mailboxConnectSessions)
+                  .where(eq(mailboxConnectSessions.id, params.connectSessionId))
+                  .limit(1);
+
+                if (connectSession === undefined) {
+                  throw new Error(`Connect session ${params.connectSessionId} does not exist.`);
+                }
+
+                if (connectSession.mailboxId !== null) {
+                  const [existingMailbox] = await transaction
+                    .select()
+                    .from(mailboxes)
+                    .where(eq(mailboxes.id, connectSession.mailboxId))
+                    .limit(1);
+
+                  if (existingMailbox === undefined) {
+                    throw new Error(
+                      `Mailbox ${connectSession.mailboxId} referenced by connect session ${connectSession.id} does not exist.`,
+                    );
+                  }
+
+                  return {
+                    mailbox: toMailboxResource(existingMailbox),
+                    redirectUrl: connectSession.redirectUrl,
+                    created: false,
+                  } satisfies CompletedMailboxConnectSession;
+                }
+
+                const normalizedEmailAddress = normalizeEmailAddress(params.providerAccountEmail);
                 const [existingMailbox] = await transaction
                   .select()
                   .from(mailboxes)
-                  .where(eq(mailboxes.id, connectSession.mailboxId))
-                  .limit(1);
-
-                if (existingMailbox === undefined) {
-                  throw new Error(
-                    `Mailbox ${connectSession.mailboxId} referenced by connect session ${connectSession.id} does not exist.`,
-                  );
-                }
-
-                return {
-                  mailbox: toMailboxResource(existingMailbox),
-                  redirectUrl: connectSession.redirectUrl,
-                  created: false,
-                } satisfies CompletedMailboxConnectSession;
-              }
-
-              const normalizedEmailAddress = normalizeEmailAddress(params.providerAccountEmail);
-              const [existingMailbox] = await transaction
-                .select()
-                .from(mailboxes)
-                .where(
-                  and(
-                    eq(mailboxes.workspaceId, connectSession.workspaceId),
-                    eq(mailboxes.provider, connectSession.provider),
-                    or(
-                      eq(mailboxes.emailAddress, normalizedEmailAddress),
-                      and(
-                        eq(mailboxes.tenantExternalId, connectSession.tenantExternalId),
-                        eq(mailboxes.mailboxExternalId, connectSession.mailboxExternalId),
+                  .where(
+                    and(
+                      eq(mailboxes.workspaceId, connectSession.workspaceId),
+                      eq(mailboxes.provider, connectSession.provider),
+                      or(
+                        eq(mailboxes.emailAddress, normalizedEmailAddress),
+                        and(
+                          eq(mailboxes.tenantExternalId, connectSession.tenantExternalId),
+                          eq(mailboxes.mailboxExternalId, connectSession.mailboxExternalId),
+                        ),
                       ),
                     ),
-                  ),
-                )
-                .limit(1);
+                  )
+                  .limit(1);
 
-              if (existingMailbox !== undefined) {
-                throw mailboxAlreadyConnected(existingMailbox.id);
-              }
+                if (existingMailbox !== undefined) {
+                  throw mailboxAlreadyConnected(existingMailbox.id);
+                }
 
-              const createdAt = toDate(params.connectedAt);
-              const mailboxId = createMailboxId();
+                const createdAt = toDate(params.connectedAt);
+                const mailboxId = createMailboxId();
 
-              const [createdMailbox] = await transaction
-                .insert(mailboxes)
-                .values({
-                  id: mailboxId,
-                  workspaceId: connectSession.workspaceId,
-                  provider: connectSession.provider,
-                  tenantExternalId: connectSession.tenantExternalId,
-                  mailboxExternalId: connectSession.mailboxExternalId,
-                  emailAddress: normalizedEmailAddress,
-                  status: "active",
-                  syncState: "initializing",
-                  watchState: "active",
+                const [createdMailbox] = await transaction
+                  .insert(mailboxes)
+                  .values({
+                    id: mailboxId,
+                    workspaceId: connectSession.workspaceId,
+                    provider: connectSession.provider,
+                    tenantExternalId: connectSession.tenantExternalId,
+                    mailboxExternalId: connectSession.mailboxExternalId,
+                    emailAddress: normalizedEmailAddress,
+                    status: "active",
+                    syncState: "initializing",
+                    watchState: "active",
+                    createdAt,
+                    updatedAt: createdAt,
+                  })
+                  .returning();
+
+                if (createdMailbox === undefined) {
+                  throw new Error(`Mailbox ${mailboxId} was not created.`);
+                }
+
+                await transaction.insert(gmailMailboxCredentials).values({
+                  mailboxId,
+                  refreshTokenCiphertext: encryptedRefreshToken,
                   createdAt,
                   updatedAt: createdAt,
-                })
-                .returning();
+                });
 
-              if (createdMailbox === undefined) {
-                throw new Error(`Mailbox ${mailboxId} was not created.`);
-              }
+                await transaction
+                  .update(mailboxConnectSessions)
+                  .set({
+                    mailboxId,
+                    completedAt: createdAt,
+                    updatedAt: createdAt,
+                  })
+                  .where(eq(mailboxConnectSessions.id, connectSession.id));
 
-              await transaction.insert(gmailMailboxCredentials).values({
-                mailboxId,
-                refreshToken: params.refreshToken,
-                createdAt,
-                updatedAt: createdAt,
+                return {
+                  mailbox: toMailboxResource(createdMailbox),
+                  redirectUrl: connectSession.redirectUrl,
+                  created: true,
+                } satisfies CompletedMailboxConnectSession;
               });
-
-              await transaction
-                .update(mailboxConnectSessions)
-                .set({
-                  mailboxId,
-                  completedAt: createdAt,
-                  updatedAt: createdAt,
-                })
-                .where(eq(mailboxConnectSessions.id, connectSession.id));
-
-              return {
-                mailbox: toMailboxResource(createdMailbox),
-                redirectUrl: connectSession.redirectUrl,
-                created: true,
-              } satisfies CompletedMailboxConnectSession;
-            });
-          },
+            },
+          });
         }),
     };
   }),
@@ -1855,20 +1905,37 @@ export const createGmailMailboxCredentialStoreLayer = Layer.effect(
   GmailMailboxCredentialStore,
   Effect.gen(function* () {
     const database = yield* MailmonDatabase;
+    const gmailRefreshTokenCipher = yield* GmailRefreshTokenCipher;
 
     return {
       getGmailMailboxCredential: (mailboxId: string) =>
-        Effect.promise(async () => {
-          const [row] = await database.db
-            .select({
-              mailboxId: gmailMailboxCredentials.mailboxId,
-              refreshToken: gmailMailboxCredentials.refreshToken,
-            })
-            .from(gmailMailboxCredentials)
-            .where(eq(gmailMailboxCredentials.mailboxId, mailboxId))
-            .limit(1);
+        Effect.gen(function* () {
+          const [row] = yield* Effect.tryPromise({
+            catch: () => gmailMailboxCredentialReadFailed(mailboxId),
+            try: () => {
+              return database.db
+                .select({
+                  mailboxId: gmailMailboxCredentials.mailboxId,
+                  refreshTokenCiphertext: gmailMailboxCredentials.refreshTokenCiphertext,
+                })
+                .from(gmailMailboxCredentials)
+                .where(eq(gmailMailboxCredentials.mailboxId, mailboxId))
+                .limit(1);
+            },
+          });
 
-          return row ?? null;
+          if (row === undefined) {
+            return null;
+          }
+
+          const refreshToken = yield* gmailRefreshTokenCipher
+            .decryptRefreshToken(row.refreshTokenCiphertext)
+            .pipe(Effect.mapError(() => gmailMailboxCredentialUnreadable(mailboxId)));
+
+          return {
+            mailboxId: row.mailboxId,
+            refreshToken,
+          };
         }),
     };
   }),

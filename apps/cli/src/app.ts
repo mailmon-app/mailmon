@@ -2,6 +2,7 @@ import { Args, Command, Options } from "@effect/cli";
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
 import { dispatchMailboxSync } from "@mailmon/core";
 import { createCorePersistenceLayer } from "@mailmon/db";
+import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { createLocalAsyncTransportLayer } from "@mailmon/queue";
 import { Console, Effect, Layer, ManagedRuntime, Option } from "effect";
 
@@ -47,12 +48,25 @@ const runSyncMailbox = (options: { readonly mailboxId: string }) =>
       return;
     }
 
+    if (config.gmailRefreshTokenEncryptionKey === null) {
+      yield* Console.error(
+        "MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY is required to dispatch mailbox sync from the CLI",
+      );
+      return;
+    }
+
     const databaseUrl = config.databaseUrl;
+    const gmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+      allowPlaintextFallback: config.nodeEnv !== "production",
+      encryptionKey: config.gmailRefreshTokenEncryptionKey,
+    });
     const dispatchRuntime = yield* Effect.acquireRelease(
       Effect.sync(() =>
         ManagedRuntime.make(
           Layer.mergeAll(
-            createCorePersistenceLayer(databaseUrl),
+            createCorePersistenceLayer(databaseUrl).pipe(
+              Layer.provide(gmailRefreshTokenCipherLayer),
+            ),
             createLocalAsyncTransportLayer({
               workerBaseUrl: config.workerBaseUrl,
             }),
