@@ -35,6 +35,8 @@ const mailboxFixture = {
   lastSuccessfulSyncAt: null,
   lastError: null,
 };
+const primaryEncryptionKey = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
+const rotatedEncryptionKey = "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg=";
 
 describe("createStubMailboxSyncProviderLayer", () => {
   it("returns a stable bootstrap sync result when no cursor is stored", async () => {
@@ -147,13 +149,38 @@ describe("createAesGcmGmailRefreshTokenCipherLayer", () => {
       }).pipe(
         Effect.provide(
           createAesGcmGmailRefreshTokenCipherLayer({
-            encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+            activeKeyId: "primary",
+            encryptionKey: primaryEncryptionKey,
           }),
         ),
       ),
     );
 
     expect(result).toBe("refresh-token");
+  });
+
+  it("includes the active key id in new encrypted envelopes", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+        const encryptedRefreshToken = yield* cipher.encryptRefreshToken("refresh-token");
+
+        return yield* cipher.inspectRefreshToken(encryptedRefreshToken);
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "key_2026_04",
+            encryptionKey: primaryEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    expect(result).toEqual({
+      keyId: "key_2026_04",
+      rewrapRequired: false,
+      storage: "encrypted",
+    });
   });
 
   it("supports legacy plaintext reads when the fallback is enabled", async () => {
@@ -166,13 +193,104 @@ describe("createAesGcmGmailRefreshTokenCipherLayer", () => {
         Effect.provide(
           createAesGcmGmailRefreshTokenCipherLayer({
             allowPlaintextFallback: true,
-            encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+            encryptionKey: primaryEncryptionKey,
           }),
         ),
       ),
     );
 
     expect(result).toBe("legacy-refresh-token");
+  });
+
+  it("decrypts previous-key envelopes and rewraps them with the active key", async () => {
+    const legacyEncryptedRefreshToken = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+
+        return yield* cipher.encryptRefreshToken("refresh-token");
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "key_old",
+            encryptionKey: primaryEncryptionKey,
+          }),
+        ),
+      ),
+    );
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+        const inspection = yield* cipher.inspectRefreshToken(legacyEncryptedRefreshToken);
+        const rewrappedRefreshToken = yield* cipher.rewrapRefreshToken(legacyEncryptedRefreshToken);
+        const rewrappedInspection = yield* cipher.inspectRefreshToken(rewrappedRefreshToken);
+        const decryptedRefreshToken = yield* cipher.decryptRefreshToken(rewrappedRefreshToken);
+
+        return {
+          decryptedRefreshToken,
+          inspection,
+          rewrappedInspection,
+        };
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "key_new",
+            decryptionKeys: [
+              {
+                encryptionKey: primaryEncryptionKey,
+                keyId: "key_old",
+              },
+            ],
+            encryptionKey: rotatedEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    expect(result).toEqual({
+      decryptedRefreshToken: "refresh-token",
+      inspection: {
+        keyId: "key_old",
+        rewrapRequired: true,
+        storage: "encrypted",
+      },
+      rewrappedInspection: {
+        keyId: "key_new",
+        rewrapRequired: false,
+        storage: "encrypted",
+      },
+    });
+  });
+
+  it("rewraps legacy plaintext tokens without enabling plaintext runtime reads", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+        const rewrappedRefreshToken = yield* cipher.rewrapRefreshToken("legacy-refresh-token");
+        const inspection = yield* cipher.inspectRefreshToken(rewrappedRefreshToken);
+        const decryptedRefreshToken = yield* cipher.decryptRefreshToken(rewrappedRefreshToken);
+
+        return {
+          decryptedRefreshToken,
+          inspection,
+          rewrappedRefreshToken,
+        };
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "key_new",
+            encryptionKey: rotatedEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    expect(result.rewrappedRefreshToken).toMatch(/^mmrt_v1:/);
+    expect(result.decryptedRefreshToken).toBe("legacy-refresh-token");
+    expect(result.inspection).toEqual({
+      keyId: "key_new",
+      rewrapRequired: false,
+      storage: "encrypted",
+    });
   });
 });
 
@@ -433,17 +551,19 @@ describe("createHttpGmailSyncProviderLayer", () => {
       Effect.gen(function* () {
         const provider = yield* MailboxSyncProvider;
 
-        return yield* provider.syncMailbox({
-          mailbox: mailboxFixture,
-          cursor: null,
-        }).pipe(
-          Effect.match({
-            onFailure: (problem) => problem,
-            onSuccess: () => {
-              throw new Error("Expected syncMailbox to fail for revoked refresh tokens.");
-            },
-          }),
-        );
+        return yield* provider
+          .syncMailbox({
+            mailbox: mailboxFixture,
+            cursor: null,
+          })
+          .pipe(
+            Effect.match({
+              onFailure: (problem) => problem,
+              onSuccess: () => {
+                throw new Error("Expected syncMailbox to fail for revoked refresh tokens.");
+              },
+            }),
+          );
       }).pipe(
         Effect.provide(
           createHttpGmailSyncProviderLayer({
