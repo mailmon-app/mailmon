@@ -1237,75 +1237,77 @@ describe("runMailboxSync", () => {
     }),
   );
 
-  it.effect("returns reconnect_required without running provider work for mailboxes already awaiting reconnect", () =>
-    Effect.gen(function* () {
-      const appliedSnapshots: Array<{
-        eventsEmitted: number;
-        mailboxId: string;
-        leaseOwnerId: string;
-        syncRunId: string;
-        threadCount: number;
-        messageCount: number;
-        nextCursor: string | null;
-      }> = [];
-      const observedCursors: Array<string | null> = [];
-      const completedSyncRuns: Array<CompletedSyncRun> = [];
-      const acquisitionCalls: Array<{
-        acquiredAt: string;
-        expiresAt: string;
-        leaseOwnerId: string;
-        mailboxId: string;
-        syncRunId: string;
-      }> = [];
-      const reconnectRequiredCatalogLayer = Layer.succeed(MailboxCatalog, {
-        getMailbox: () =>
-          Effect.succeed(
-            Option.some({
-              ...mailboxFixture,
-              status: "reconnect_required" as const,
-              syncState: "failed" as const,
-              lastError: {
-                code: "gmail_token_refresh_reconnect_required",
-                message: "Reconnect is required before mailbox sync can continue.",
-                occurredAt: "2026-03-24T00:00:00.000Z",
-                retryable: false,
-              },
-            }),
-          ),
-      });
+  it.effect(
+    "returns reconnect_required without running provider work for mailboxes already awaiting reconnect",
+    () =>
+      Effect.gen(function* () {
+        const appliedSnapshots: Array<{
+          eventsEmitted: number;
+          mailboxId: string;
+          leaseOwnerId: string;
+          syncRunId: string;
+          threadCount: number;
+          messageCount: number;
+          nextCursor: string | null;
+        }> = [];
+        const observedCursors: Array<string | null> = [];
+        const completedSyncRuns: Array<CompletedSyncRun> = [];
+        const acquisitionCalls: Array<{
+          acquiredAt: string;
+          expiresAt: string;
+          leaseOwnerId: string;
+          mailboxId: string;
+          syncRunId: string;
+        }> = [];
+        const reconnectRequiredCatalogLayer = Layer.succeed(MailboxCatalog, {
+          getMailbox: () =>
+            Effect.succeed(
+              Option.some({
+                ...mailboxFixture,
+                status: "reconnect_required" as const,
+                syncState: "failed" as const,
+                lastError: {
+                  code: "gmail_token_refresh_reconnect_required",
+                  message: "Reconnect is required before mailbox sync can continue.",
+                  occurredAt: "2026-03-24T00:00:00.000Z",
+                  retryable: false,
+                },
+              }),
+            ),
+        });
 
-      return yield* runMailboxSync(mailboxFixture.id).pipe(
-        Effect.map((result) => {
-          expect(result.mailboxId).toBe(mailboxFixture.id);
-          expect(result.syncRunId).toBe("sr_mbx_demo");
-          expect(result.status).toBe("reconnect_required");
-          expect(result.eventsEmitted).toBe(0);
-          expect(result.nextCursor).toBeNull();
-          expect(acquisitionCalls).toEqual([]);
-          expect(completedSyncRuns).toEqual([
-            expect.objectContaining({
-              mailboxId: mailboxFixture.id,
-              status: "reconnect_required",
-              detail: "mailbox_reconnect_required",
-              eventsEmitted: 0,
-              nextCursor: null,
-            }),
-          ]);
-        }),
-        Effect.provide(
-          Layer.mergeAll(
-            reconnectRequiredCatalogLayer,
-            createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
-            createSyncRunStoreTestLayer(completedSyncRuns),
-            createSyncCoordinatorTestLayer({
-              acquisitionCalls,
-            }),
-            createSyncProviderTestLayer(observedCursors),
-            noopWebhookDeliverySchedulingLayer,
+        return yield* runMailboxSync(mailboxFixture.id).pipe(
+          Effect.map((result) => {
+            expect(result.mailboxId).toBe(mailboxFixture.id);
+            expect(result.syncRunId).toBe("sr_mbx_demo");
+            expect(result.status).toBe("reconnect_required");
+            expect(result.eventsEmitted).toBe(0);
+            expect(result.nextCursor).toBeNull();
+            expect(acquisitionCalls).toEqual([]);
+            expect(completedSyncRuns).toEqual([
+              expect.objectContaining({
+                mailboxId: mailboxFixture.id,
+                status: "reconnect_required",
+                detail: "mailbox_reconnect_required",
+                eventsEmitted: 0,
+                nextCursor: null,
+              }),
+            ]);
+          }),
+          Effect.provide(
+            Layer.mergeAll(
+              reconnectRequiredCatalogLayer,
+              createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
+              createSyncRunStoreTestLayer(completedSyncRuns),
+              createSyncCoordinatorTestLayer({
+                acquisitionCalls,
+              }),
+              createSyncProviderTestLayer(observedCursors),
+              noopWebhookDeliverySchedulingLayer,
+            ),
           ),
-        ),
-      );
-    }),
+        );
+      }),
   );
 
   it.effect("returns reconnect_required when provider reports a terminal Gmail auth failure", () =>
@@ -1369,64 +1371,66 @@ describe("runMailboxSync", () => {
     }),
   );
 
-  it.effect("returns reconnect_required when provider reports missing Gmail mailbox credentials", () =>
-    Effect.gen(function* () {
-      const appliedSnapshots: Array<{
-        eventsEmitted: number;
-        mailboxId: string;
-        leaseOwnerId: string;
-        syncRunId: string;
-        threadCount: number;
-        messageCount: number;
-        nextCursor: string | null;
-      }> = [];
-      const completedSyncRuns: Array<CompletedSyncRun> = [];
+  it.effect(
+    "returns reconnect_required when provider reports missing Gmail mailbox credentials",
+    () =>
+      Effect.gen(function* () {
+        const appliedSnapshots: Array<{
+          eventsEmitted: number;
+          mailboxId: string;
+          leaseOwnerId: string;
+          syncRunId: string;
+          threadCount: number;
+          messageCount: number;
+          nextCursor: string | null;
+        }> = [];
+        const completedSyncRuns: Array<CompletedSyncRun> = [];
 
-      const providerLayer = Layer.succeed(MailboxSyncProvider, {
-        syncMailbox: () =>
-          Effect.fail({
-            type: "https://api.mailmon.dev/problems/gmail-mailbox-credentials-missing",
-            title: "Gmail mailbox credentials missing",
-            status: 409,
-            code: "gmail_mailbox_credentials_missing",
-            detail: `Mailbox ${mailboxFixture.id} has no stored Gmail refresh token.`,
-            retryable: false,
-            resource: {
-              mailbox_id: mailboxFixture.id,
-            },
-          }),
-      });
-
-      return yield* runMailboxSync(mailboxFixture.id).pipe(
-        Effect.map((result) => {
-          expect(result.mailboxId).toBe(mailboxFixture.id);
-          expect(result.syncRunId).toBe("sr_mbx_demo");
-          expect(result.status).toBe("reconnect_required");
-          expect(result.eventsEmitted).toBe(0);
-          expect(result.nextCursor).toBeNull();
-          expect(appliedSnapshots).toEqual([]);
-          expect(completedSyncRuns).toEqual([
-            expect.objectContaining({
-              mailboxId: mailboxFixture.id,
-              status: "reconnect_required",
-              detail: "gmail_mailbox_credentials_missing",
-              eventsEmitted: 0,
-              nextCursor: null,
+        const providerLayer = Layer.succeed(MailboxSyncProvider, {
+          syncMailbox: () =>
+            Effect.fail({
+              type: "https://api.mailmon.dev/problems/gmail-mailbox-credentials-missing",
+              title: "Gmail mailbox credentials missing",
+              status: 409,
+              code: "gmail_mailbox_credentials_missing",
+              detail: `Mailbox ${mailboxFixture.id} has no stored Gmail refresh token.`,
+              retryable: false,
+              resource: {
+                mailbox_id: mailboxFixture.id,
+              },
             }),
-          ]);
-        }),
-        Effect.provide(
-          Layer.mergeAll(
-            catalogLayer,
-            createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
-            createSyncRunStoreTestLayer(completedSyncRuns),
-            createSyncCoordinatorTestLayer(),
-            providerLayer,
-            noopWebhookDeliverySchedulingLayer,
+        });
+
+        return yield* runMailboxSync(mailboxFixture.id).pipe(
+          Effect.map((result) => {
+            expect(result.mailboxId).toBe(mailboxFixture.id);
+            expect(result.syncRunId).toBe("sr_mbx_demo");
+            expect(result.status).toBe("reconnect_required");
+            expect(result.eventsEmitted).toBe(0);
+            expect(result.nextCursor).toBeNull();
+            expect(appliedSnapshots).toEqual([]);
+            expect(completedSyncRuns).toEqual([
+              expect.objectContaining({
+                mailboxId: mailboxFixture.id,
+                status: "reconnect_required",
+                detail: "gmail_mailbox_credentials_missing",
+                eventsEmitted: 0,
+                nextCursor: null,
+              }),
+            ]);
+          }),
+          Effect.provide(
+            Layer.mergeAll(
+              catalogLayer,
+              createMailboxStateStoreTestLayer("hist_1", appliedSnapshots),
+              createSyncRunStoreTestLayer(completedSyncRuns),
+              createSyncCoordinatorTestLayer(),
+              providerLayer,
+              noopWebhookDeliverySchedulingLayer,
+            ),
           ),
-        ),
-      );
-    }),
+        );
+      }),
   );
 
   it.effect("keeps heartbeating the mailbox lease until state writes finish", () =>

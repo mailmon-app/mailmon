@@ -157,12 +157,16 @@ export const createWorkerRuntimeLayer = (
     | "gmailOauthClientId"
     | "gmailOauthClientSecret"
     | "gmailRefreshTokenEncryptionKey"
+    | "gmailRefreshTokenEncryptionKeyId"
+    | "gmailRefreshTokenPreviousEncryptionKeys"
     | "gmailOauthTokenUrl"
     | "nodeEnv"
   >,
 ) => {
   const gmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+    activeKeyId: env.gmailRefreshTokenEncryptionKeyId,
     allowPlaintextFallback: env.nodeEnv !== "production",
+    decryptionKeys: env.gmailRefreshTokenPreviousEncryptionKeys,
     encryptionKey: env.gmailRefreshTokenEncryptionKey,
   });
   const persistenceLayer = createWorkerPersistenceLayer(env.databaseUrl).pipe(

@@ -36,6 +36,8 @@ const createWorkerProcessorRuntime = (
     | "gmailOauthClientId"
     | "gmailOauthClientSecret"
     | "gmailRefreshTokenEncryptionKey"
+    | "gmailRefreshTokenEncryptionKeyId"
+    | "gmailRefreshTokenPreviousEncryptionKeys"
     | "gmailOauthTokenUrl"
     | "gcpProjectId"
     | "gcpRegion"

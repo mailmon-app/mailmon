@@ -23,6 +23,8 @@ describe("ApiConfig", () => {
         gmailOauthClientId: null,
         gmailOauthClientSecret: null,
         gmailRefreshTokenEncryptionKey: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+        gmailRefreshTokenEncryptionKeyId: "primary",
+        gmailRefreshTokenPreviousEncryptionKeys: [],
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         nodeEnv: "test",
         port: 3000,
@@ -53,6 +55,8 @@ describe("WorkerConfig", () => {
         gmailOauthClientId: null,
         gmailOauthClientSecret: null,
         gmailRefreshTokenEncryptionKey: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+        gmailRefreshTokenEncryptionKeyId: "primary",
+        gmailRefreshTokenPreviousEncryptionKeys: [],
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         gcpProjectId: null,
         gcpRegion: null,
@@ -162,6 +166,36 @@ describe("WorkerConfig", () => {
       ),
     ),
   );
+
+  it.effect("loads Gmail refresh token rotation keys", () =>
+    Effect.gen(function* () {
+      const config = yield* WorkerConfig;
+
+      expect(config.gmailRefreshTokenEncryptionKeyId).toBe("key_new");
+      expect(config.gmailRefreshTokenPreviousEncryptionKeys).toEqual([
+        {
+          encryptionKey: "old-key",
+          keyId: "key_old",
+        },
+        {
+          encryptionKey: "older-key",
+          keyId: "key_older",
+        },
+      ]);
+    }).pipe(
+      Effect.provide(WorkerConfig.layer),
+      Effect.withConfigProvider(
+        ConfigProvider.fromJson({
+          DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY_ID: "key_new",
+          MAILMON_GMAIL_REFRESH_TOKEN_PREVIOUS_ENCRYPTION_KEYS:
+            "key_old=old-key,key_older=older-key",
+          NODE_ENV: "test",
+        }),
+      ),
+    ),
+  );
 });
 
 describe("CliConfig", () => {
@@ -173,6 +207,8 @@ describe("CliConfig", () => {
         asyncTransportMode: "local",
         databaseUrl: null,
         gmailRefreshTokenEncryptionKey: null,
+        gmailRefreshTokenEncryptionKeyId: "primary",
+        gmailRefreshTokenPreviousEncryptionKeys: [],
         nodeEnv: "test",
         workerBaseUrl: "http://127.0.0.1:3001",
       });
