@@ -6,6 +6,7 @@ import * as schema from "./schema.js";
 export { bootstrap, client, persistence, schema };
 export { createDb, createSqlClient } from "./client.js";
 export {
+  auditGmailMailboxCredentials,
   createCorePersistenceLayer,
   createDatabaseLayer,
   createGmailMailboxCredentialStoreLayer,
@@ -23,4 +24,10 @@ export {
   createWorkspaceApiKeyStoreLayer,
   createWorkerPersistenceLayer,
   MailmonDatabase,
+  rewrapGmailMailboxCredentials,
+  type GmailMailboxCredentialAuditItem,
+  type GmailMailboxCredentialAuditReport,
+  type GmailMailboxCredentialAuditStatus,
+  type GmailMailboxCredentialAuditSummary,
+  type GmailMailboxCredentialRewrapResult,
 } from "./persistence.js";

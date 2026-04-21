@@ -48,7 +48,11 @@ import {
   type WebhookEventType,
   type WorkspaceApiKeyIdentity,
 } from "@mailmon/core";
-import { GmailMailboxCredentialStore, GmailRefreshTokenCipher } from "@mailmon/gmail";
+import {
+  GmailMailboxCredentialStore,
+  GmailRefreshTokenCipher,
+  type GmailRefreshTokenInspection,
+} from "@mailmon/gmail";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
@@ -77,6 +81,39 @@ type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
 type WebhookEndpointSubscriptionRow = typeof webhookEndpointSubscriptions.$inferSelect;
 
 const WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS = 30_000;
+
+export type GmailMailboxCredentialAuditStatus =
+  | "encrypted_current"
+  | "encrypted_rewrap_required"
+  | "plaintext"
+  | "unreadable";
+
+export interface GmailMailboxCredentialAuditItem {
+  readonly keyId: string | null;
+  readonly mailboxId: string;
+  readonly status: GmailMailboxCredentialAuditStatus;
+}
+
+export interface GmailMailboxCredentialAuditSummary {
+  readonly encryptedCurrent: number;
+  readonly encryptedRewrapRequired: number;
+  readonly plaintext: number;
+  readonly total: number;
+  readonly unreadable: number;
+}
+
+export interface GmailMailboxCredentialAuditReport extends GmailMailboxCredentialAuditSummary {
+  readonly items: ReadonlyArray<GmailMailboxCredentialAuditItem>;
+}
+
+export interface GmailMailboxCredentialRewrapResult {
+  readonly alreadyCurrent: number;
+  readonly markedReconnectRequired: number;
+  readonly rewrapped: number;
+  readonly staleSkipped: number;
+  readonly total: number;
+  readonly unreadable: number;
+}
 
 const hashApiKey = (apiKey: string) => {
   return createHash("sha256").update(apiKey).digest("hex");
@@ -829,6 +866,154 @@ const getMailboxSyncFailureState = (
   };
 };
 
+const toGmailMailboxCredentialAuditStatus = (
+  inspection: GmailRefreshTokenInspection,
+): GmailMailboxCredentialAuditStatus => {
+  if (inspection.storage === "plaintext") {
+    return "plaintext";
+  }
+
+  return inspection.rewrapRequired ? "encrypted_rewrap_required" : "encrypted_current";
+};
+
+const summarizeGmailMailboxCredentialAuditItems = (
+  items: ReadonlyArray<GmailMailboxCredentialAuditItem>,
+): GmailMailboxCredentialAuditSummary => {
+  return {
+    encryptedCurrent: items.filter((item) => item.status === "encrypted_current").length,
+    encryptedRewrapRequired: items.filter((item) => item.status === "encrypted_rewrap_required")
+      .length,
+    plaintext: items.filter((item) => item.status === "plaintext").length,
+    total: items.length,
+    unreadable: items.filter((item) => item.status === "unreadable").length,
+  };
+};
+
+export const auditGmailMailboxCredentials = () =>
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+    const gmailRefreshTokenCipher = yield* GmailRefreshTokenCipher;
+    const credentialRows = yield* Effect.promise(() =>
+      database.db
+        .select({
+          mailboxId: gmailMailboxCredentials.mailboxId,
+          refreshTokenCiphertext: gmailMailboxCredentials.refreshTokenCiphertext,
+        })
+        .from(gmailMailboxCredentials),
+    );
+    const items = yield* Effect.forEach(credentialRows, (credential) =>
+      gmailRefreshTokenCipher.inspectRefreshToken(credential.refreshTokenCiphertext).pipe(
+        Effect.match({
+          onFailure: () =>
+            ({
+              keyId: null,
+              mailboxId: credential.mailboxId,
+              status: "unreadable",
+            }) satisfies GmailMailboxCredentialAuditItem,
+          onSuccess: (inspection) =>
+            ({
+              keyId: inspection.keyId,
+              mailboxId: credential.mailboxId,
+              status: toGmailMailboxCredentialAuditStatus(inspection),
+            }) satisfies GmailMailboxCredentialAuditItem,
+        }),
+      ),
+    );
+
+    return {
+      ...summarizeGmailMailboxCredentialAuditItems(items),
+      items,
+    } satisfies GmailMailboxCredentialAuditReport;
+  });
+
+export const rewrapGmailMailboxCredentials = (options?: {
+  readonly markUnreadableReconnectRequired?: boolean;
+  readonly observedAt?: string;
+}) =>
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+    const gmailRefreshTokenCipher = yield* GmailRefreshTokenCipher;
+    const observedAt = toDate(options?.observedAt ?? new Date().toISOString());
+    const markUnreadableReconnectRequired = options?.markUnreadableReconnectRequired ?? false;
+    const credentialRows = yield* Effect.promise(() =>
+      database.db
+        .select({
+          mailboxId: gmailMailboxCredentials.mailboxId,
+          refreshTokenCiphertext: gmailMailboxCredentials.refreshTokenCiphertext,
+        })
+        .from(gmailMailboxCredentials),
+    );
+    const result = {
+      alreadyCurrent: 0,
+      markedReconnectRequired: 0,
+      rewrapped: 0,
+      staleSkipped: 0,
+      total: credentialRows.length,
+      unreadable: 0,
+    };
+
+    for (const credential of credentialRows) {
+      const rewrappedRefreshToken = yield* gmailRefreshTokenCipher
+        .rewrapRefreshToken(credential.refreshTokenCiphertext)
+        .pipe(Effect.either);
+
+      if (rewrappedRefreshToken._tag === "Left") {
+        if (markUnreadableReconnectRequired) {
+          yield* Effect.promise(() =>
+            database.db
+              .update(mailboxes)
+              .set({
+                lastErrorCode: "gmail_mailbox_credential_unreadable",
+                lastErrorMessage:
+                  "Mailbox has a stored Gmail refresh token that could not be decrypted or migrated. The mailbox must be reconnected.",
+                lastErrorOccurredAt: observedAt,
+                lastErrorRetryable: false,
+                status: "reconnect_required",
+                syncState: "failed",
+                updatedAt: observedAt,
+              })
+              .where(eq(mailboxes.id, credential.mailboxId)),
+          );
+          result.markedReconnectRequired += 1;
+          continue;
+        }
+
+        result.unreadable += 1;
+        continue;
+      }
+
+      if (rewrappedRefreshToken.right === credential.refreshTokenCiphertext) {
+        result.alreadyCurrent += 1;
+        continue;
+      }
+
+      const updatedRows = yield* Effect.promise(() =>
+        database.db
+          .update(gmailMailboxCredentials)
+          .set({
+            refreshTokenCiphertext: rewrappedRefreshToken.right,
+            updatedAt: observedAt,
+          })
+          .where(
+            and(
+              eq(gmailMailboxCredentials.mailboxId, credential.mailboxId),
+              eq(gmailMailboxCredentials.refreshTokenCiphertext, credential.refreshTokenCiphertext),
+            ),
+          )
+          .returning({ mailboxId: gmailMailboxCredentials.mailboxId }),
+      );
+
+      if (updatedRows.length === 0) {
+        result.staleSkipped += 1;
+        continue;
+      }
+
+      result.rewrapped += 1;
+    }
+
+    return result satisfies GmailMailboxCredentialRewrapResult;
+  });
+
 export class MailmonDatabase extends Context.Tag("@mailmon/db/MailmonDatabase")<
   MailmonDatabase,
   DatabaseHandle
@@ -1512,7 +1697,11 @@ export const createMailboxConnectSessionStoreLayer = Layer.effect(
         Effect.gen(function* () {
           const encryptedRefreshToken = yield* gmailRefreshTokenCipher
             .encryptRefreshToken(params.refreshToken)
-            .pipe(Effect.mapError(() => gmailMailboxCredentialEncryptionFailed(params.connectSessionId)));
+            .pipe(
+              Effect.mapError(() =>
+                gmailMailboxCredentialEncryptionFailed(params.connectSessionId),
+              ),
+            );
 
           return yield* Effect.tryPromise({
             catch: (error) => {

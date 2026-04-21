@@ -6,12 +6,20 @@ import { MailboxConnectSessionStore, SyncRunStore } from "@mailmon/core";
 import {
   createAesGcmGmailRefreshTokenCipherLayer,
   GmailMailboxCredentialStore,
+  GmailRefreshTokenCipher,
 } from "@mailmon/gmail";
 import { eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 import postgres from "postgres";
 
-import { createDb, createWorkerPersistenceLayer, schema } from "./index.js";
+import {
+  auditGmailMailboxCredentials,
+  createDb,
+  createDatabaseLayer,
+  createWorkerPersistenceLayer,
+  rewrapGmailMailboxCredentials,
+  schema,
+} from "./index.js";
 
 const DEFAULT_DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://mailmon:mailmon@localhost:5432/mailmon";
@@ -20,6 +28,16 @@ const workspaceId = "ws_gmail_credentials";
 const testGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
   allowPlaintextFallback: true,
   encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+});
+const rotatedGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+  activeKeyId: "key_new",
+  decryptionKeys: [
+    {
+      encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+      keyId: "key_old",
+    },
+  ],
+  encryptionKey: "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg=",
 });
 
 interface IsolatedDatabase {
@@ -134,6 +152,13 @@ const seedWorkspace = async (connectionString: string) => {
   }
 };
 
+const createEncryptedRefreshToken = (refreshToken: string) =>
+  Effect.gen(function* () {
+    const cipher = yield* GmailRefreshTokenCipher;
+
+    return yield* cipher.encryptRefreshToken(refreshToken);
+  });
+
 describe("gmail mailbox credentials", () => {
   it.effect("encrypts refresh tokens at rest and decrypts them for worker reads", () =>
     withIsolatedDatabase((database) =>
@@ -184,7 +209,9 @@ describe("gmail mailbox credentials", () => {
                 refreshTokenCiphertext: schema.gmailMailboxCredentials.refreshTokenCiphertext,
               })
               .from(schema.gmailMailboxCredentials)
-              .where(eq(schema.gmailMailboxCredentials.mailboxId, completedConnectSession.mailbox.id))
+              .where(
+                eq(schema.gmailMailboxCredentials.mailboxId, completedConnectSession.mailbox.id),
+              )
               .limit(1);
 
             return row;
@@ -196,6 +223,204 @@ describe("gmail mailbox credentials", () => {
         expect(storedCredential).toBeDefined();
         expect(storedCredential?.refreshTokenCiphertext).not.toBe("refresh-token-plaintext");
         expect(storedCredential?.refreshTokenCiphertext).toMatch(/^mmrt_v1:/);
+      }),
+    ),
+  );
+
+  it.effect("audits and rewraps plaintext and previous-key Gmail credentials", () =>
+    withIsolatedDatabase((database) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedWorkspace(database.connectionString));
+
+        const currentEncryptedRefreshToken = yield* createEncryptedRefreshToken(
+          "current-refresh-token",
+        ).pipe(Effect.provide(rotatedGmailRefreshTokenCipherLayer));
+        const oldEncryptedRefreshToken = yield* createEncryptedRefreshToken(
+          "old-refresh-token",
+        ).pipe(
+          Effect.provide(
+            createAesGcmGmailRefreshTokenCipherLayer({
+              activeKeyId: "key_old",
+              encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+            }),
+          ),
+        );
+
+        yield* Effect.promise(async () => {
+          const seededDatabase = createDb(database.connectionString);
+          const createdAt = new Date("2026-04-13T08:30:00.000Z");
+
+          try {
+            await seededDatabase.db.insert(schema.mailboxes).values([
+              {
+                id: "mbx_credential_current",
+                workspaceId,
+                provider: "gmail",
+                tenantExternalId: "tenant_current",
+                mailboxExternalId: "mailbox_current",
+                emailAddress: "current@mailmon.dev",
+                status: "active",
+                syncState: "healthy",
+                watchState: "active",
+                createdAt,
+                updatedAt: createdAt,
+              },
+              {
+                id: "mbx_credential_old",
+                workspaceId,
+                provider: "gmail",
+                tenantExternalId: "tenant_old",
+                mailboxExternalId: "mailbox_old",
+                emailAddress: "old@mailmon.dev",
+                status: "active",
+                syncState: "healthy",
+                watchState: "active",
+                createdAt,
+                updatedAt: createdAt,
+              },
+              {
+                id: "mbx_credential_plaintext",
+                workspaceId,
+                provider: "gmail",
+                tenantExternalId: "tenant_plaintext",
+                mailboxExternalId: "mailbox_plaintext",
+                emailAddress: "plaintext@mailmon.dev",
+                status: "active",
+                syncState: "healthy",
+                watchState: "active",
+                createdAt,
+                updatedAt: createdAt,
+              },
+              {
+                id: "mbx_credential_unreadable",
+                workspaceId,
+                provider: "gmail",
+                tenantExternalId: "tenant_unreadable",
+                mailboxExternalId: "mailbox_unreadable",
+                emailAddress: "unreadable@mailmon.dev",
+                status: "active",
+                syncState: "healthy",
+                watchState: "active",
+                createdAt,
+                updatedAt: createdAt,
+              },
+            ]);
+            await seededDatabase.db.insert(schema.gmailMailboxCredentials).values([
+              {
+                mailboxId: "mbx_credential_current",
+                refreshTokenCiphertext: currentEncryptedRefreshToken,
+                createdAt,
+                updatedAt: createdAt,
+              },
+              {
+                mailboxId: "mbx_credential_old",
+                refreshTokenCiphertext: oldEncryptedRefreshToken,
+                createdAt,
+                updatedAt: createdAt,
+              },
+              {
+                mailboxId: "mbx_credential_plaintext",
+                refreshTokenCiphertext: "plaintext-refresh-token",
+                createdAt,
+                updatedAt: createdAt,
+              },
+              {
+                mailboxId: "mbx_credential_unreadable",
+                refreshTokenCiphertext: "mmrt_v1:not-json",
+                createdAt,
+                updatedAt: createdAt,
+              },
+            ]);
+          } finally {
+            await seededDatabase.client.end();
+          }
+        });
+
+        const operatorLayer = Layer.mergeAll(
+          createDatabaseLayer(database.connectionString),
+          rotatedGmailRefreshTokenCipherLayer,
+        );
+        const credentialOperationResult = yield* Effect.gen(function* () {
+          const initialAuditReport = yield* auditGmailMailboxCredentials();
+          const migrationResult = yield* rewrapGmailMailboxCredentials({
+            markUnreadableReconnectRequired: true,
+            observedAt: "2026-04-13T08:45:00.000Z",
+          });
+
+          return {
+            auditReport: initialAuditReport,
+            rewrapResult: migrationResult,
+          };
+        }).pipe(Effect.provide(operatorLayer));
+        const verification = yield* Effect.promise(async () => {
+          const verificationDatabase = createDb(database.connectionString);
+
+          try {
+            const credentials = await verificationDatabase.db
+              .select({
+                mailboxId: schema.gmailMailboxCredentials.mailboxId,
+                refreshTokenCiphertext: schema.gmailMailboxCredentials.refreshTokenCiphertext,
+              })
+              .from(schema.gmailMailboxCredentials);
+            const [unreadableMailbox] = await verificationDatabase.db
+              .select({
+                lastErrorCode: schema.mailboxes.lastErrorCode,
+                status: schema.mailboxes.status,
+                syncState: schema.mailboxes.syncState,
+              })
+              .from(schema.mailboxes)
+              .where(eq(schema.mailboxes.id, "mbx_credential_unreadable"))
+              .limit(1);
+
+            return {
+              credentials,
+              unreadableMailbox,
+            };
+          } finally {
+            await verificationDatabase.client.end();
+          }
+        });
+
+        expect(credentialOperationResult.auditReport).toMatchObject({
+          encryptedCurrent: 1,
+          encryptedRewrapRequired: 1,
+          plaintext: 1,
+          total: 4,
+          unreadable: 1,
+        });
+        const auditStatuses = credentialOperationResult.auditReport.items.map(
+          (item) => [item.mailboxId, item.status] as const,
+        );
+
+        // oxlint-disable-next-line unicorn/no-array-sort
+        auditStatuses.sort((left, right) => left[0].localeCompare(right[0]));
+
+        expect(auditStatuses).toEqual([
+          ["mbx_credential_current", "encrypted_current"],
+          ["mbx_credential_old", "encrypted_rewrap_required"],
+          ["mbx_credential_plaintext", "plaintext"],
+          ["mbx_credential_unreadable", "unreadable"],
+        ]);
+        expect(credentialOperationResult.rewrapResult).toEqual({
+          alreadyCurrent: 1,
+          markedReconnectRequired: 1,
+          rewrapped: 2,
+          staleSkipped: 0,
+          total: 4,
+          unreadable: 0,
+        });
+        expect(verification.unreadableMailbox).toMatchObject({
+          lastErrorCode: "gmail_mailbox_credential_unreadable",
+          status: "reconnect_required",
+          syncState: "failed",
+        });
+        expect(
+          verification.credentials.filter(
+            (credential) =>
+              credential.mailboxId !== "mbx_credential_unreadable" &&
+              credential.refreshTokenCiphertext.startsWith("mmrt_v1:"),
+          ),
+        ).toHaveLength(3);
       }),
     ),
   );
@@ -276,82 +501,84 @@ describe("gmail mailbox credentials", () => {
     ),
   );
 
-  it.effect("moves mailboxes into reconnect_required when Gmail mailbox credentials are missing", () =>
-    withIsolatedDatabase((database) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => seedWorkspace(database.connectionString));
+  it.effect(
+    "moves mailboxes into reconnect_required when Gmail mailbox credentials are missing",
+    () =>
+      withIsolatedDatabase((database) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => seedWorkspace(database.connectionString));
 
-        const seededMailboxId = yield* Effect.promise(async () => {
-          const seededDatabase = createDb(database.connectionString);
+          const seededMailboxId = yield* Effect.promise(async () => {
+            const seededDatabase = createDb(database.connectionString);
 
-          try {
-            await seededDatabase.db.insert(schema.mailboxes).values({
-              id: "mbx_missing_credentials",
-              workspaceId,
-              provider: "gmail",
-              tenantExternalId: "tenant_missing_credentials",
-              mailboxExternalId: "mailbox_missing_credentials",
-              emailAddress: "missing@mailmon.dev",
-              status: "active",
-              syncState: "healthy",
-              watchState: "active",
-              createdAt: new Date("2026-04-13T08:30:00.000Z"),
-              updatedAt: new Date("2026-04-13T08:30:00.000Z"),
-            });
+            try {
+              await seededDatabase.db.insert(schema.mailboxes).values({
+                id: "mbx_missing_credentials",
+                workspaceId,
+                provider: "gmail",
+                tenantExternalId: "tenant_missing_credentials",
+                mailboxExternalId: "mailbox_missing_credentials",
+                emailAddress: "missing@mailmon.dev",
+                status: "active",
+                syncState: "healthy",
+                watchState: "active",
+                createdAt: new Date("2026-04-13T08:30:00.000Z"),
+                updatedAt: new Date("2026-04-13T08:30:00.000Z"),
+              });
 
-            return "mbx_missing_credentials";
-          } finally {
-            await seededDatabase.client.end();
-          }
-        });
-
-        const persistenceLayer = createWorkerPersistenceLayer(database.connectionString).pipe(
-          Layer.provide(testGmailRefreshTokenCipherLayer),
-        );
-
-        yield* Effect.gen(function* () {
-          const syncRunStore = yield* SyncRunStore;
-          const syncRun = yield* syncRunStore.startSyncRun(seededMailboxId);
-
-          yield* syncRunStore.completeSyncRun({
-            syncRunId: syncRun.syncRunId,
-            mailboxId: seededMailboxId,
-            completedAt: "2026-04-13T08:45:00.000Z",
-            status: "reconnect_required",
-            eventsEmitted: 0,
-            nextCursor: null,
-            detail: "gmail_mailbox_credentials_missing",
+              return "mbx_missing_credentials";
+            } finally {
+              await seededDatabase.client.end();
+            }
           });
-        }).pipe(Effect.provide(persistenceLayer));
 
-        const storedMailbox = yield* Effect.promise(async () => {
-          const verificationDatabase = createDb(database.connectionString);
+          const persistenceLayer = createWorkerPersistenceLayer(database.connectionString).pipe(
+            Layer.provide(testGmailRefreshTokenCipherLayer),
+          );
 
-          try {
-            const [row] = await verificationDatabase.db
-              .select({
-                lastErrorCode: schema.mailboxes.lastErrorCode,
-                lastErrorRetryable: schema.mailboxes.lastErrorRetryable,
-                status: schema.mailboxes.status,
-                syncState: schema.mailboxes.syncState,
-              })
-              .from(schema.mailboxes)
-              .where(eq(schema.mailboxes.id, seededMailboxId))
-              .limit(1);
+          yield* Effect.gen(function* () {
+            const syncRunStore = yield* SyncRunStore;
+            const syncRun = yield* syncRunStore.startSyncRun(seededMailboxId);
 
-            return row;
-          } finally {
-            await verificationDatabase.client.end();
-          }
-        });
+            yield* syncRunStore.completeSyncRun({
+              syncRunId: syncRun.syncRunId,
+              mailboxId: seededMailboxId,
+              completedAt: "2026-04-13T08:45:00.000Z",
+              status: "reconnect_required",
+              eventsEmitted: 0,
+              nextCursor: null,
+              detail: "gmail_mailbox_credentials_missing",
+            });
+          }).pipe(Effect.provide(persistenceLayer));
 
-        expect(storedMailbox).toMatchObject({
-          lastErrorCode: "gmail_mailbox_credentials_missing",
-          lastErrorRetryable: false,
-          status: "reconnect_required",
-          syncState: "failed",
-        });
-      }),
-    ),
+          const storedMailbox = yield* Effect.promise(async () => {
+            const verificationDatabase = createDb(database.connectionString);
+
+            try {
+              const [row] = await verificationDatabase.db
+                .select({
+                  lastErrorCode: schema.mailboxes.lastErrorCode,
+                  lastErrorRetryable: schema.mailboxes.lastErrorRetryable,
+                  status: schema.mailboxes.status,
+                  syncState: schema.mailboxes.syncState,
+                })
+                .from(schema.mailboxes)
+                .where(eq(schema.mailboxes.id, seededMailboxId))
+                .limit(1);
+
+              return row;
+            } finally {
+              await verificationDatabase.client.end();
+            }
+          });
+
+          expect(storedMailbox).toMatchObject({
+            lastErrorCode: "gmail_mailbox_credentials_missing",
+            lastErrorRetryable: false,
+            status: "reconnect_required",
+            syncState: "failed",
+          });
+        }),
+      ),
   );
 });
