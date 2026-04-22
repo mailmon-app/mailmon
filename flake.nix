@@ -14,14 +14,14 @@
       {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            nodejs_22
+            nodejs_24
             pnpm
             just
             docker-compose
           ];
 
           shellHook = ''
-            echo "🚀 Mailmon Dev Environment Loaded"
+            echo "💌 Mailmon Dev Environment Loaded"
             echo "Node.js: $(node --version)"
             echo "pnpm: $(pnpm --version)"
             echo "Run 'just' to see available commands."
