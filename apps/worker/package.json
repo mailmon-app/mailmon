@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "varlock run -- tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "varlock run -- node dist/index.js",
     "lint": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json .",
     "lint:fix": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --fix .",
     "typecheck": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --type-check .",
@@ -20,7 +20,9 @@
     "@mailmon/db": "workspace:*",
     "@mailmon/gmail": "workspace:*",
     "@mailmon/queue": "workspace:*",
+    "@varlock/google-secret-manager-plugin": "catalog:",
     "bullmq": "^5.71.0",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "varlock": "catalog:"
   }
 }

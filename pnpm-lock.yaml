@@ -21,12 +21,18 @@ catalogs:
     '@types/node':
       specifier: ^25.5.0
       version: 25.5.0
+    '@varlock/google-secret-manager-plugin':
+      specifier: ^0.2.1
+      version: 0.2.1
     effect:
       specifier: ^3.21.0
       version: 3.21.0
     typescript:
       specifier: ^6.0.2
       version: 6.0.2
+    varlock:
+      specifier: ^0.9.1
+      version: 0.9.1
 
 packageExtensionsChecksum: sha256-0kyTNkcRcFDQqWrPqMmYao3OK7ArhPUDqpKQ9cZErUA=
 
@@ -97,12 +103,18 @@ importers:
       '@mailmon/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@varlock/google-secret-manager-plugin':
+        specifier: 'catalog:'
+        version: 0.2.1(varlock@0.9.1)
       effect:
         specifier: 'catalog:'
         version: 3.21.0
       hono:
         specifier: ^4.12.9
         version: 4.12.9
+      varlock:
+        specifier: 'catalog:'
+        version: 0.9.1
 
   apps/cli:
     dependencies:
@@ -127,9 +139,15 @@ importers:
       '@mailmon/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@varlock/google-secret-manager-plugin':
+        specifier: 'catalog:'
+        version: 0.2.1(varlock@0.9.1)
       effect:
         specifier: 'catalog:'
         version: 3.21.0
+      varlock:
+        specifier: 'catalog:'
+        version: 0.9.1
 
   apps/worker:
     dependencies:
@@ -148,12 +166,18 @@ importers:
       '@mailmon/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@varlock/google-secret-manager-plugin':
+        specifier: 'catalog:'
+        version: 0.2.1(varlock@0.9.1)
       bullmq:
         specifier: ^5.71.0
         version: 5.71.0
       effect:
         specifier: 'catalog:'
         version: 3.21.0
+      varlock:
+        specifier: 'catalog:'
+        version: 0.9.1
 
   packages/config:
     dependencies:
@@ -249,10 +273,10 @@ packages:
     resolution: {integrity: sha512-cBQ7yg/P4+kAp+JFX+9Bk5bc1jG3UMVq8pgtW5VAWBl/yiTjWlCGMKC4UxX2KlpREvjTkvS8BKi1wYw0phWmAQ==}
     hasBin: true
 
-  '@effect/platform-bun@4.0.0-beta.48':
-    resolution: {integrity: sha512-IFECogXd6BW0qtzZgCF9HdwP4tVMhz9D+hwFmGWh5cmqCeDIA2YnmWuhCsJZ9/iNwfpsWv9a68mysAcUFwTS+A==}
+  '@effect/platform-bun@4.0.0-beta.54':
+    resolution: {integrity: sha512-rkCzHBS9bik+yjiBb0e50+PR/Vv5ys0EKclIHEFrU0+q+p5lLTZjMdfmRpJ567STF0JUclqdoev8JqZRVUsGYQ==}
     peerDependencies:
-      effect: ^4.0.0-beta.48
+      effect: ^4.0.0-beta.54
 
   '@effect/platform-node-shared@0.59.0':
     resolution: {integrity: sha512-3bq2YKKfLY7UFauZSxqZUneCXoA3SMSls82V+0RKunvRlfPuPQW0hVn6t1RkvEdh0PDoygWG2mZXYQa6Iqgp9A==}
@@ -263,11 +287,11 @@ packages:
       '@effect/sql': ^0.51.0
       effect: ^3.21.0
 
-  '@effect/platform-node-shared@4.0.0-beta.48':
-    resolution: {integrity: sha512-wlhcdDHyacydCgiWdM8JwtQkViQhZsC8uJZ9wMoZXYxlCTvqfdzLeWw4A1UVMoq7sS6/KR1aZVeFkUjrqonncQ==}
+  '@effect/platform-node-shared@4.0.0-beta.54':
+    resolution: {integrity: sha512-aSHimEVevmgjm1GhvSmEM5xb8D7bUohHcf4NTvf+WqCQbt3Y58kT8xdD93EbpxZDkteY0DraCbUrtxx3cRBQ3Q==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.48
+      effect: ^4.0.0-beta.54
 
   '@effect/platform-node@0.106.0':
     resolution: {integrity: sha512-mpsJK2jNLVd0jQAjHKBo8j3wdKWznSGvfnKBcAuG/9Rr4mb8bMRZFLXHHT9wUP7EvnZ0tDZJgEDxkC+j+ByRag==}
@@ -1423,6 +1447,12 @@ packages:
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
+  '@varlock/google-secret-manager-plugin@0.2.1':
+    resolution: {integrity: sha512-urQMGNMq5KZO9k68AX5xDyOm5WeM3an11y3hdWhlmGUNw3g1nNti19DedA7/KSxb1zPX/rxnZVKURRM3dQ5QKg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      varlock: ^0.7.0
+
   '@vitest/expect@3.2.4':
     resolution: {integrity: sha512-Io0yyORnB6sikFlt8QW5K7slY4OjqNX9jmJQ02QDda8lyM6B5oNgVWoSoKPac8/kgnCUzuHQKrSLtu/uOqqrig==}
 
@@ -1692,8 +1722,8 @@ packages:
   effect@3.21.0:
     resolution: {integrity: sha512-PPN80qRokCd1f015IANNhrwOnLO7GrrMQfk4/lnZRE/8j7UPWrNNjPV0uBrZutI/nHzernbW+J0hdqQysHiSnQ==}
 
-  effect@4.0.0-beta.48:
-    resolution: {integrity: sha512-MMAM/ZabuNdNmgXiin+BAanQXK7qM8mlt7nfXDoJ/Gn9V8i89JlCq+2N0AiWmqFLXjGLA0u3FjiOjSOYQk5uMw==}
+  effect@4.0.0-beta.54:
+    resolution: {integrity: sha512-hbnBnyGt2bftwlZPtjXnFfnCQwDYCEYbHYiNs5MvYL+NgnQvAhjZugKaTxZXul2tT8RaNQZyqXX0XBhUIWkcFw==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -2379,6 +2409,11 @@ packages:
     resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
     hasBin: true
 
+  varlock@0.9.1:
+    resolution: {integrity: sha512-AMF41b5Pqo7rOOBK5mXuR+Jv++R/jeq9T9KdWCiYXD4ARZKH6MWbe0N/2JKpSPPDpiCWD2tlRLDPfh/gHAavkg==}
+    engines: {bun: '>=1.3.3', node: '>=22'}
+    hasBin: true
+
   vite-node@3.2.4:
     resolution: {integrity: sha512-EbKSKh+bh1E1IFxeO0pg1n4dvoOTt0UDiXMd/qn++r98+jPO1xtJilvXldeuQ8giIB5IkpjCgMleHMNEsGH6pg==}
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
@@ -2543,10 +2578,10 @@ snapshots:
 
   '@effect/language-service@0.83.1': {}
 
-  '@effect/platform-bun@4.0.0-beta.48(effect@4.0.0-beta.48)':
+  '@effect/platform-bun@4.0.0-beta.54(effect@4.0.0-beta.54)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.48(effect@4.0.0-beta.48)
-      effect: 4.0.0-beta.48
+      '@effect/platform-node-shared': 4.0.0-beta.54(effect@4.0.0-beta.54)
+      effect: 4.0.0-beta.54
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -2565,10 +2600,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node-shared@4.0.0-beta.48(effect@4.0.0-beta.48)':
+  '@effect/platform-node-shared@4.0.0-beta.54(effect@4.0.0-beta.54)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-beta.48
+      effect: 4.0.0-beta.54
       ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
@@ -3253,6 +3288,10 @@ snapshots:
     dependencies:
       '@types/node': 25.5.0
 
+  '@varlock/google-secret-manager-plugin@0.2.1(varlock@0.9.1)':
+    dependencies:
+      varlock: 0.9.1
+
   '@vitest/expect@3.2.4':
     dependencies:
       '@types/chai': 5.2.3
@@ -3461,8 +3500,8 @@ snapshots:
 
   effect-solutions@0.5.2:
     dependencies:
-      '@effect/platform-bun': 4.0.0-beta.48(effect@4.0.0-beta.48)
-      effect: 4.0.0-beta.48
+      '@effect/platform-bun': 4.0.0-beta.54(effect@4.0.0-beta.54)
+      effect: 4.0.0-beta.54
       gray-matter: 4.0.3
       picocolors: 1.1.1
     transitivePeerDependencies:
@@ -3474,7 +3513,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2
 
-  effect@4.0.0-beta.48:
+  effect@4.0.0-beta.54:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.6.0
@@ -4272,6 +4311,8 @@ snapshots:
   uuid@11.1.0: {}
 
   uuid@13.0.0: {}
+
+  varlock@0.9.1: {}
 
   vite-node@3.2.4(@types/node@25.5.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:

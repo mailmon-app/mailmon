@@ -8,8 +8,10 @@ catalog:
   "@effect/platform-node": ^0.106.0
   "@google-cloud/tasks": ^6.2.1
   "@types/node": ^25.5.0
+  "@varlock/google-secret-manager-plugin": ^0.2.1
   effect: ^3.21.0
   typescript: ^6.0.2
+  varlock: ^0.9.1
 enableGlobalVirtualStore: true
 
 engineStrict: true
