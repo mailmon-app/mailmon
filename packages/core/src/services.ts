@@ -5,6 +5,7 @@ import type {
   CompletedMailboxConnectSession,
   CompletedSyncRun,
   CreatedWebhookEndpointResource,
+  GmailPushNotification,
   ListMailboxMessagesRequest,
   ListMailboxThreadsRequest,
   ListResource,
@@ -262,6 +263,17 @@ export class MailboxWatchProvider extends Context.Tag("@mailmon/core/MailboxWatc
     readonly renewMailboxWatch: (
       request: MailboxWatchRenewalRequest,
     ) => Effect.Effect<MailboxWatchRenewalResult, ProblemDetails>;
+  }
+>() {}
+
+export class MailboxPushNotificationStore extends Context.Tag(
+  "@mailmon/core/MailboxPushNotificationStore",
+)<
+  MailboxPushNotificationStore,
+  {
+    readonly listMailboxesForGmailPushNotification: (
+      notification: GmailPushNotification,
+    ) => Effect.Effect<ReadonlyArray<MailboxResource>>;
   }
 >() {}
 

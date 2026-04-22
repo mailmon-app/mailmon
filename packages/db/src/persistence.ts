@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   MailboxCatalog,
   MailboxConnectSessionStore,
+  MailboxPushNotificationStore,
   MailboxQueryCatalog,
   MailboxSyncCoordinator,
   MailboxStateStore,
@@ -1070,6 +1071,32 @@ export const createMailboxCatalogLayer = Layer.effect(
             .limit(1);
 
           return Option.fromNullable(row).pipe(Option.map(toMailboxResource));
+        }),
+    };
+  }),
+);
+
+export const createMailboxPushNotificationStoreLayer = Layer.effect(
+  MailboxPushNotificationStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      listMailboxesForGmailPushNotification: ({ emailAddress }) =>
+        Effect.promise(async () => {
+          const rows = await database.db
+            .select()
+            .from(mailboxes)
+            .where(
+              and(
+                eq(mailboxes.provider, "gmail"),
+                eq(mailboxes.status, "active"),
+                eq(mailboxes.emailAddress, normalizeEmailAddress(emailAddress)),
+              ),
+            )
+            .orderBy(asc(mailboxes.id));
+
+          return rows.map((row) => toMailboxResource(row));
         }),
     };
   }),
@@ -2520,6 +2547,7 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
 export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxCatalogLayer,
   createMailboxConnectSessionStoreLayer,
+  createMailboxPushNotificationStoreLayer,
   createMailboxQueryCatalogLayer,
   createMailboxStateStoreLayer,
   createMailboxSyncCoordinatorLayer,

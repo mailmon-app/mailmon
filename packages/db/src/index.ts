@@ -12,6 +12,7 @@ export {
   createGmailMailboxCredentialStoreLayer,
   createMailboxCatalogLayer,
   createMailboxConnectSessionStoreLayer,
+  createMailboxPushNotificationStoreLayer,
   createMailboxQueryCatalogLayer,
   createMailboxSyncCoordinatorLayer,
   createMailboxStateStoreLayer,

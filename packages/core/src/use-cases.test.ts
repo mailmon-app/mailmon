@@ -11,6 +11,7 @@ import type {
 import { makeProblem } from "./problems.js";
 import {
   MailboxCatalog,
+  MailboxPushNotificationStore,
   MailboxQueryCatalog,
   MailboxSyncCoordinator,
   MailboxSyncDispatcher,
@@ -33,6 +34,7 @@ import {
   getMailboxOrFail,
   getMessageOrFail,
   getThreadOrFail,
+  ingestGmailPushNotification,
   listMailboxMessages,
   listMailboxThreads,
   recoverWebhookDeliveryScheduling,
@@ -487,6 +489,21 @@ const syncDispatcherLayer = Layer.succeed(MailboxSyncDispatcher, {
     }),
 });
 
+const pushNotificationStoreLayer = Layer.succeed(MailboxPushNotificationStore, {
+  listMailboxesForGmailPushNotification: ({ emailAddress }) =>
+    Effect.succeed(
+      emailAddress === mailboxFixture.emailAddress
+        ? [
+            mailboxFixture,
+            {
+              ...mailboxFixture,
+              id: "mbx_second_workspace",
+            },
+          ]
+        : [],
+    ),
+});
+
 const queryCatalogLayer = Layer.succeed(MailboxQueryCatalog, {
   listMessages: ({ mailboxId, cursor, limit }) =>
     Effect.succeed({
@@ -596,6 +613,45 @@ describe("dispatchMailboxSync", () => {
         Effect.tap(() => Effect.sync(() => dispatchedMailboxIds.splice(0))),
         Effect.provide(Layer.mergeAll(catalogLayer, syncDispatcherLayer)),
       ),
+  );
+});
+
+describe("ingestGmailPushNotification", () => {
+  it.effect("dispatches sync for every active mailbox matching the Gmail push address", () =>
+    ingestGmailPushNotification({
+      emailAddress: mailboxFixture.emailAddress,
+      historyId: "hist_push_123",
+      messageId: "pubsub_msg_123",
+      subscription: "projects/mailmon-staging/subscriptions/gmail-push-worker",
+    }).pipe(
+      Effect.map((result) => {
+        expect(result).toEqual({
+          dispatched: 2,
+          emailAddress: mailboxFixture.emailAddress,
+          historyId: "hist_push_123",
+          kind: "gmail_push",
+          status: "accepted",
+        });
+        expect(dispatchedMailboxIds).toEqual([mailboxFixture.id, "mbx_second_workspace"]);
+      }),
+      Effect.tap(() => Effect.sync(() => dispatchedMailboxIds.splice(0))),
+      Effect.provide(Layer.mergeAll(pushNotificationStoreLayer, syncDispatcherLayer)),
+    ),
+  );
+
+  it.effect("accepts unmatched Gmail pushes without dispatching sync work", () =>
+    ingestGmailPushNotification({
+      emailAddress: "unknown@example.com",
+      historyId: "hist_unknown",
+      messageId: "pubsub_msg_unknown",
+      subscription: null,
+    }).pipe(
+      Effect.map((result) => {
+        expect(result.dispatched).toBe(0);
+        expect(dispatchedMailboxIds).toEqual([]);
+      }),
+      Effect.provide(Layer.mergeAll(pushNotificationStoreLayer, syncDispatcherLayer)),
+    ),
   );
 });
 

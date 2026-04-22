@@ -9,6 +9,8 @@ import type {
   CreateConnectSessionRequest,
   CreateWebhookEndpointRequest,
   CreateWebhookEndpointSubscriptionRequest,
+  GmailPushNotification,
+  GmailPushNotificationResult,
   MailboxResource,
   ProcessWebhookDeliveryResult,
   RenewMailboxWatchesResult,
@@ -33,6 +35,7 @@ import {
   MailboxCatalog,
   MailboxConnectProvider,
   MailboxConnectSessionStore,
+  MailboxPushNotificationStore,
   MailboxSyncCoordinator,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
@@ -990,6 +993,27 @@ export const dispatchMailboxSync = (mailboxId: string) =>
     yield* dispatcher.dispatchMailboxSync(mailbox.id);
 
     return mailbox;
+  });
+
+export const ingestGmailPushNotification = (notification: GmailPushNotification) =>
+  Effect.gen(function* () {
+    const pushNotificationStore = yield* MailboxPushNotificationStore;
+    const dispatcher = yield* MailboxSyncDispatcher;
+    const mailboxes =
+      yield* pushNotificationStore.listMailboxesForGmailPushNotification(notification);
+
+    yield* Effect.forEach(mailboxes, (mailbox) => dispatcher.dispatchMailboxSync(mailbox.id), {
+      concurrency: 10,
+      discard: true,
+    });
+
+    return {
+      dispatched: mailboxes.length,
+      emailAddress: notification.emailAddress,
+      historyId: notification.historyId,
+      kind: "gmail_push",
+      status: "accepted",
+    } satisfies GmailPushNotificationResult;
   });
 
 export const createHealthyMailboxSnapshot = (

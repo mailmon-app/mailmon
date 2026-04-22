@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 
 import { describe, expect, it } from "@effect/vitest";
 import {
+  MailboxPushNotificationStore,
   getMessageOrFail,
   getThreadOrFail,
   listMailboxMessages,
@@ -153,7 +154,7 @@ const seedReadModelFixtures = async (connectionString: string) => {
         id: foreignMailboxId,
         workspaceId: foreignWorkspaceId,
         provider: "gmail",
-        emailAddress: "foreign@mailmon.dev",
+        emailAddress: "primary@mailmon.dev",
         status: "active",
         syncState: "healthy",
         watchState: "active",
@@ -339,6 +340,31 @@ describe("DB-backed mailbox read hardening", () => {
 
         expect(secondPage.data.map((message) => message.id)).toEqual(["msg_250", "msg_100"]);
         expect(secondPage.nextCursor).toBeNull();
+      }).pipe(Effect.provide(persistenceLayer));
+    }),
+  );
+
+  it.effect("lists every active mailbox matching a Gmail Push Notification address", () =>
+    withIsolatedDatabase(({ connectionString }) => {
+      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+        Layer.provide(testGmailRefreshTokenCipherLayer),
+      );
+
+      return Effect.gen(function* () {
+        yield* Effect.promise(() => seedReadModelFixtures(connectionString));
+
+        const pushNotificationStore = yield* MailboxPushNotificationStore;
+        const mailboxes = yield* pushNotificationStore.listMailboxesForGmailPushNotification({
+          emailAddress: " Primary@Mailmon.Dev ",
+          historyId: "hist_push_123",
+          messageId: "pubsub_msg_123",
+          subscription: "projects/mailmon-staging/subscriptions/gmail-push-worker",
+        });
+
+        expect(mailboxes.map((mailbox) => mailbox.id)).toEqual([
+          foreignMailboxId,
+          primaryMailboxId,
+        ]);
       }).pipe(Effect.provide(persistenceLayer));
     }),
   );

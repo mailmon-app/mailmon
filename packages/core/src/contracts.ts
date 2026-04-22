@@ -398,6 +398,21 @@ export interface MailboxWatchRenewalResult {
   readonly watchExpiresAt: string;
 }
 
+export interface GmailPushNotification {
+  readonly emailAddress: string;
+  readonly historyId: string;
+  readonly messageId: string | null;
+  readonly subscription: string | null;
+}
+
+export interface GmailPushNotificationResult {
+  readonly dispatched: number;
+  readonly emailAddress: string;
+  readonly historyId: string;
+  readonly kind: "gmail_push";
+  readonly status: "accepted";
+}
+
 export interface MailboxSyncLeaseAcquisition {
   readonly acquired: boolean;
   readonly expiresAt: string | null;
