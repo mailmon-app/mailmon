@@ -23,7 +23,7 @@
     "@mailmon/queue": "workspace:*",
     "@varlock/google-secret-manager-plugin": "catalog:",
     "effect": "catalog:",
-    "hono": "^4.12.9",
+    "hono": "^4.12.14",
     "varlock": "catalog:"
   }
 }
