@@ -3,11 +3,13 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import {
   MailboxConnectProvider,
   MailboxSyncProvider,
+  MailboxWatchProvider,
   makeProblem,
   type CanonicalMessageRecord,
   type MailboxConnectAuthorization,
   type MailboxProviderSyncResult,
   type MailboxSyncRequest,
+  type MailboxWatchRenewalResult,
   type ProblemDetails,
 } from "@mailmon/core";
 import { Context, Effect, Layer } from "effect";
@@ -378,6 +380,7 @@ export const createAesGcmGmailRefreshTokenCipherLayer = (config: GmailRefreshTok
 export interface GmailSyncProviderConfig {
   readonly apiBaseUrl?: string;
   readonly fetchImpl?: typeof fetch;
+  readonly gmailPubSubTopicName?: string | null;
   readonly oauthAuthorizeUrl?: string;
   readonly oauthClientId: string | null;
   readonly oauthClientSecret: string | null;
@@ -416,6 +419,11 @@ interface GmailHistoryListResponse {
   readonly history?: ReadonlyArray<GmailHistoryRecord>;
   readonly historyId: string;
   readonly nextPageToken?: string;
+}
+
+interface GmailWatchResponse {
+  readonly expiration: string;
+  readonly historyId: string;
 }
 
 interface GmailHistoryRecord {
@@ -638,6 +646,29 @@ const parseGmailHistoryListResponse = (
   };
 };
 
+const parseGmailWatchResponse = (payload: unknown, mailboxId: string): GmailWatchResponse => {
+  if (
+    isRecord(payload) &&
+    typeof payload.historyId === "string" &&
+    typeof payload.expiration === "string" &&
+    !Number.isNaN(Number.parseInt(payload.expiration, 10))
+  ) {
+    return {
+      expiration: payload.expiration,
+      historyId: payload.historyId,
+    };
+  }
+
+  throw makeGmailProblem({
+    code: "gmail_watch_response_invalid",
+    detail: "Renewing the Gmail mailbox watch returned an invalid response body.",
+    mailboxId,
+    retryable: false,
+    status: 502,
+    title: "Gmail watch response invalid",
+  });
+};
+
 const isProblemDetails = (value: unknown): value is ProblemDetails => {
   return (
     isRecord(value) &&
@@ -703,6 +734,16 @@ const toReceivedAt = (internalDate: string | undefined) => {
   }
 
   return new Date(Number.parseInt(internalDate, 10)).toISOString();
+};
+
+const toIsoTimestampFromEpochMillis = (epochMillis: string) => {
+  const parsedEpochMillis = Number.parseInt(epochMillis, 10);
+
+  if (Number.isNaN(parsedEpochMillis)) {
+    throw new Error(`Invalid Gmail watch expiration: ${epochMillis}`);
+  }
+
+  return new Date(parsedEpochMillis).toISOString();
 };
 
 const makeGmailProblem = (params: {
@@ -1095,6 +1136,26 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
 
     return {
       response,
+      responseBody: await response.json().catch(() => null),
+    };
+  };
+
+  const postJson = async (params: {
+    readonly accessToken: string;
+    readonly body: unknown;
+    readonly pathname: string;
+  }) => {
+    const response = await fetchImpl(createFetchUrl(apiBaseUrl, params.pathname, {}), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${params.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(params.body),
+    });
+
+    return {
+      response,
       responseBody: await response.json(),
     };
   };
@@ -1143,6 +1204,52 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
     }
 
     return parseGmailConnectProfileResponse(responseBody, params.connectSessionId);
+  };
+
+  const watchMailbox = async (params: {
+    readonly accessToken: string;
+    readonly mailboxId: string;
+  }): Promise<MailboxWatchRenewalResult> => {
+    if (
+      config.gmailPubSubTopicName === undefined ||
+      config.gmailPubSubTopicName === null ||
+      config.gmailPubSubTopicName.length === 0
+    ) {
+      throw makeGmailProblem({
+        code: "gmail_watch_topic_missing",
+        detail: "MAILMON_GMAIL_PUBSUB_TOPIC_NAME is required to renew Gmail mailbox watches.",
+        mailboxId: params.mailboxId,
+        retryable: false,
+        status: 500,
+        title: "Gmail watch topic missing",
+      });
+    }
+
+    const { response, responseBody } = await postJson({
+      accessToken: params.accessToken,
+      pathname: "/users/me/watch",
+      body: {
+        topicName: config.gmailPubSubTopicName,
+      },
+    });
+
+    if (!response.ok) {
+      throw makeGmailProblem({
+        code: "gmail_watch_renewal_failed",
+        detail: `Renewing the Gmail mailbox watch failed with HTTP ${response.status}.`,
+        mailboxId: params.mailboxId,
+        retryable: response.status === 429 || response.status >= 500,
+        status: response.status,
+        title: "Gmail watch renewal failed",
+      });
+    }
+
+    const parsedResponse = parseGmailWatchResponse(responseBody, params.mailboxId);
+
+    return {
+      historyId: parsedResponse.historyId,
+      watchExpiresAt: toIsoTimestampFromEpochMillis(parsedResponse.expiration),
+    };
   };
 
   const getMessage = async (params: {
@@ -1328,6 +1435,7 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
     listAllMessages,
     listHistoryDelta,
     oauthAuthorizeUrl,
+    watchMailbox,
   };
 };
 
@@ -1336,6 +1444,66 @@ export const createStubMailboxSyncProviderLayer = Layer.succeed(MailboxSyncProvi
     return Effect.succeed(createStubSyncResult(request));
   },
 });
+
+export const createHttpGmailWatchProviderLayer = (config: GmailSyncProviderConfig) =>
+  Layer.effect(
+    MailboxWatchProvider,
+    Effect.gen(function* () {
+      const credentialStore = yield* GmailMailboxCredentialStore;
+      const gmailApi = createHttpGmailApi(config);
+
+      return {
+        renewMailboxWatch: ({ mailbox }) =>
+          Effect.gen(function* () {
+            const credential = yield* credentialStore.getGmailMailboxCredential(mailbox.id);
+
+            if (credential === null) {
+              return yield* Effect.fail(
+                makeGmailProblem({
+                  code: "gmail_mailbox_credentials_missing",
+                  detail: `Mailbox ${mailbox.id} has no stored Gmail refresh token.`,
+                  mailboxId: mailbox.id,
+                  retryable: false,
+                  status: 409,
+                  title: "Gmail mailbox credentials missing",
+                }),
+              );
+            }
+
+            return yield* Effect.tryPromise({
+              catch: (error) => {
+                if (isProblemDetails(error)) {
+                  return error;
+                }
+
+                return makeGmailProblem({
+                  code: "gmail_watch_renewal_failed",
+                  detail:
+                    error instanceof Error
+                      ? error.message
+                      : "An unexpected Gmail watch renewal error occurred.",
+                  mailboxId: mailbox.id,
+                  retryable: true,
+                  status: 502,
+                  title: "Gmail watch renewal failed",
+                });
+              },
+              try: async () => {
+                const accessToken = await gmailApi.fetchAccessToken({
+                  mailboxId: mailbox.id,
+                  refreshToken: credential.refreshToken,
+                });
+
+                return gmailApi.watchMailbox({
+                  accessToken,
+                  mailboxId: mailbox.id,
+                });
+              },
+            });
+          }),
+      };
+    }),
+  );
 
 export const createHttpGmailConnectProviderLayer = (config: GmailSyncProviderConfig) =>
   Layer.effect(

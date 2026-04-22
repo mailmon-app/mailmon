@@ -1,4 +1,4 @@
-import { MailboxConnectProvider, MailboxSyncProvider } from "@mailmon/core";
+import { MailboxConnectProvider, MailboxSyncProvider, MailboxWatchProvider } from "@mailmon/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -6,6 +6,7 @@ import {
   createAesGcmGmailRefreshTokenCipherLayer,
   createHttpGmailConnectProviderLayer,
   createHttpGmailSyncProviderLayer,
+  createHttpGmailWatchProviderLayer,
   createStubMailboxSyncProviderLayer,
   GmailMailboxCredentialStore,
   GmailRefreshTokenCipher,
@@ -712,6 +713,101 @@ describe("createHttpGmailSyncProviderLayer", () => {
       eventsEmitted: 3,
       nextCursor: "hist_incremental_3",
     });
+  });
+});
+
+describe("createHttpGmailWatchProviderLayer", () => {
+  const credentialStoreLayer = Layer.succeed(GmailMailboxCredentialStore, {
+    getGmailMailboxCredential: () =>
+      Effect.succeed({
+        mailboxId: mailboxFixture.id,
+        refreshToken: "refresh-token",
+      }),
+  });
+
+  it("renews a Gmail watch using the configured Pub/Sub topic", async () => {
+    const requests: Array<{
+      readonly body: string | null;
+      readonly method: string | undefined;
+      readonly path: string;
+    }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = new URL(getInputUrl(input));
+      const body =
+        typeof init?.body === "string"
+          ? init.body
+          : init?.body instanceof URLSearchParams
+            ? init.body.toString()
+            : null;
+
+      requests.push({
+        body,
+        method: init?.method,
+        path: url.pathname,
+      });
+
+      if (url.pathname === "/token") {
+        return new Response(JSON.stringify({ access_token: "access-token" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/watch") {
+        return new Response(
+          JSON.stringify({
+            historyId: "hist_watch_123",
+            expiration: String(Date.parse("2026-04-29T00:00:00.000Z")),
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxWatchProvider;
+
+        return yield* provider.renewMailboxWatch({
+          mailbox: mailboxFixture,
+        });
+      }).pipe(
+        Effect.provide(
+          createHttpGmailWatchProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            gmailPubSubTopicName: "projects/mailmon-staging/topics/gmail-push",
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }).pipe(Layer.provide(credentialStoreLayer)),
+        ),
+      ),
+    );
+
+    expect(result).toEqual({
+      historyId: "hist_watch_123",
+      watchExpiresAt: "2026-04-29T00:00:00.000Z",
+    });
+    expect(requests).toEqual([
+      {
+        body: expect.stringContaining("grant_type=refresh_token"),
+        method: "POST",
+        path: "/token",
+      },
+      {
+        body: JSON.stringify({
+          topicName: "projects/mailmon-staging/topics/gmail-push",
+        }),
+        method: "POST",
+        path: "/gmail/v1/users/me/watch",
+      },
+    ]);
   });
 });
 
