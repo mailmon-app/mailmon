@@ -18,6 +18,8 @@
             pnpm
             just
             docker-compose
+            opentofu
+            google-cloud-sdk
           ];
 
           shellHook = ''
