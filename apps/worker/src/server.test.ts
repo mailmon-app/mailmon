@@ -1,4 +1,5 @@
 import type { WorkerEnv } from "@mailmon/config";
+import type { ControlJobDispatchRequest } from "@mailmon/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { startWorkerHttpRuntime } from "./server.js";
@@ -19,6 +20,7 @@ const workerEnvFixture: WorkerEnv = {
   gmailRefreshTokenEncryptionKeyId: "primary",
   gmailRefreshTokenPreviousEncryptionKeys: [],
   gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
+  gmailPubSubTopicName: null,
   gcpProjectId: null,
   gcpRegion: null,
   gcpTasksAudience: null,
@@ -31,12 +33,34 @@ const workerEnvFixture: WorkerEnv = {
   workerBaseUrl: "http://127.0.0.1:3001",
 };
 
+const defaultProcessControlJob = async (request: ControlJobDispatchRequest) => {
+  if (request.kind !== "renew_watches") {
+    return {
+      completedAt: "2026-03-25T00:00:00.000Z",
+      kind: request.kind,
+      status: "noop" as const,
+    };
+  }
+
+  return {
+    completedAt: "2026-03-25T00:00:00.000Z",
+    expired: 0,
+    expiring: 0,
+    failed: 0,
+    kind: request.kind,
+    renewed: 0,
+    scanned: 0,
+    status: "completed" as const,
+  };
+};
+
 describe("startWorkerHttpRuntime", () => {
   it("serves a health response in local mode", async () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_health",
@@ -69,6 +93,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",
@@ -110,6 +135,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",
@@ -149,6 +175,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",
@@ -175,6 +202,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",
@@ -216,11 +244,70 @@ describe("startWorkerHttpRuntime", () => {
     });
   });
 
+  it("runs the control job workflow through /internal/control-jobs", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processControlJob: async (request) =>
+        request.kind === "renew_watches"
+          ? {
+              completedAt: "2026-03-25T00:00:00.000Z",
+              expired: 1,
+              expiring: 2,
+              failed: 0,
+              kind: request.kind,
+              renewed: 3,
+              scanned: 3,
+              status: "completed" as const,
+            }
+          : {
+              completedAt: "2026-03-25T00:00:00.000Z",
+              kind: request.kind,
+              status: "noop" as const,
+            },
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/control-jobs`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        kind: "renew_watches",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      kind: "renew_watches",
+      renewed: 3,
+      status: "completed",
+    });
+  });
+
   it("rejects invalid webhook delivery payloads", async () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",

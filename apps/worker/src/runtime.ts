@@ -12,6 +12,7 @@ import { createWorkerPersistenceLayer } from "@mailmon/db";
 import {
   createAesGcmGmailRefreshTokenCipherLayer,
   createHttpGmailSyncProviderLayer,
+  createHttpGmailWatchProviderLayer,
 } from "@mailmon/gmail";
 import { Effect, Layer } from "effect";
 
@@ -160,6 +161,7 @@ export const createWorkerRuntimeLayer = (
     | "gmailRefreshTokenEncryptionKeyId"
     | "gmailRefreshTokenPreviousEncryptionKeys"
     | "gmailOauthTokenUrl"
+    | "gmailPubSubTopicName"
     | "nodeEnv"
   >,
 ) => {
@@ -178,7 +180,19 @@ export const createWorkerRuntimeLayer = (
     oauthClientSecret: env.gmailOauthClientSecret,
     oauthTokenUrl: env.gmailOauthTokenUrl,
   }).pipe(Layer.provide(persistenceLayer));
+  const gmailWatchProviderLayer = createHttpGmailWatchProviderLayer({
+    apiBaseUrl: env.gmailApiBaseUrl,
+    gmailPubSubTopicName: env.gmailPubSubTopicName,
+    oauthClientId: env.gmailOauthClientId,
+    oauthClientSecret: env.gmailOauthClientSecret,
+    oauthTokenUrl: env.gmailOauthTokenUrl,
+  }).pipe(Layer.provide(persistenceLayer));
   const webhookDeliverySenderLayer = createWebhookDeliverySenderLayer();
 
-  return Layer.mergeAll(persistenceLayer, gmailSyncProviderLayer, webhookDeliverySenderLayer);
+  return Layer.mergeAll(
+    persistenceLayer,
+    gmailSyncProviderLayer,
+    gmailWatchProviderLayer,
+    webhookDeliverySenderLayer,
+  );
 };

@@ -13,6 +13,7 @@ const workerEnvFixture: WorkerEnv = {
   gmailRefreshTokenEncryptionKeyId: "primary",
   gmailRefreshTokenPreviousEncryptionKeys: [],
   gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
+  gmailPubSubTopicName: null,
   gcpProjectId: null,
   gcpRegion: null,
   gcpTasksAudience: null,

@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import type { AsyncTransportMode } from "@mailmon/config";
 import type {
+  ControlJobDispatchRequest,
+  ControlJobRunResult,
   MailboxSyncJobData,
   ProblemDetails,
   ProcessWebhookDeliveryResult,
@@ -13,6 +15,7 @@ interface WorkerHttpRuntimeOptions {
   readonly host: string;
   readonly port: number;
   readonly asyncTransportMode: AsyncTransportMode;
+  readonly processControlJob: (request: ControlJobDispatchRequest) => Promise<ControlJobRunResult>;
   readonly processSyncJob: (job: MailboxSyncJobData) => Promise<SyncMailboxResult>;
   readonly processWebhookDelivery: (
     request: WebhookDeliveryScheduleRequest,
@@ -62,6 +65,18 @@ const isWebhookDeliveryScheduleRequest = (
     value.deliveryId.length > 0 &&
     typeof value.notBefore === "string" &&
     value.notBefore.length > 0
+  );
+};
+
+const isControlJobDispatchRequest = (value: unknown): value is ControlJobDispatchRequest => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    (value.kind === "renew_watches" ||
+      value.kind === "dispatch_replays" ||
+      value.kind === "repair_mailboxes" ||
+      value.kind === "cleanup")
   );
 };
 
@@ -202,6 +217,34 @@ export const startWorkerHttpRuntime = async (
         sendJson(response, 500, {
           code: "worker_internal_error",
           detail: "The worker failed while processing the webhook delivery request.",
+        });
+      }
+      return;
+    }
+
+    if (request.method === "POST" && request.url === "/internal/control-jobs") {
+      try {
+        const payload = await readJsonBody(request);
+
+        if (!isControlJobDispatchRequest(payload)) {
+          sendJson(response, 400, {
+            code: "invalid_control_job_request",
+            detail: "Expected a control job payload with a supported kind.",
+          });
+          return;
+        }
+
+        const result = await options.processControlJob(payload);
+        sendJson(response, 200, result);
+      } catch (error) {
+        if (isProblemDetails(error)) {
+          sendJson(response, error.status, error);
+          return;
+        }
+
+        sendJson(response, 500, {
+          code: "worker_internal_error",
+          detail: "The worker failed while processing the control job request.",
         });
       }
       return;

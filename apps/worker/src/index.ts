@@ -2,8 +2,13 @@ import { pathToFileURL } from "node:url";
 
 import type { WorkerEnv } from "@mailmon/config";
 import { loadWorkerEnv } from "@mailmon/config";
-import type { ProcessWebhookDeliveryResult, WebhookDeliveryScheduleRequest } from "@mailmon/core";
-import { recoverWebhookDeliveryScheduling } from "@mailmon/core";
+import type {
+  ControlJobDispatchRequest,
+  ControlJobRunResult,
+  ProcessWebhookDeliveryResult,
+  WebhookDeliveryScheduleRequest,
+} from "@mailmon/core";
+import { recoverWebhookDeliveryScheduling, runControlJob } from "@mailmon/core";
 import { createGcpWebhookDeliverySchedulerLayer } from "@mailmon/queue";
 import { Layer, ManagedRuntime } from "effect";
 
@@ -39,6 +44,7 @@ const createWorkerProcessorRuntime = (
     | "gmailRefreshTokenEncryptionKeyId"
     | "gmailRefreshTokenPreviousEncryptionKeys"
     | "gmailOauthTokenUrl"
+    | "gmailPubSubTopicName"
     | "gcpProjectId"
     | "gcpRegion"
     | "gcpTasksAudience"
@@ -92,6 +98,14 @@ const createWorkerProcessorRuntime = (
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(createWorkerRuntimeLayer(env), schedulerLayer),
   );
+  const processControlJob = (request: ControlJobDispatchRequest): Promise<ControlJobRunResult> => {
+    const controlJob = runControlJob(request);
+
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the worker runtime layer provides MailboxWatchStore and MailboxWatchProvider; ManagedRuntime's R type is the full service union.
+    return runtime.runPromise(
+      controlJob as Parameters<typeof runtime.runPromise>[0],
+    ) as Promise<ControlJobRunResult>;
+  };
   const processSyncJob = createProcessSyncJob(runtime);
   const processWebhookDelivery = createProcessWebhookDelivery(runtime);
 
@@ -102,6 +116,7 @@ const createWorkerProcessorRuntime = (
   return {
     recoverWebhookDeliveries: () => runtime.runPromise(recoverWebhookDeliveryScheduling()),
     runtime,
+    processControlJob,
     processSyncJob,
     processWebhookDelivery,
   };
@@ -166,6 +181,7 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
     asyncTransportMode: env.asyncTransportMode,
     host: env.host,
     port: env.port,
+    processControlJob: effectRuntime.processControlJob,
     processSyncJob: effectRuntime.processSyncJob,
     processWebhookDelivery: effectRuntime.processWebhookDelivery,
   });
