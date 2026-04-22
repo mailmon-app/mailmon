@@ -265,7 +265,7 @@ Harden the system for production behavior under failure and scale. This slice fo
 - [x] Persisted Gmail refresh tokens are encrypted before any staging or production rollout
 - [x] Legacy plaintext Gmail refresh tokens can be identified and either migrated to encrypted envelopes or moved into a controlled reconnect flow before production rollout
 - [x] Refresh-token encryption supports key rotation or rewrap without leaving persisted mailbox credentials unreadable
-- [ ] Watch expiration is detected and mailboxes move through `expiring` and `expired` states appropriately
+- [x] Watch expiration is detected and mailboxes move through `expiring` and `expired` states appropriately
 - [ ] Staging and production include Gmail watch registration, renewal, and Pub/Sub push ingress handling
 - [ ] Gmail `429` and `403` rate limits degrade mailbox sync state without surfacing as unrelated synchronous API failures
 - [ ] Invalid or expired Gmail history cursors trigger a repair or full-resync path instead of leaving the mailbox permanently failed
