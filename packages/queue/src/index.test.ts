@@ -10,6 +10,7 @@ import {
   createLocalAsyncTransportLayer,
   createGcpWebhookDeliverySchedulerLayer,
   createMailboxSyncJobData,
+  createWorkerHttpControlJobDispatcherLayer,
   createWorkerHttpMailboxSyncDispatcherLayer,
   DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
   DEFAULT_LOCAL_WORKER_BASE_URL,
@@ -116,6 +117,16 @@ describe("createLocalAsyncTransportLayer", () => {
         },
         method: "POST",
         url: `${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/webhook-deliveries`,
+      },
+      {
+        body: JSON.stringify({
+          kind: "repair_mailboxes",
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+        url: `${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/control-jobs`,
       },
     ]);
   });
@@ -230,6 +241,53 @@ describe("createWorkerHttpMailboxSyncDispatcherLayer", () => {
     ).resolves.toBeUndefined();
 
     expect(requests).toEqual([`${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/sync`]);
+  });
+});
+
+describe("createWorkerHttpControlJobDispatcherLayer", () => {
+  it("dispatches control job requests over the worker http interface", async () => {
+    const requests: Array<{
+      readonly body: string | null;
+      readonly url: string;
+    }> = [];
+    const program = Effect.gen(function* () {
+      const controlJobDispatcher = yield* ControlJobDispatcher;
+
+      yield* controlJobDispatcher.dispatchControlJob({
+        kind: "renew_watches",
+      });
+    });
+
+    await expect(
+      Effect.runPromise(
+        program.pipe(
+          Effect.provide(
+            createWorkerHttpControlJobDispatcherLayer({
+              fetch: async (url, init) => {
+                requests.push({
+                  body: typeof init?.body === "string" ? init.body : null,
+                  url:
+                    typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url,
+                });
+
+                return new Response(null, {
+                  status: 200,
+                });
+              },
+            }),
+          ),
+        ),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(requests).toEqual([
+      {
+        body: JSON.stringify({
+          kind: "renew_watches",
+        }),
+        url: `${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/control-jobs`,
+      },
+    ]);
   });
 });
 

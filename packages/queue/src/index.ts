@@ -18,6 +18,7 @@ export const DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID = "mailmon-webhook-deliveries
 
 const WEBHOOK_DELIVERY_TASK_PATH = "/internal/webhook-deliveries";
 const MAILBOX_SYNC_TASK_PATH = "/internal/sync";
+const CONTROL_JOB_TASK_PATH = "/internal/control-jobs";
 
 export const createMailboxSyncJobData = (mailboxId: string) => {
   return {
@@ -83,6 +84,10 @@ const createWebhookDeliveryWorkerUrl = (workerBaseUrl: string) => {
   return `${normalizeWorkerBaseUrl(workerBaseUrl)}${WEBHOOK_DELIVERY_TASK_PATH}`;
 };
 
+const createControlJobWorkerUrl = (workerBaseUrl: string) => {
+  return `${normalizeWorkerBaseUrl(workerBaseUrl)}${CONTROL_JOB_TASK_PATH}`;
+};
+
 const dispatchWorkerJson = (
   fetchImpl: typeof globalThis.fetch,
   url: string,
@@ -130,6 +135,19 @@ const dispatchWebhookDeliveryToWorker = (
   );
 };
 
+const dispatchControlJobToWorker = (
+  fetchImpl: typeof globalThis.fetch,
+  workerBaseUrl: string,
+  request: ControlJobDispatchRequest,
+) => {
+  return dispatchWorkerJson(
+    fetchImpl,
+    createControlJobWorkerUrl(workerBaseUrl),
+    request,
+    "Control job dispatch failed with",
+  );
+};
+
 export interface WorkerHttpMailboxSyncDispatcherOptions {
   readonly fetch?: typeof globalThis.fetch;
   readonly workerBaseUrl?: string;
@@ -146,6 +164,25 @@ export const createWorkerHttpMailboxSyncDispatcherLayer = (
   return Layer.succeed(MailboxSyncDispatcher, {
     dispatchMailboxSync: (mailboxId: string) =>
       dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId),
+  });
+};
+
+export interface WorkerHttpControlJobDispatcherOptions {
+  readonly fetch?: typeof globalThis.fetch;
+  readonly workerBaseUrl?: string;
+}
+
+export const createWorkerHttpControlJobDispatcherLayer = (
+  options: WorkerHttpControlJobDispatcherOptions = {},
+) => {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const workerBaseUrl = normalizeWorkerBaseUrl(
+    options.workerBaseUrl ?? DEFAULT_LOCAL_WORKER_BASE_URL,
+  );
+
+  return Layer.succeed(ControlJobDispatcher, {
+    dispatchControlJob: (request: ControlJobDispatchRequest) =>
+      dispatchControlJobToWorker(fetchImpl, workerBaseUrl, request),
   });
 };
 
@@ -337,7 +374,9 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
             Ref.update(snapshotRef, (snapshot) => ({
               ...snapshot,
               controlJobs: [...snapshot.controlJobs, request],
-            })),
+            })).pipe(
+              Effect.zipRight(dispatchControlJobToWorker(fetchImpl, workerBaseUrl, request)),
+            ),
         }),
         Layer.succeed(LocalAsyncTransportProbe, {
           getSnapshot: Ref.get(snapshotRef),
