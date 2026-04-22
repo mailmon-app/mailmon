@@ -384,6 +384,20 @@ export interface MailboxProviderSyncResult {
   readonly nextCursor: string | null;
 }
 
+export interface MailboxWatchRenewalTarget {
+  readonly mailbox: MailboxResource;
+  readonly watchExpiresAt: string | null;
+}
+
+export interface MailboxWatchRenewalRequest {
+  readonly mailbox: MailboxResource;
+}
+
+export interface MailboxWatchRenewalResult {
+  readonly historyId: string;
+  readonly watchExpiresAt: string;
+}
+
 export interface MailboxSyncLeaseAcquisition {
   readonly acquired: boolean;
   readonly expiresAt: string | null;
@@ -440,3 +454,22 @@ export type SyncMailboxResult =
   | CompletedSyncMailboxResult
   | ReconnectRequiredSyncMailboxResult
   | SkippedSyncMailboxResult;
+
+export interface RenewMailboxWatchesResult {
+  readonly completedAt: string;
+  readonly expired: number;
+  readonly expiring: number;
+  readonly failed: number;
+  readonly kind: "renew_watches";
+  readonly renewed: number;
+  readonly scanned: number;
+  readonly status: "completed";
+}
+
+export interface NoopControlJobResult {
+  readonly completedAt: string;
+  readonly kind: Exclude<ControlJobKind, "renew_watches">;
+  readonly status: "noop";
+}
+
+export type ControlJobRunResult = RenewMailboxWatchesResult | NoopControlJobResult;

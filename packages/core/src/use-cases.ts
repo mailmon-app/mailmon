@@ -4,11 +4,14 @@ import type {
   CompletedWebhookDeliveryAttempt,
   CompletedSyncRun,
   ConnectSessionResource,
+  ControlJobDispatchRequest,
+  ControlJobRunResult,
   CreateConnectSessionRequest,
   CreateWebhookEndpointRequest,
   CreateWebhookEndpointSubscriptionRequest,
   MailboxResource,
   ProcessWebhookDeliveryResult,
+  RenewMailboxWatchesResult,
   StoredConnectSession,
   SyncMailboxResult,
   SyncRunOutcome,
@@ -34,6 +37,8 @@ import {
   MailboxSyncDispatcher,
   MailboxSyncProvider,
   MailboxStateStore,
+  MailboxWatchProvider,
+  MailboxWatchStore,
   SyncRunStore,
   WebhookDeliveryScheduler,
   WebhookDeliverySender,
@@ -47,6 +52,8 @@ import {
 const DEFAULT_CONNECT_SESSION_TTL_MS = 15 * 60_000;
 const DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS = 90_000;
 const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
+const DEFAULT_GMAIL_WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60_000;
+const DEFAULT_GMAIL_WATCH_RENEWAL_BATCH_SIZE = 100;
 const DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS = 5;
 const DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 5_000;
 const MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 15 * 60_000;
@@ -716,6 +723,100 @@ export const runWebhookDelivery = (deliveryId: string) =>
         ),
     });
   });
+
+const isMailboxWatchExpired = (watchExpiresAt: string | null, observedAt: string): boolean =>
+  watchExpiresAt !== null && Date.parse(watchExpiresAt) <= Date.parse(observedAt);
+
+export const renewExpiringMailboxWatches = (
+  options: Readonly<{
+    limit?: number;
+    observedAt?: string;
+    renewalWindowMs?: number;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const observedAt = options.observedAt ?? new Date().toISOString();
+    const renewalWindowMs = options.renewalWindowMs ?? DEFAULT_GMAIL_WATCH_RENEWAL_WINDOW_MS;
+    const limit = options.limit ?? DEFAULT_GMAIL_WATCH_RENEWAL_BATCH_SIZE;
+    const mailboxWatchStore = yield* MailboxWatchStore;
+    const mailboxWatchProvider = yield* MailboxWatchProvider;
+    const targets = yield* mailboxWatchStore.listMailboxWatchesNeedingRenewal({
+      limit,
+      observedAt,
+      renewalWindowMs,
+    });
+
+    const outcomes = yield* Effect.forEach(targets, (target) => {
+      const expired = isMailboxWatchExpired(target.watchExpiresAt, observedAt);
+
+      return mailboxWatchStore
+        .markMailboxWatchRenewalStarted({
+          mailboxId: target.mailbox.id,
+          observedAt,
+        })
+        .pipe(
+          Effect.zipRight(
+            mailboxWatchProvider.renewMailboxWatch({
+              mailbox: target.mailbox,
+            }),
+          ),
+          Effect.flatMap((renewal) =>
+            mailboxWatchStore.completeMailboxWatchRenewal({
+              historyId: renewal.historyId,
+              mailboxId: target.mailbox.id,
+              renewedAt: observedAt,
+              watchExpiresAt: renewal.watchExpiresAt,
+            }),
+          ),
+          Effect.as({
+            expired,
+            status: "renewed" as const,
+          }),
+          Effect.catchAll((problem) =>
+            mailboxWatchStore
+              .failMailboxWatchRenewal({
+                mailboxId: target.mailbox.id,
+                observedAt,
+                problem,
+              })
+              .pipe(
+                Effect.as({
+                  expired,
+                  status: "failed" as const,
+                }),
+              ),
+          ),
+        );
+    });
+
+    return {
+      completedAt: observedAt,
+      expired: outcomes.filter((outcome) => outcome.expired).length,
+      expiring: outcomes.filter((outcome) => !outcome.expired).length,
+      failed: outcomes.filter((outcome) => outcome.status === "failed").length,
+      kind: "renew_watches",
+      renewed: outcomes.filter((outcome) => outcome.status === "renewed").length,
+      scanned: targets.length,
+      status: "completed",
+    } satisfies RenewMailboxWatchesResult;
+  });
+
+export const runControlJob = (
+  request: ControlJobDispatchRequest,
+): Effect.Effect<ControlJobRunResult, never, MailboxWatchProvider | MailboxWatchStore> => {
+  switch (request.kind) {
+    case "renew_watches":
+      return renewExpiringMailboxWatches();
+    case "cleanup":
+    case "dispatch_replays":
+    case "repair_mailboxes":
+      return Effect.succeed({
+        completedAt: new Date().toISOString(),
+        kind: request.kind,
+        status: "noop",
+      });
+  }
+};
 
 export const runMailboxSync = (mailboxId: string) =>
   Effect.gen(function* () {

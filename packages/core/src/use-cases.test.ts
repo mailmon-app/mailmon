@@ -8,6 +8,7 @@ import type {
   PreparedWebhookDelivery,
   WebhookEndpointResource,
 } from "./contracts.js";
+import { makeProblem } from "./problems.js";
 import {
   MailboxCatalog,
   MailboxQueryCatalog,
@@ -15,6 +16,8 @@ import {
   MailboxSyncDispatcher,
   MailboxSyncProvider,
   MailboxStateStore,
+  MailboxWatchProvider,
+  MailboxWatchStore,
   SyncRunStore,
   WebhookDeliveryScheduler,
   WebhookDeliverySender,
@@ -33,6 +36,8 @@ import {
   listMailboxMessages,
   listMailboxThreads,
   recoverWebhookDeliveryScheduling,
+  renewExpiringMailboxWatches,
+  runControlJob,
   runMailboxSync,
   runWebhookDelivery,
 } from "./use-cases.js";
@@ -835,6 +840,163 @@ describe("recoverWebhookDeliveryScheduling", () => {
         },
       ]);
       expect(scheduledDeliveryRequests).toEqual(result);
+    }),
+  );
+});
+
+describe("renewExpiringMailboxWatches", () => {
+  it.effect("marks expiring and expired watches before renewing them", () =>
+    Effect.gen(function* () {
+      const started: Array<{ mailboxId: string; observedAt: string }> = [];
+      const completed: Array<{
+        historyId: string;
+        mailboxId: string;
+        renewedAt: string;
+        watchExpiresAt: string;
+      }> = [];
+      const observedAt = "2026-04-22T00:00:00.000Z";
+      const expiringMailbox = {
+        mailbox: mailboxFixture,
+        watchExpiresAt: "2026-04-22T12:00:00.000Z",
+      };
+      const expiredMailbox = {
+        mailbox: {
+          ...mailboxFixture,
+          id: "mbx_expired",
+          watchState: "expired" as const,
+        },
+        watchExpiresAt: "2026-04-21T23:59:00.000Z",
+      };
+
+      const result = yield* renewExpiringMailboxWatches({
+        limit: 10,
+        observedAt,
+        renewalWindowMs: 24 * 60 * 60_000,
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(MailboxWatchStore, {
+              listMailboxWatchesNeedingRenewal: () =>
+                Effect.succeed([expiringMailbox, expiredMailbox]),
+              markMailboxWatchRenewalStarted: (params) =>
+                Effect.sync(() => {
+                  started.push(params);
+                }),
+              completeMailboxWatchRenewal: (params) =>
+                Effect.sync(() => {
+                  completed.push(params);
+                }),
+              failMailboxWatchRenewal: () => Effect.void,
+            }),
+            Layer.succeed(MailboxWatchProvider, {
+              renewMailboxWatch: ({ mailbox }) =>
+                Effect.succeed({
+                  historyId: `hist_${mailbox.id}`,
+                  watchExpiresAt: "2026-04-28T00:00:00.000Z",
+                }),
+            }),
+          ),
+        ),
+      );
+
+      expect(result).toEqual({
+        completedAt: observedAt,
+        expired: 1,
+        expiring: 1,
+        failed: 0,
+        kind: "renew_watches",
+        renewed: 2,
+        scanned: 2,
+        status: "completed",
+      });
+      expect(started).toEqual([
+        {
+          mailboxId: mailboxFixture.id,
+          observedAt,
+        },
+        {
+          mailboxId: "mbx_expired",
+          observedAt,
+        },
+      ]);
+      expect(completed).toEqual([
+        {
+          historyId: "hist_mbx_demo",
+          mailboxId: mailboxFixture.id,
+          renewedAt: observedAt,
+          watchExpiresAt: "2026-04-28T00:00:00.000Z",
+        },
+        {
+          historyId: "hist_mbx_expired",
+          mailboxId: "mbx_expired",
+          renewedAt: observedAt,
+          watchExpiresAt: "2026-04-28T00:00:00.000Z",
+        },
+      ]);
+    }),
+  );
+
+  it.effect("records individual renewal failures without failing the control job", () =>
+    Effect.gen(function* () {
+      const failures: Array<{
+        mailboxId: string;
+        observedAt: string;
+        problemCode: string;
+      }> = [];
+      const renewalProblem = makeProblem({
+        type: "https://api.mailmon.dev/problems/gmail-watch-renewal-failed",
+        title: "Gmail watch renewal failed",
+        status: 503,
+        code: "gmail_watch_renewal_failed",
+        detail: "Gmail temporarily rejected the watch renewal.",
+        retryable: true,
+      });
+
+      const result = yield* runControlJob({ kind: "renew_watches" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(MailboxWatchStore, {
+              listMailboxWatchesNeedingRenewal: () =>
+                Effect.succeed([
+                  {
+                    mailbox: mailboxFixture,
+                    watchExpiresAt: "2026-04-21T23:59:00.000Z",
+                  },
+                ]),
+              markMailboxWatchRenewalStarted: () => Effect.void,
+              completeMailboxWatchRenewal: () => Effect.void,
+              failMailboxWatchRenewal: ({ mailboxId, observedAt: failedAt, problem }) =>
+                Effect.sync(() => {
+                  failures.push({
+                    mailboxId,
+                    observedAt: failedAt,
+                    problemCode: problem.code,
+                  });
+                }),
+            }),
+            Layer.succeed(MailboxWatchProvider, {
+              renewMailboxWatch: () => Effect.fail(renewalProblem),
+            }),
+          ),
+        ),
+      );
+
+      expect(result).toMatchObject({
+        expired: 1,
+        failed: 1,
+        kind: "renew_watches",
+        renewed: 0,
+        scanned: 1,
+        status: "completed",
+      });
+      expect(Date.parse(result.completedAt)).not.toBeNaN();
+      expect(failures).toEqual([
+        {
+          mailboxId: mailboxFixture.id,
+          observedAt: result.completedAt,
+          problemCode: "gmail_watch_renewal_failed",
+        },
+      ]);
     }),
   );
 });

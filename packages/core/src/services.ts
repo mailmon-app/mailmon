@@ -11,6 +11,9 @@ import type {
   MessageResource,
   MailboxConnectAuthorization,
   ControlJobDispatchRequest,
+  MailboxWatchRenewalRequest,
+  MailboxWatchRenewalResult,
+  MailboxWatchRenewalTarget,
   MailboxSyncLeaseAcquisition,
   MailboxProviderSyncResult,
   MailboxResource,
@@ -224,6 +227,41 @@ export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateSt
         syncedAt: string;
       }>,
     ) => Effect.Effect<MailboxSyncCommitResult>;
+  }
+>() {}
+
+export class MailboxWatchStore extends Context.Tag("@mailmon/core/MailboxWatchStore")<
+  MailboxWatchStore,
+  {
+    readonly listMailboxWatchesNeedingRenewal: (params: {
+      readonly limit: number;
+      readonly observedAt: string;
+      readonly renewalWindowMs: number;
+    }) => Effect.Effect<ReadonlyArray<MailboxWatchRenewalTarget>>;
+    readonly markMailboxWatchRenewalStarted: (params: {
+      readonly mailboxId: string;
+      readonly observedAt: string;
+    }) => Effect.Effect<void>;
+    readonly completeMailboxWatchRenewal: (params: {
+      readonly historyId: string;
+      readonly mailboxId: string;
+      readonly renewedAt: string;
+      readonly watchExpiresAt: string;
+    }) => Effect.Effect<void>;
+    readonly failMailboxWatchRenewal: (params: {
+      readonly mailboxId: string;
+      readonly observedAt: string;
+      readonly problem: ProblemDetails;
+    }) => Effect.Effect<void>;
+  }
+>() {}
+
+export class MailboxWatchProvider extends Context.Tag("@mailmon/core/MailboxWatchProvider")<
+  MailboxWatchProvider,
+  {
+    readonly renewMailboxWatch: (
+      request: MailboxWatchRenewalRequest,
+    ) => Effect.Effect<MailboxWatchRenewalResult, ProblemDetails>;
   }
 >() {}
 
