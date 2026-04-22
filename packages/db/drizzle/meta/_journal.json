@@ -68,15 +68,8 @@
     {
       "idx": 9,
       "version": "7",
-      "when": 1775800000000,
-      "tag": "0009_odd_phantom_reporter",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1776816000000,
-      "tag": "0010_watch_renewal_state",
+      "when": 1776895096400,
+      "tag": "0009_watery_hobgoblin",
       "breakpoints": true
     }
   ]
