@@ -12,7 +12,11 @@ import { recoverWebhookDeliveryScheduling, runControlJob } from "@mailmon/core";
 import { createGcpWebhookDeliverySchedulerLayer } from "@mailmon/queue";
 import { Layer, ManagedRuntime } from "effect";
 
-import { createProcessSyncJob, createProcessWebhookDelivery } from "./processor.js";
+import {
+  createProcessGmailPushNotification,
+  createProcessSyncJob,
+  createProcessWebhookDelivery,
+} from "./processor.js";
 import {
   createInProcessWebhookDeliverySchedulerLayer,
   createWorkerRuntimeLayer,
@@ -106,6 +110,10 @@ const createWorkerProcessorRuntime = (
       controlJob as Parameters<typeof runtime.runPromise>[0],
     ) as Promise<ControlJobRunResult>;
   };
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the worker runtime layer provides MailboxPushNotificationStore and MailboxSyncDispatcher; ManagedRuntime's R type is the full service union.
+  const processGmailPushNotification = createProcessGmailPushNotification(
+    runtime as Parameters<typeof createProcessGmailPushNotification>[0],
+  );
   const processSyncJob = createProcessSyncJob(runtime);
   const processWebhookDelivery = createProcessWebhookDelivery(runtime);
 
@@ -117,6 +125,7 @@ const createWorkerProcessorRuntime = (
     recoverWebhookDeliveries: () => runtime.runPromise(recoverWebhookDeliveryScheduling()),
     runtime,
     processControlJob,
+    processGmailPushNotification,
     processSyncJob,
     processWebhookDelivery,
   };
@@ -182,6 +191,7 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
     host: env.host,
     port: env.port,
     processControlJob: effectRuntime.processControlJob,
+    processGmailPushNotification: effectRuntime.processGmailPushNotification,
     processSyncJob: effectRuntime.processSyncJob,
     processWebhookDelivery: effectRuntime.processWebhookDelivery,
   });

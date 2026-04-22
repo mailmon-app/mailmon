@@ -1,5 +1,5 @@
 import type { WorkerEnv } from "@mailmon/config";
-import type { ControlJobDispatchRequest } from "@mailmon/core";
+import type { ControlJobDispatchRequest, GmailPushNotification } from "@mailmon/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { startWorkerHttpRuntime } from "./server.js";
@@ -54,12 +54,23 @@ const defaultProcessControlJob = async (request: ControlJobDispatchRequest) => {
   };
 };
 
+const defaultProcessGmailPushNotification = async (notification: GmailPushNotification) => {
+  return {
+    dispatched: 0,
+    emailAddress: notification.emailAddress,
+    historyId: notification.historyId,
+    kind: "gmail_push" as const,
+    status: "accepted" as const,
+  };
+};
+
 describe("startWorkerHttpRuntime", () => {
   it("serves a health response in local mode", async () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
@@ -93,6 +104,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
@@ -135,6 +147,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
@@ -175,6 +188,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
@@ -197,11 +211,130 @@ describe("startWorkerHttpRuntime", () => {
     await expect(runtime.close()).resolves.toBeUndefined();
   });
 
+  it("decodes GCP Pub/Sub Gmail pushes and dispatches mailbox sync wake-ups", async () => {
+    const notifications: GmailPushNotification[] = [];
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: "gcp",
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: async (notification) => {
+        notifications.push(notification);
+
+        return {
+          dispatched: 2,
+          emailAddress: notification.emailAddress,
+          historyId: notification.historyId,
+          kind: "gmail_push",
+          status: "accepted",
+        };
+      },
+      processControlJob: defaultProcessControlJob,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/gmail-push`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          data: Buffer.from(
+            JSON.stringify({
+              emailAddress: "demo@mailmon.dev",
+              historyId: "hist_push_123",
+            }),
+          ).toString("base64"),
+          messageId: "pubsub_msg_123",
+        },
+        subscription: "projects/mailmon-staging/subscriptions/gmail-push-worker",
+      }),
+    });
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      dispatched: 2,
+      emailAddress: "demo@mailmon.dev",
+      historyId: "hist_push_123",
+      kind: "gmail_push",
+      status: "accepted",
+    });
+    expect(notifications).toEqual([
+      {
+        emailAddress: "demo@mailmon.dev",
+        historyId: "hist_push_123",
+        messageId: "pubsub_msg_123",
+        subscription: "projects/mailmon-staging/subscriptions/gmail-push-worker",
+      },
+    ]);
+  });
+
+  it("rejects malformed GCP Gmail push envelopes", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: "gcp",
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: defaultProcessControlJob,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/gmail-push`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          data: Buffer.from(JSON.stringify({ emailAddress: "demo@mailmon.dev" })).toString(
+            "base64",
+          ),
+        },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_gmail_push_request",
+    });
+  });
+
   it("runs the webhook delivery workflow through /internal/webhook-deliveries", async () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
@@ -249,6 +382,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: async (request) =>
         request.kind === "renew_watches"
           ? {
@@ -307,6 +441,7 @@ describe("startWorkerHttpRuntime", () => {
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
       host: workerEnvFixture.host,
       port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,

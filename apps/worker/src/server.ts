@@ -4,6 +4,8 @@ import type { AsyncTransportMode } from "@mailmon/config";
 import type {
   ControlJobDispatchRequest,
   ControlJobRunResult,
+  GmailPushNotification,
+  GmailPushNotificationResult,
   MailboxSyncJobData,
   ProblemDetails,
   ProcessWebhookDeliveryResult,
@@ -15,6 +17,9 @@ interface WorkerHttpRuntimeOptions {
   readonly host: string;
   readonly port: number;
   readonly asyncTransportMode: AsyncTransportMode;
+  readonly processGmailPushNotification: (
+    notification: GmailPushNotification,
+  ) => Promise<GmailPushNotificationResult>;
   readonly processControlJob: (request: ControlJobDispatchRequest) => Promise<ControlJobRunResult>;
   readonly processSyncJob: (job: MailboxSyncJobData) => Promise<SyncMailboxResult>;
   readonly processWebhookDelivery: (
@@ -78,6 +83,68 @@ const isControlJobDispatchRequest = (value: unknown): value is ControlJobDispatc
       value.kind === "repair_mailboxes" ||
       value.kind === "cleanup")
   );
+};
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
+  return typeof value === "object" && value !== null;
+};
+
+const decodeBase64Json = (encoded: string): unknown => {
+  return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as unknown;
+};
+
+const parseGmailPushNotification = (
+  payload: unknown,
+): { readonly notification: GmailPushNotification } | { readonly error: string } => {
+  if (!isRecord(payload) || !isRecord(payload.message)) {
+    return {
+      error: "Expected a Pub/Sub push envelope with a message object.",
+    };
+  }
+
+  const message = payload.message;
+
+  if (typeof message.data !== "string" || message.data.length === 0) {
+    return {
+      error: "Expected Pub/Sub message.data to contain a base64-encoded Gmail notification.",
+    };
+  }
+
+  try {
+    const decoded = decodeBase64Json(message.data);
+
+    if (
+      !isRecord(decoded) ||
+      typeof decoded.emailAddress !== "string" ||
+      decoded.emailAddress.length === 0 ||
+      typeof decoded.historyId !== "string" ||
+      decoded.historyId.length === 0
+    ) {
+      return {
+        error:
+          "Expected Gmail notification data to include non-empty emailAddress and historyId fields.",
+      };
+    }
+
+    return {
+      notification: {
+        emailAddress: decoded.emailAddress,
+        historyId: decoded.historyId,
+        messageId:
+          typeof message.messageId === "string" && message.messageId.length > 0
+            ? message.messageId
+            : null,
+        subscription:
+          typeof payload.subscription === "string" && payload.subscription.length > 0
+            ? payload.subscription
+            : null,
+      },
+    };
+  } catch {
+    return {
+      error: "Pub/Sub message.data was not valid base64-encoded JSON.",
+    };
+  }
 };
 
 const sendJson = (response: ServerResponse, statusCode: number, body: unknown) => {
@@ -186,10 +253,31 @@ export const startWorkerHttpRuntime = async (
         return;
       }
 
-      sendJson(response, 501, {
-        code: "gmail_push_not_implemented",
-        detail: "GCP Gmail push handling is not implemented yet.",
-      });
+      try {
+        const payload = await readJsonBody(request);
+        const parsed = parseGmailPushNotification(payload);
+
+        if ("error" in parsed) {
+          sendJson(response, 400, {
+            code: "invalid_gmail_push_request",
+            detail: parsed.error,
+          });
+          return;
+        }
+
+        const result = await options.processGmailPushNotification(parsed.notification);
+        sendJson(response, 202, result);
+      } catch (error) {
+        if (isProblemDetails(error)) {
+          sendJson(response, error.status, error);
+          return;
+        }
+
+        sendJson(response, 500, {
+          code: "worker_internal_error",
+          detail: "The worker failed while processing the Gmail push request.",
+        });
+      }
       return;
     }
 

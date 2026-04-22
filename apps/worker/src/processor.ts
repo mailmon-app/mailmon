@@ -1,9 +1,12 @@
 import {
   type ControlJobDispatchRequest,
   type ControlJobRunResult,
+  type GmailPushNotification,
+  type GmailPushNotificationResult,
   type MailboxSyncJobData,
   type ProcessWebhookDeliveryResult,
   type WebhookDeliveryScheduleRequest,
+  ingestGmailPushNotification,
   runControlJob,
   runWebhookDelivery,
   runMailboxSync,
@@ -30,6 +33,10 @@ type ControlJobProcessorRuntime = WorkerProcessorRuntime<
   import("effect").Effect.Effect.Context<ReturnType<typeof runControlJob>>
 >;
 
+type GmailPushProcessorRuntime = WorkerProcessorRuntime<
+  import("effect").Effect.Effect.Context<ReturnType<typeof ingestGmailPushNotification>>
+>;
+
 export const createProcessSyncJob = (runtime: SyncProcessorRuntime) => {
   return (job: MailboxSyncJobData) => runtime.runPromise(runMailboxSync(job.mailboxId));
 };
@@ -42,4 +49,9 @@ export const createProcessWebhookDelivery = (runtime: WebhookDeliveryProcessorRu
 export const createProcessControlJob = (runtime: ControlJobProcessorRuntime) => {
   return (request: ControlJobDispatchRequest): Promise<ControlJobRunResult> =>
     runtime.runPromise(runControlJob(request));
+};
+
+export const createProcessGmailPushNotification = (runtime: GmailPushProcessorRuntime) => {
+  return (notification: GmailPushNotification): Promise<GmailPushNotificationResult> =>
+    runtime.runPromise(ingestGmailPushNotification(notification));
 };

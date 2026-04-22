@@ -14,6 +14,7 @@ import {
   createHttpGmailSyncProviderLayer,
   createHttpGmailWatchProviderLayer,
 } from "@mailmon/gmail";
+import { createWorkerHttpMailboxSyncDispatcherLayer } from "@mailmon/queue";
 import { Effect, Layer } from "effect";
 
 const DEFAULT_WEBHOOK_DELIVERY_TIMEOUT_MS = 5_000;
@@ -163,6 +164,7 @@ export const createWorkerRuntimeLayer = (
     | "gmailOauthTokenUrl"
     | "gmailPubSubTopicName"
     | "nodeEnv"
+    | "workerBaseUrl"
   >,
 ) => {
   const gmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
@@ -188,11 +190,15 @@ export const createWorkerRuntimeLayer = (
     oauthTokenUrl: env.gmailOauthTokenUrl,
   }).pipe(Layer.provide(persistenceLayer));
   const webhookDeliverySenderLayer = createWebhookDeliverySenderLayer();
+  const mailboxSyncDispatcherLayer = createWorkerHttpMailboxSyncDispatcherLayer({
+    workerBaseUrl: env.workerBaseUrl,
+  });
 
   return Layer.mergeAll(
     persistenceLayer,
     gmailSyncProviderLayer,
     gmailWatchProviderLayer,
+    mailboxSyncDispatcherLayer,
     webhookDeliverySenderLayer,
   );
 };
