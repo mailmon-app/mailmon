@@ -746,48 +746,52 @@ export const renewExpiringMailboxWatches = (
       renewalWindowMs,
     });
 
-    const outcomes = yield* Effect.forEach(targets, (target) => {
-      const expired = isMailboxWatchExpired(target.watchExpiresAt, observedAt);
+    const outcomes = yield* Effect.forEach(
+      targets,
+      (target) => {
+        const expired = isMailboxWatchExpired(target.watchExpiresAt, observedAt);
 
-      return mailboxWatchStore
-        .markMailboxWatchRenewalStarted({
-          mailboxId: target.mailbox.id,
-          observedAt,
-        })
-        .pipe(
-          Effect.zipRight(
-            mailboxWatchProvider.renewMailboxWatch({
-              mailbox: target.mailbox,
-            }),
-          ),
-          Effect.flatMap((renewal) =>
-            mailboxWatchStore.completeMailboxWatchRenewal({
-              historyId: renewal.historyId,
-              mailboxId: target.mailbox.id,
-              renewedAt: observedAt,
-              watchExpiresAt: renewal.watchExpiresAt,
-            }),
-          ),
-          Effect.as({
-            expired,
-            status: "renewed" as const,
-          }),
-          Effect.catchAll((problem) =>
-            mailboxWatchStore
-              .failMailboxWatchRenewal({
+        return mailboxWatchStore
+          .markMailboxWatchRenewalStarted({
+            mailboxId: target.mailbox.id,
+            observedAt,
+          })
+          .pipe(
+            Effect.zipRight(
+              mailboxWatchProvider.renewMailboxWatch({
+                mailbox: target.mailbox,
+              }),
+            ),
+            Effect.flatMap((renewal) =>
+              mailboxWatchStore.completeMailboxWatchRenewal({
+                historyId: renewal.historyId,
                 mailboxId: target.mailbox.id,
-                observedAt,
-                problem,
-              })
-              .pipe(
-                Effect.as({
-                  expired,
-                  status: "failed" as const,
-                }),
-              ),
-          ),
-        );
-    });
+                renewedAt: observedAt,
+                watchExpiresAt: renewal.watchExpiresAt,
+              }),
+            ),
+            Effect.as({
+              expired,
+              status: "renewed" as const,
+            }),
+            Effect.catchAll((problem) =>
+              mailboxWatchStore
+                .failMailboxWatchRenewal({
+                  mailboxId: target.mailbox.id,
+                  observedAt,
+                  problem,
+                })
+                .pipe(
+                  Effect.as({
+                    expired,
+                    status: "failed" as const,
+                  }),
+                ),
+            ),
+          );
+      },
+      { concurrency: 10 },
+    );
 
     return {
       completedAt: observedAt,

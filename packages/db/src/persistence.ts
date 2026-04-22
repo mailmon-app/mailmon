@@ -2180,7 +2180,8 @@ export const createMailboxWatchStoreLayer = Layer.effect(
               ),
             )
             .orderBy(asc(mailboxes.watchExpirationAt), asc(mailboxes.id))
-            .limit(limit);
+            .limit(limit)
+            .for("update", { skipLocked: true });
 
           return rows.map((row) => toMailboxWatchRenewalTarget(row));
         }),
