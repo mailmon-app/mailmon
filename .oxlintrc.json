@@ -22,8 +22,7 @@
     "import/no-cycle": "error",
     "import/no-unassigned-import": "off",
     "typescript/no-floating-promises": "error",
-    "typescript/no-misused-promises": "error",
-    "unicorn/prevent-abbreviations": "off"
+    "typescript/no-misused-promises": "error"
   },
   "overrides": [
     {
@@ -32,6 +31,9 @@
         "node": true
       },
       "rules": {
+        "jest/no-conditional-expect": "off",
+        "vitest/no-conditional-expect": "off",
+        "vitest/require-mock-type-parameters": "off",
         "vitest/expect-expect": "off"
       }
     }
