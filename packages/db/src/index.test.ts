@@ -4,6 +4,7 @@ import {
   bootstrap,
   createCorePersistenceLayer,
   createMailboxQueryCatalogLayer,
+  createMailboxWatchStoreLayer,
   createWorkerPersistenceLayer,
   MailmonDatabase,
   schema,
@@ -22,6 +23,9 @@ describe("schema", () => {
     expect(schema.mailboxEvents).toBeDefined();
     expect(schema.webhookDeliveries).toBeDefined();
     expect(schema.mailboxes.cursor).toBeDefined();
+    expect(schema.mailboxes.watchExpirationAt).toBeDefined();
+    expect(schema.mailboxes.watchLastHistoryId).toBeDefined();
+    expect(schema.mailboxes.watchLastRenewedAt).toBeDefined();
     expect(schema.mailboxes.activeSyncLeaseOwner).toBeDefined();
     expect(schema.mailboxes.activeSyncLeaseExpiresAt).toBeDefined();
     expect(schema.syncRuns.leaseOwnerId).toBeDefined();
@@ -30,6 +34,7 @@ describe("schema", () => {
   it("exports DB-backed core persistence helpers", () => {
     expect(createCorePersistenceLayer).toBeDefined();
     expect(createMailboxQueryCatalogLayer).toBeDefined();
+    expect(createMailboxWatchStoreLayer).toBeDefined();
     expect(createWorkerPersistenceLayer).toBeDefined();
     expect(MailmonDatabase).toBeDefined();
   });

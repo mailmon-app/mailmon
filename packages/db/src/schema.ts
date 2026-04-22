@@ -49,6 +49,9 @@ export const mailboxes = pgTable(
     status: text("status").notNull(),
     syncState: text("sync_state").notNull(),
     watchState: text("watch_state").notNull(),
+    watchExpirationAt: timestamp("watch_expiration_at", { withTimezone: true }),
+    watchLastRenewedAt: timestamp("watch_last_renewed_at", { withTimezone: true }),
+    watchLastHistoryId: text("watch_last_history_id"),
     cursor: text("cursor"),
     activeSyncLeaseOwner: text("active_sync_lease_owner"),
     activeSyncLeaseAcquiredAt: timestamp("active_sync_lease_acquired_at", { withTimezone: true }),
@@ -75,6 +78,11 @@ export const mailboxes = pgTable(
     workspaceProviderExternalIdentityUnique: unique(
       "mailboxes_workspace_provider_external_identity_unique",
     ).on(table.workspaceId, table.provider, table.tenantExternalId, table.mailboxExternalId),
+    providerStatusWatchExpirationIndex: index("mailboxes_provider_status_watch_expiration_idx").on(
+      table.provider,
+      table.status,
+      table.watchExpirationAt,
+    ),
   }),
 );
 

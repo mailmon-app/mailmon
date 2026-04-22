@@ -15,6 +15,7 @@ export {
   createMailboxQueryCatalogLayer,
   createMailboxSyncCoordinatorLayer,
   createMailboxStateStoreLayer,
+  createMailboxWatchStoreLayer,
   createPersistenceServicesLayer,
   createSyncRunStoreLayer,
   createWebhookDeliveryStoreLayer,

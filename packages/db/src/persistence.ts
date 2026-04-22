@@ -6,6 +6,7 @@ import {
   MailboxQueryCatalog,
   MailboxSyncCoordinator,
   MailboxStateStore,
+  MailboxWatchStore,
   SyncRunStore,
   WebhookDeliveryStore,
   WebhookEndpointCatalog,
@@ -33,6 +34,7 @@ import {
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncCommitResult,
   type MailboxSyncLeaseRenewal,
+  type MailboxWatchRenewalTarget,
   type MessageResource,
   type PreparedWebhookDelivery,
   type StartedSyncRun,
@@ -81,6 +83,11 @@ type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
 type WebhookEndpointSubscriptionRow = typeof webhookEndpointSubscriptions.$inferSelect;
 
 const WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS = 30_000;
+const TERMINAL_GMAIL_CREDENTIAL_PROBLEM_CODES = new Set([
+  "gmail_mailbox_credentials_missing",
+  "gmail_mailbox_credential_unreadable",
+  "gmail_token_refresh_reconnect_required",
+]);
 
 export type GmailMailboxCredentialAuditStatus =
   | "encrypted_current"
@@ -330,6 +337,13 @@ const toMailboxResource = (row: MailboxRow): MailboxResource => {
     initializedAt: toIsoString(row.initializedAt),
     lastSuccessfulSyncAt: toIsoString(row.lastSuccessfulSyncAt),
     lastError: toMailboxOperationalError(row),
+  };
+};
+
+const toMailboxWatchRenewalTarget = (row: MailboxRow): MailboxWatchRenewalTarget => {
+  return {
+    mailbox: toMailboxResource(row),
+    watchExpiresAt: toIsoString(row.watchExpirationAt),
   };
 };
 
@@ -795,6 +809,10 @@ const toWebhookDeliveryRecoverySchedule = (
     default:
       return null;
   }
+};
+
+const isTerminalGmailCredentialProblem = (code: string) => {
+  return TERMINAL_GMAIL_CREDENTIAL_PROBLEM_CODES.has(code);
 };
 
 const getMailboxSyncFailureState = (
@@ -2137,6 +2155,131 @@ export const createMailboxStateStoreLayer = Layer.effect(
   }),
 );
 
+export const createMailboxWatchStoreLayer = Layer.effect(
+  MailboxWatchStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      listMailboxWatchesNeedingRenewal: ({ limit, observedAt, renewalWindowMs }) =>
+        Effect.promise(async () => {
+          const observedAtDate = toDate(observedAt);
+          const renewalCutoff = new Date(observedAtDate.getTime() + renewalWindowMs);
+          const rows = await database.db
+            .select()
+            .from(mailboxes)
+            .where(
+              and(
+                eq(mailboxes.provider, "gmail"),
+                eq(mailboxes.status, "active"),
+                or(
+                  isNull(mailboxes.watchExpirationAt),
+                  lte(mailboxes.watchExpirationAt, renewalCutoff),
+                  inArray(mailboxes.watchState, ["expired", "expiring", "unhealthy"]),
+                ),
+              ),
+            )
+            .orderBy(asc(mailboxes.watchExpirationAt), asc(mailboxes.id))
+            .limit(limit);
+
+          return rows.map((row) => toMailboxWatchRenewalTarget(row));
+        }),
+      markMailboxWatchRenewalStarted: ({ mailboxId, observedAt }) =>
+        Effect.promise(async () => {
+          const observedAtDate = toDate(observedAt);
+          const [row] = await database.db
+            .select({
+              watchExpirationAt: mailboxes.watchExpirationAt,
+            })
+            .from(mailboxes)
+            .where(eq(mailboxes.id, mailboxId))
+            .limit(1);
+          const watchState =
+            row?.watchExpirationAt !== null &&
+            row?.watchExpirationAt !== undefined &&
+            row.watchExpirationAt <= observedAtDate
+              ? "expired"
+              : "expiring";
+
+          await database.db
+            .update(mailboxes)
+            .set({
+              watchState,
+              updatedAt: observedAtDate,
+            })
+            .where(eq(mailboxes.id, mailboxId));
+        }),
+      completeMailboxWatchRenewal: ({ historyId, mailboxId, renewedAt, watchExpiresAt }) =>
+        Effect.promise(async () => {
+          const renewedAtDate = toDate(renewedAt);
+          const watchExpiresAtDate = toDate(watchExpiresAt);
+          const [row] = await database.db
+            .select({
+              lastErrorCode: mailboxes.lastErrorCode,
+            })
+            .from(mailboxes)
+            .where(eq(mailboxes.id, mailboxId))
+            .limit(1);
+          const clearLastError = row?.lastErrorCode?.startsWith("gmail_watch_") ?? false;
+
+          await database.db
+            .update(mailboxes)
+            .set({
+              ...(clearLastError
+                ? {
+                    lastErrorCode: null,
+                    lastErrorMessage: null,
+                    lastErrorOccurredAt: null,
+                    lastErrorRetryable: null,
+                  }
+                : {}),
+              watchExpirationAt: watchExpiresAtDate,
+              watchLastHistoryId: historyId,
+              watchLastRenewedAt: renewedAtDate,
+              watchState: "active",
+              updatedAt: renewedAtDate,
+            })
+            .where(eq(mailboxes.id, mailboxId));
+        }),
+      failMailboxWatchRenewal: ({ mailboxId, observedAt, problem }) =>
+        Effect.promise(async () => {
+          const observedAtDate = toDate(observedAt);
+          const [row] = await database.db
+            .select({
+              watchExpirationAt: mailboxes.watchExpirationAt,
+            })
+            .from(mailboxes)
+            .where(eq(mailboxes.id, mailboxId))
+            .limit(1);
+          const watchState =
+            row?.watchExpirationAt !== null &&
+            row?.watchExpirationAt !== undefined &&
+            row.watchExpirationAt <= observedAtDate
+              ? "expired"
+              : "unhealthy";
+
+          await database.db
+            .update(mailboxes)
+            .set({
+              lastErrorCode: problem.code,
+              lastErrorMessage: problem.detail,
+              lastErrorOccurredAt: observedAtDate,
+              lastErrorRetryable: problem.retryable,
+              ...(isTerminalGmailCredentialProblem(problem.code)
+                ? {
+                    status: "reconnect_required",
+                    syncState: "failed",
+                  }
+                : {}),
+              watchState,
+              updatedAt: observedAtDate,
+            })
+            .where(eq(mailboxes.id, mailboxId));
+        }),
+    };
+  }),
+);
+
 export const createGmailMailboxCredentialStoreLayer = Layer.effect(
   GmailMailboxCredentialStore,
   Effect.gen(function* () {
@@ -2379,6 +2522,7 @@ export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxQueryCatalogLayer,
   createMailboxStateStoreLayer,
   createMailboxSyncCoordinatorLayer,
+  createMailboxWatchStoreLayer,
   createSyncRunStoreLayer,
   createWebhookDeliveryStoreLayer,
   createWebhookEndpointCatalogLayer,
