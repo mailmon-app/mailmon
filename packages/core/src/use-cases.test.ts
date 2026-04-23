@@ -1067,7 +1067,7 @@ describe("repairMailboxes", () => {
         observedAt: string;
         resetCursor: boolean;
       }> = [];
-      const dispatchedMailboxIds: string[] = [];
+      const repairedMailboxDispatches: string[] = [];
       const observedAt = "2026-04-22T00:00:00.000Z";
 
       const result = yield* repairMailboxes({ limit: 10, observedAt }).pipe(
@@ -1100,7 +1100,7 @@ describe("repairMailboxes", () => {
             Layer.succeed(MailboxSyncDispatcher, {
               dispatchMailboxSync: (mailboxId: string) =>
                 Effect.sync(() => {
-                  dispatchedMailboxIds.push(mailboxId);
+                  repairedMailboxDispatches.push(mailboxId);
                 }),
             }),
           ),
@@ -1127,7 +1127,7 @@ describe("repairMailboxes", () => {
           resetCursor: false,
         },
       ]);
-      expect(dispatchedMailboxIds).toEqual([mailboxFixture.id, "mbx_watch_expired"]);
+      expect(repairedMailboxDispatches).toEqual([mailboxFixture.id, "mbx_watch_expired"]);
     }),
   );
 });

@@ -880,6 +880,13 @@ export function runControlJob(
   ControlJobRunResult,
   never,
   MailboxRepairStore | MailboxSyncDispatcher | MailboxWatchProvider | MailboxWatchStore
+>;
+export function runControlJob(
+  request: ControlJobDispatchRequest,
+): Effect.Effect<
+  ControlJobRunResult,
+  never,
+  MailboxRepairStore | MailboxSyncDispatcher | MailboxWatchProvider | MailboxWatchStore
 > {
   switch (request.kind) {
     case "renew_watches":
@@ -894,6 +901,12 @@ export function runControlJob(
     case "repair_mailboxes":
       return repairMailboxes();
   }
+
+  return Effect.succeed({
+    completedAt: new Date().toISOString(),
+    kind: request.kind,
+    status: "noop",
+  });
 }
 
 export const runMailboxSync = (mailboxId: string) =>
