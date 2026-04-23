@@ -270,7 +270,7 @@ Harden the system for production behavior under failure and scale. This slice fo
 - [x] Gmail `429` and `403` rate limits degrade mailbox sync state without surfacing as unrelated synchronous API failures
 - [x] Invalid or expired Gmail history cursors trigger a repair or full-resync path instead of leaving the mailbox permanently failed
 - [x] Repair or catch-up sync paths exist for missed changes and unhealthy watches
-- [ ] Sync runs, cursor movement, mailbox lag, and webhook delivery degradation are observable
+- [x] Sync runs, cursor movement, mailbox lag, and webhook delivery degradation are observable
 - [ ] Stuck mailbox execution recovers through lease expiry and takeover
 - [ ] Repeated lease contention or lease loss is observable and alertable
 - [ ] Staging and production have explicit dead-letter and retry-exhaustion handling for sync dispatch and webhook delivery

@@ -419,10 +419,11 @@ This section translates the current repo state into launch language.
 - mailbox `lagging` degradation for Gmail `429` and quota-style `403` rate limits
 - repair and full-resync flow for invalid or expired Gmail history cursors
 - local webhook delivery runtime with retries, endpoint health, and startup recovery of pending/in-flight deliveries
+- mailbox observability routes for sync runs and current operational state via `GET /v1/mailboxes/{mailbox_id}/sync-runs` and `GET /v1/mailboxes/{mailbox_id}/observability`
 
 ### 6.2 Immediate Launch Blockers
 
-- staging and production delivery adapter
+- webhook deliveries work in staging and production
 - Gmail push/watch production path
 
 ### 6.3 Likely Public-Launch Blockers
@@ -432,7 +433,7 @@ This section translates the current repo state into launch language.
 - official OpenAPI source of truth
 - official SDK
 - polished troubleshooting and production docs
-- support and observability workflows
+- support workflows, alerting, and operator runbooks
 
 ### 6.4 Things That Can Be Deferred Until After Early Beta
 
@@ -518,8 +519,8 @@ Use this as the final go/no-go list.
 
 ### Operations
 
-- [ ] Sync Run observability exists
-- [ ] webhook delivery observability exists
+- [x] Sync Run observability exists
+- [x] webhook delivery observability exists
 - [ ] alerting exists
 - [ ] dead-letter handling exists
 - [ ] backup and restore plan exists
