@@ -5,12 +5,15 @@ import {
   createWebhookEndpointSubscription,
   createMailboxConnectSession,
   getConnectSessionOrFail,
+  getMailboxObservability,
   getGmailMailboxConnectAuthorizationUrl,
   getMessageOrFail,
   getMailboxOrFail,
   getThreadOrFail,
+  listMailboxSyncRuns,
   listMailboxMessages,
   listMailboxThreads,
+  type MailboxSyncRunInspectionResource,
   type CreateConnectSessionRequest,
   type CreateWebhookEndpointRequest,
   type CreateWebhookEndpointSubscriptionRequest,
@@ -213,6 +216,30 @@ const parseListCursor = (request: { readonly query: (key: string) => string | un
   return request.query("cursor") ?? null;
 };
 
+const toSyncRunsResponse = (response: {
+  readonly object: "list";
+  readonly data: ReadonlyArray<MailboxSyncRunInspectionResource>;
+  readonly nextCursor: string | null;
+}) => {
+  return {
+    object: response.object,
+    data: response.data.map((run) => ({
+      syncRunId: run.syncRunId,
+      mailboxId: run.mailboxId,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      status: run.status,
+      detail: run.detail,
+      eventsEmitted: run.eventsEmitted,
+      leaseOwnerId: run.leaseOwnerId,
+      previousCursor: run.previousCursor,
+      nextCursor: run.nextCursor,
+      cursorAdvanced: run.cursorAdvanced,
+    })),
+    nextCursor: response.nextCursor,
+  };
+};
+
 const parseListLimit = (request: { readonly query: (key: string) => string | undefined }) => {
   const limitValue = request.query("limit");
 
@@ -404,6 +431,58 @@ export const createApp = (runtime: ApiServerRuntime) => {
     const result = await matchProblemEffect(
       runtime,
       getMailboxOrFail(context.req.param("mailboxId"), {
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value);
+  });
+
+  app.get("/v1/mailboxes/:mailboxId/sync-runs", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const limit = parseListLimit(context.req);
+
+    if (limit === null) {
+      return createProblemResponse(
+        invalidRequest(`Query parameter limit must be an integer between 1 and ${MAX_LIST_LIMIT}.`),
+      );
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      listMailboxSyncRuns(context.req.param("mailboxId"), {
+        cursor: parseListCursor(context.req),
+        limit,
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result._tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(toSyncRunsResponse(result.value));
+  });
+
+  app.get("/v1/mailboxes/:mailboxId/observability", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth._tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const result = await matchProblemEffect(
+      runtime,
+      getMailboxObservability(context.req.param("mailboxId"), {
         workspaceId: auth.workspace.workspaceId,
       }),
     );

@@ -33,6 +33,14 @@ export const SyncRunOutcomeSchema = Schema.Literal(
   "failed_after_lease_acquired",
   "lease_lost",
 );
+export const MailboxSyncRunInspectionStatusSchema = Schema.Literal(
+  "running",
+  "completed",
+  "skipped_due_to_active_lease",
+  "reconnect_required",
+  "failed_after_lease_acquired",
+  "lease_lost",
+);
 export const ControlJobKindSchema = Schema.Literal(
   "renew_watches",
   "dispatch_replays",
@@ -60,6 +68,9 @@ export type WebhookEndpointDeliveryState = Schema.Schema.Type<
 >;
 export type ReplayStatus = Schema.Schema.Type<typeof ReplayStatusSchema>;
 export type SyncRunOutcome = Schema.Schema.Type<typeof SyncRunOutcomeSchema>;
+export type MailboxSyncRunInspectionStatus = Schema.Schema.Type<
+  typeof MailboxSyncRunInspectionStatusSchema
+>;
 export type ControlJobKind = Schema.Schema.Type<typeof ControlJobKindSchema>;
 export type MailboxSyncJobData = Schema.Schema.Type<typeof MailboxSyncJobDataSchema>;
 export type WebhookDeliveryScheduleRequest = Schema.Schema.Type<
@@ -345,6 +356,69 @@ export interface CompletedSyncRun {
   readonly detail: string | null;
 }
 
+export interface MailboxSyncRunInspectionResource {
+  readonly syncRunId: string;
+  readonly mailboxId: string;
+  readonly startedAt: string;
+  readonly completedAt: string | null;
+  readonly status: MailboxSyncRunInspectionStatus;
+  readonly detail: string | null;
+  readonly eventsEmitted: number | null;
+  readonly leaseOwnerId: string | null;
+  readonly previousCursor: string | null;
+  readonly nextCursor: string | null;
+  readonly cursorAdvanced: boolean | null;
+}
+
+export interface MailboxLagInspectionResource {
+  readonly status: MailboxStatus;
+  readonly syncState: MailboxSyncState;
+  readonly watchState: MailboxWatchState;
+  readonly lastSuccessfulSyncAt: string | null;
+  readonly lagSeconds: number | null;
+}
+
+export interface MailboxCursorMovementInspectionResource {
+  readonly currentCursor: string | null;
+  readonly previousCursor: string | null;
+  readonly nextCursor: string | null;
+  readonly advanced: boolean | null;
+  readonly advancedAt: string | null;
+}
+
+export interface MailboxLeaseInspectionResource {
+  readonly activeLeaseOwner: string | null;
+  readonly activeLeaseHeartbeatAt: string | null;
+  readonly activeLeaseExpiresAt: string | null;
+  readonly contentionCount24h: number;
+  readonly latestContentionAt: string | null;
+  readonly leaseLossCount24h: number;
+  readonly latestLeaseLossAt: string | null;
+}
+
+export interface MailboxWebhookDeliveryDegradationResource {
+  readonly webhookEndpointId: string;
+  readonly webhookEndpointUrl: string;
+  readonly deliveryState: WebhookEndpointDeliveryState;
+  readonly consecutiveFailures: number;
+  readonly pendingDeliveries: number;
+  readonly processingDeliveries: number;
+  readonly failedDeliveries: number;
+  readonly lastDeliveryAt: string | null;
+  readonly lastDeliveryError: WebhookEndpointOperationalError | null;
+}
+
+export interface MailboxObservabilitySnapshotResource {
+  readonly object: "mailbox_observability";
+  readonly mailboxId: string;
+  readonly generatedAt: string;
+  readonly lag: MailboxLagInspectionResource;
+  readonly cursor: MailboxCursorMovementInspectionResource;
+  readonly lease: MailboxLeaseInspectionResource;
+  readonly webhookDeliveries: ReadonlyArray<MailboxWebhookDeliveryDegradationResource>;
+  readonly latestSyncRun: MailboxSyncRunInspectionResource | null;
+}
+
 export interface CanonicalThreadRecord {
   readonly id: string;
   readonly providerThreadId: string;
@@ -439,6 +513,12 @@ export interface WorkspaceApiKeyIdentity {
 }
 
 export interface ListMailboxMessagesRequest {
+  readonly mailboxId: string;
+  readonly limit: number;
+  readonly cursor: string | null;
+}
+
+export interface ListMailboxSyncRunsRequest {
   readonly mailboxId: string;
   readonly limit: number;
   readonly cursor: string | null;

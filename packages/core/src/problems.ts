@@ -71,7 +71,9 @@ export const threadNotFound = (threadId: string): ProblemDetails => {
   });
 };
 
-export const invalidPaginationCursor = (resourceType: "messages" | "threads"): ProblemDetails => {
+export const invalidPaginationCursor = (
+  resourceType: "messages" | "threads" | "sync_runs",
+): ProblemDetails => {
   return makeProblem({
     type: "https://api.mailmon.dev/problems/invalid-pagination-cursor",
     title: "Invalid pagination cursor",

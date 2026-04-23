@@ -11,6 +11,7 @@ import type {
 import { makeProblem } from "./problems.js";
 import {
   MailboxCatalog,
+  MailboxObservabilityCatalog,
   MailboxPushNotificationStore,
   MailboxQueryCatalog,
   MailboxRepairStore,
@@ -32,11 +33,13 @@ import {
   createWebhookEndpoint,
   createWebhookEndpointSubscription,
   dispatchMailboxSync,
+  getMailboxObservability,
   getMailboxOrFail,
   getMessageOrFail,
   getThreadOrFail,
   ingestGmailPushNotification,
   listMailboxMessages,
+  listMailboxSyncRuns,
   listMailboxThreads,
   repairMailboxes,
   recoverWebhookDeliveryScheduling,
@@ -590,6 +593,78 @@ const queryCatalogLayer = Layer.succeed(MailboxQueryCatalog, {
     ),
 });
 
+const syncRunInspectionFixture = {
+  syncRunId: "sr_demo",
+  mailboxId: mailboxFixture.id,
+  startedAt: "2026-04-22T10:00:00.000Z",
+  completedAt: "2026-04-22T10:00:12.000Z",
+  status: "completed" as const,
+  detail: null,
+  eventsEmitted: 3,
+  leaseOwnerId: "lease_demo",
+  previousCursor: "hist_100",
+  nextCursor: "hist_105",
+  cursorAdvanced: true,
+};
+
+const mailboxObservabilityFixture = {
+  object: "mailbox_observability" as const,
+  mailboxId: mailboxFixture.id,
+  generatedAt: "2026-04-22T10:05:00.000Z",
+  lag: {
+    status: "active" as const,
+    syncState: "healthy" as const,
+    watchState: "active" as const,
+    lastSuccessfulSyncAt: "2026-04-22T10:00:12.000Z",
+    lagSeconds: 288,
+  },
+  cursor: {
+    currentCursor: "hist_105",
+    previousCursor: "hist_100",
+    nextCursor: "hist_105",
+    advanced: true,
+    advancedAt: "2026-04-22T10:00:12.000Z",
+  },
+  lease: {
+    activeLeaseOwner: null,
+    activeLeaseHeartbeatAt: null,
+    activeLeaseExpiresAt: null,
+    contentionCount24h: 2,
+    latestContentionAt: "2026-04-22T09:58:00.000Z",
+    leaseLossCount24h: 1,
+    latestLeaseLossAt: "2026-04-22T09:59:30.000Z",
+  },
+  webhookDeliveries: [
+    {
+      webhookEndpointId: webhookEndpointFixture.id,
+      webhookEndpointUrl: webhookEndpointFixture.url,
+      deliveryState: "degraded" as const,
+      consecutiveFailures: 2,
+      pendingDeliveries: 3,
+      processingDeliveries: 1,
+      failedDeliveries: 4,
+      lastDeliveryAt: "2026-04-22T10:04:00.000Z",
+      lastDeliveryError: {
+        code: "webhook_delivery_timeout",
+        message: "Webhook delivery timed out before the endpoint responded.",
+        occurredAt: "2026-04-22T10:04:00.000Z",
+        retryable: true,
+      },
+    },
+  ],
+  latestSyncRun: syncRunInspectionFixture,
+};
+
+const observabilityCatalogLayer = Layer.succeed(MailboxObservabilityCatalog, {
+  listSyncRuns: ({ mailboxId }) =>
+    Effect.succeed({
+      object: "list" as const,
+      data: mailboxId === mailboxFixture.id ? [syncRunInspectionFixture] : [],
+      nextCursor: null,
+    }),
+  getMailboxObservability: () => Effect.succeed(mailboxObservabilityFixture),
+});
+
 describe("getMailboxOrFail", () => {
   it.effect("fails with a structured problem when the mailbox is missing", () =>
     getMailboxOrFail("mbx_missing").pipe(
@@ -700,6 +775,34 @@ describe("message and thread query use cases", () => {
         },
       ]);
     }).pipe(Effect.provide(Layer.mergeAll(catalogLayer, queryCatalogLayer))),
+  );
+});
+
+describe("mailbox observability query use cases", () => {
+  it.effect("lists sync runs after verifying mailbox ownership", () =>
+    listMailboxSyncRuns(mailboxFixture.id, {
+      limit: 10,
+      workspaceId: primaryWorkspaceId,
+    }).pipe(
+      Effect.map((result) => {
+        expect(result.object).toBe("list");
+        expect(result.data).toEqual([syncRunInspectionFixture]);
+        expect(result.nextCursor).toBeNull();
+      }),
+      Effect.provide(Layer.mergeAll(catalogLayer, observabilityCatalogLayer)),
+    ),
+  );
+
+  it.effect("returns a mailbox observability snapshot after ownership checks", () =>
+    getMailboxObservability(mailboxFixture.id, {
+      observedAt: mailboxObservabilityFixture.generatedAt,
+      workspaceId: primaryWorkspaceId,
+    }).pipe(
+      Effect.map((result) => {
+        expect(result).toEqual(mailboxObservabilityFixture);
+      }),
+      Effect.provide(Layer.mergeAll(catalogLayer, observabilityCatalogLayer)),
+    ),
   );
 });
 

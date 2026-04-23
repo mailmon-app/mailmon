@@ -229,29 +229,56 @@ export const messages = pgTable(
   }),
 );
 
-export const syncRuns = pgTable("sync_runs", {
-  id: text("id").primaryKey(),
-  mailboxId: text("mailbox_id")
-    .notNull()
-    .references(() => mailboxes.id),
-  status: text("status").notNull(),
-  leaseOwnerId: text("lease_owner_id"),
-  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  eventsEmitted: text("events_emitted"),
-  nextCursor: text("next_cursor"),
-  detail: text("detail"),
-});
+export const syncRuns = pgTable(
+  "sync_runs",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailbox_id")
+      .notNull()
+      .references(() => mailboxes.id),
+    status: text("status").notNull(),
+    leaseOwnerId: text("lease_owner_id"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    eventsEmitted: text("events_emitted"),
+    previousCursor: text("previous_cursor"),
+    nextCursor: text("next_cursor"),
+    detail: text("detail"),
+  },
+  (table) => ({
+    mailboxStartedAtIndex: index("sync_runs_mailbox_started_at_idx").on(
+      table.mailboxId,
+      table.startedAt.desc(),
+      table.id.desc(),
+    ),
+    mailboxStatusStartedAtIndex: index("sync_runs_mailbox_status_started_at_idx").on(
+      table.mailboxId,
+      table.status,
+      table.startedAt.desc(),
+      table.id.desc(),
+    ),
+  }),
+);
 
-export const mailboxEvents = pgTable("mailbox_events", {
-  id: text("id").primaryKey(),
-  mailboxId: text("mailbox_id")
-    .notNull()
-    .references(() => mailboxes.id),
-  eventType: text("event_type").$type<MailboxEventType>().notNull(),
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
-  payload: jsonb("payload").$type<MailboxEventEnvelope>().notNull(),
-});
+export const mailboxEvents = pgTable(
+  "mailbox_events",
+  {
+    id: text("id").primaryKey(),
+    mailboxId: text("mailbox_id")
+      .notNull()
+      .references(() => mailboxes.id),
+    eventType: text("event_type").$type<MailboxEventType>().notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+    payload: jsonb("payload").$type<MailboxEventEnvelope>().notNull(),
+  },
+  (table) => ({
+    mailboxOccurredAtIndex: index("mailbox_events_mailbox_occurred_at_idx").on(
+      table.mailboxId,
+      table.occurredAt.desc(),
+      table.id.desc(),
+    ),
+  }),
+);
 
 export const webhookDeliveries = pgTable(
   "webhook_deliveries",

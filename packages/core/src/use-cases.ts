@@ -33,6 +33,7 @@ import {
   webhookEndpointNotFound,
 } from "./problems.js";
 import {
+  MailboxObservabilityCatalog,
   MailboxQueryCatalog,
   MailboxCatalog,
   MailboxConnectProvider,
@@ -307,6 +308,48 @@ export const listMailboxThreads = (
       mailboxId,
       cursor: options.cursor ?? null,
       limit: options.limit,
+    });
+  });
+
+export const listMailboxSyncRuns = (
+  mailboxId: string,
+  options: Readonly<{
+    cursor?: string | null;
+    limit: number;
+    workspaceId?: string;
+  }>,
+) =>
+  Effect.gen(function* () {
+    yield* getMailboxOrFail(
+      mailboxId,
+      options.workspaceId === undefined ? {} : { workspaceId: options.workspaceId },
+    );
+    const observabilityCatalog = yield* MailboxObservabilityCatalog;
+
+    return yield* observabilityCatalog.listSyncRuns({
+      mailboxId,
+      cursor: options.cursor ?? null,
+      limit: options.limit,
+    });
+  });
+
+export const getMailboxObservability = (
+  mailboxId: string,
+  options: Readonly<{
+    observedAt?: string;
+    workspaceId?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    yield* getMailboxOrFail(
+      mailboxId,
+      options.workspaceId === undefined ? {} : { workspaceId: options.workspaceId },
+    );
+    const observabilityCatalog = yield* MailboxObservabilityCatalog;
+
+    return yield* observabilityCatalog.getMailboxObservability({
+      mailboxId,
+      observedAt: options.observedAt ?? new Date().toISOString(),
     });
   });
 

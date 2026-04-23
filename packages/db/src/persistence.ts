@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   MailboxCatalog,
   MailboxConnectSessionStore,
+  MailboxObservabilityCatalog,
   MailboxPushNotificationStore,
   MailboxQueryCatalog,
   MailboxRepairStore,
@@ -27,12 +28,17 @@ import {
   type CompletedSyncRun,
   type CreatedWebhookEndpointResource,
   type ListMailboxMessagesRequest,
+  type ListMailboxSyncRunsRequest,
   type ListMailboxThreadsRequest,
   type ListResource,
   type MailboxOperationalError,
+  type MailboxObservabilitySnapshotResource,
   type MailboxRepairTarget,
   type MailboxResource,
   type MailboxEventEnvelope,
+  type MailboxSyncRunInspectionResource,
+  type MailboxSyncRunInspectionStatus,
+  type MailboxWebhookDeliveryDegradationResource,
   type MailboxEventType,
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncCommitResult,
@@ -58,7 +64,7 @@ import {
   GmailRefreshTokenCipher,
   type GmailRefreshTokenInspection,
 } from "@mailmon/gmail";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
 import { createDb } from "./client.js";
@@ -84,6 +90,8 @@ type ThreadRow = typeof threads.$inferSelect;
 type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
 type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
 type WebhookEndpointSubscriptionRow = typeof webhookEndpointSubscriptions.$inferSelect;
+
+type SyncRunRow = typeof syncRuns.$inferSelect;
 
 const WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS = 30_000;
 const TERMINAL_GMAIL_CREDENTIAL_PROBLEM_CODES = new Set([
@@ -400,6 +408,73 @@ const toWebhookEndpointSubscriptionResource = (
   };
 };
 
+const toSyncRunInspectionStatus = (status: string): MailboxSyncRunInspectionStatus => {
+  switch (status) {
+    case "running":
+    case "completed":
+    case "skipped_due_to_active_lease":
+    case "reconnect_required":
+    case "failed_after_lease_acquired":
+    case "lease_lost":
+      return status;
+    default:
+      throw new Error(`Unsupported sync run status: ${status}`);
+  }
+};
+
+const toMailboxSyncRunInspectionResource = (row: SyncRunRow): MailboxSyncRunInspectionResource => {
+  const parsedEventsEmitted =
+    row.eventsEmitted === null ? null : Number.parseInt(row.eventsEmitted, 10);
+
+  return {
+    syncRunId: row.id,
+    mailboxId: row.mailboxId,
+    startedAt: row.startedAt.toISOString(),
+    completedAt: toIsoString(row.completedAt),
+    status: toSyncRunInspectionStatus(row.status),
+    detail: row.detail,
+    eventsEmitted:
+      parsedEventsEmitted !== null && Number.isNaN(parsedEventsEmitted) ? null : parsedEventsEmitted,
+    leaseOwnerId: row.leaseOwnerId,
+    previousCursor: row.previousCursor,
+    nextCursor: row.nextCursor,
+    cursorAdvanced:
+      row.previousCursor === null || row.nextCursor === null ? null : row.previousCursor !== row.nextCursor,
+  };
+};
+
+const toMailboxWebhookDeliveryDegradationResource = (row: {
+  readonly webhookEndpointId: string;
+  readonly webhookEndpointUrl: string;
+  readonly deliveryState: string;
+  readonly consecutiveFailures: number;
+  readonly pendingDeliveries: number;
+  readonly processingDeliveries: number;
+  readonly failedDeliveries: number;
+  readonly lastDeliveryAt: Date | null;
+  readonly lastErrorCode: string | null;
+  readonly lastErrorMessage: string | null;
+  readonly lastErrorOccurredAt: Date | null;
+  readonly lastErrorRetryable: boolean | null;
+}): MailboxWebhookDeliveryDegradationResource => {
+  return {
+    webhookEndpointId: row.webhookEndpointId,
+    webhookEndpointUrl: row.webhookEndpointUrl,
+    deliveryState: toWebhookEndpointDeliveryState(row.deliveryState),
+    consecutiveFailures: row.consecutiveFailures,
+    pendingDeliveries: row.pendingDeliveries,
+    processingDeliveries: row.processingDeliveries,
+    failedDeliveries: row.failedDeliveries,
+    lastDeliveryAt: toIsoString(row.lastDeliveryAt),
+    lastDeliveryError: toOperationalError({
+      lastErrorCode: row.lastErrorCode,
+      lastErrorMessage: row.lastErrorMessage,
+      lastErrorOccurredAt: row.lastErrorOccurredAt,
+      lastErrorRetryable: row.lastErrorRetryable,
+    }),
+  };
+};
+
 const toMessageResource = (row: MessageRow): MessageResource => {
   return {
     id: row.id,
@@ -453,6 +528,11 @@ interface PaginationCursor {
   readonly timestamp: string;
 }
 
+interface SyncRunPaginationCursor {
+  readonly id: string;
+  readonly startedAt: string;
+}
+
 const encodePaginationCursor = (cursor: PaginationCursor) => {
   const payload = JSON.stringify({
     id: cursor.id,
@@ -497,6 +577,47 @@ const decodePaginationCursor = (
     }
 
     throw invalidPaginationCursor(resourceType);
+  }
+};
+
+const encodeSyncRunPaginationCursor = (cursor: SyncRunPaginationCursor) => {
+  const payload = JSON.stringify(cursor);
+
+  return `cur_${Buffer.from(payload, "utf8").toString("base64url")}`;
+};
+
+const decodeSyncRunPaginationCursor = (cursor: string): SyncRunPaginationCursor => {
+  if (!cursor.startsWith("cur_")) {
+    throw invalidPaginationCursor("sync_runs");
+  }
+
+  try {
+    const decoded = Buffer.from(cursor.slice(4), "base64url").toString("utf8");
+    const payload = JSON.parse(decoded) as unknown;
+
+    if (
+      typeof payload !== "object" ||
+      payload === null ||
+      !("id" in payload) ||
+      typeof payload.id !== "string" ||
+      payload.id.length === 0 ||
+      !("startedAt" in payload) ||
+      typeof payload.startedAt !== "string" ||
+      Number.isNaN(Date.parse(payload.startedAt))
+    ) {
+      throw invalidPaginationCursor("sync_runs");
+    }
+
+    return {
+      id: payload.id,
+      startedAt: payload.startedAt,
+    };
+  } catch (error) {
+    if (isProblemDetails(error)) {
+      throw error;
+    }
+
+    throw invalidPaginationCursor("sync_runs");
   }
 };
 
@@ -827,6 +948,24 @@ const toWebhookDeliveryRecoverySchedule = (
     default:
       return null;
   }
+};
+
+const getLatestCompletedAt = (
+  rows: ReadonlyArray<{
+    readonly completedAt: Date | null;
+  }>,
+) => {
+  return rows.reduce<Date | null>((latest, row) => {
+    if (row.completedAt === null) {
+      return latest;
+    }
+
+    if (latest === null || row.completedAt.getTime() > latest.getTime()) {
+      return row.completedAt;
+    }
+
+    return latest;
+  }, null);
 };
 
 const isTerminalGmailCredentialProblem = (code: string) => {
@@ -1737,6 +1876,262 @@ export const createMailboxQueryCatalogLayer = Layer.effect(
   }),
 );
 
+export const createMailboxObservabilityCatalogLayer = Layer.effect(
+  MailboxObservabilityCatalog,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      listSyncRuns: (request: ListMailboxSyncRunsRequest) =>
+        Effect.tryPromise({
+          catch: (error) => {
+            if (isProblemDetails(error)) {
+              return error;
+            }
+
+            throw error;
+          },
+          try: async () => {
+            const paginationCursor =
+              request.cursor === null ? null : decodeSyncRunPaginationCursor(request.cursor);
+            const whereClause =
+              paginationCursor === null
+                ? eq(syncRuns.mailboxId, request.mailboxId)
+                : and(
+                    eq(syncRuns.mailboxId, request.mailboxId),
+                    or(
+                      lt(syncRuns.startedAt, toDate(paginationCursor.startedAt)),
+                      and(
+                        eq(syncRuns.startedAt, toDate(paginationCursor.startedAt)),
+                        lt(syncRuns.id, paginationCursor.id),
+                      ),
+                    ),
+                  );
+            const rows = await database.db
+              .select()
+              .from(syncRuns)
+              .where(whereClause)
+              .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
+              .limit(request.limit + 1);
+            const pageRows = rows.slice(0, request.limit);
+            const nextCursor =
+              rows.length > request.limit
+                ? encodeSyncRunPaginationCursor({
+                    id: pageRows[pageRows.length - 1]?.id ?? rows[request.limit - 1]!.id,
+                    startedAt:
+                      pageRows[pageRows.length - 1]?.startedAt.toISOString() ??
+                      rows[request.limit - 1]!.startedAt.toISOString(),
+                  })
+                : null;
+
+            return {
+              object: "list",
+              data: pageRows.map((row) => toMailboxSyncRunInspectionResource(row)),
+              nextCursor,
+            } satisfies ListResource<MailboxSyncRunInspectionResource>;
+          },
+        }),
+      getMailboxObservability: ({ mailboxId, observedAt }) =>
+        Effect.promise(async () => {
+          const observedAtDate = toDate(observedAt);
+          const windowStart = new Date(observedAtDate.getTime() - 24 * 60 * 60 * 1000);
+          const [mailboxRow] = await database.db
+            .select({
+              activeSyncLeaseExpiresAt: mailboxes.activeSyncLeaseExpiresAt,
+              activeSyncLeaseHeartbeatAt: mailboxes.activeSyncLeaseHeartbeatAt,
+              activeSyncLeaseOwner: mailboxes.activeSyncLeaseOwner,
+              cursor: mailboxes.cursor,
+              id: mailboxes.id,
+              lastSuccessfulSyncAt: mailboxes.lastSuccessfulSyncAt,
+              status: mailboxes.status,
+              syncState: mailboxes.syncState,
+              watchState: mailboxes.watchState,
+            })
+            .from(mailboxes)
+            .where(eq(mailboxes.id, mailboxId))
+            .limit(1);
+
+          if (mailboxRow === undefined) {
+            throw new Error(`Mailbox ${mailboxId} does not exist for observability read.`);
+          }
+
+          const [latestSyncRun] = await database.db
+            .select()
+            .from(syncRuns)
+            .where(eq(syncRuns.mailboxId, mailboxId))
+            .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
+            .limit(1);
+          const [latestCompletedSyncRun] = await database.db
+            .select()
+            .from(syncRuns)
+            .where(and(eq(syncRuns.mailboxId, mailboxId), eq(syncRuns.status, "completed")))
+            .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
+            .limit(1);
+          const syncRunRows = await database.db
+            .select({
+              completedAt: syncRuns.completedAt,
+              status: syncRuns.status,
+            })
+            .from(syncRuns)
+            .where(
+              and(
+                eq(syncRuns.mailboxId, mailboxId),
+                inArray(syncRuns.status, ["skipped_due_to_active_lease", "lease_lost"]),
+                gte(syncRuns.completedAt, windowStart),
+              ),
+            );
+
+          const leaseContentionRows = syncRunRows.filter(
+            (row) => row.status === "skipped_due_to_active_lease",
+          );
+          const leaseLossRows = syncRunRows.filter((row) => row.status === "lease_lost");
+
+          const endpointRows = await database.db
+            .select({
+              consecutiveFailures: webhookEndpoints.consecutiveDeliveryFailures,
+              deliveryState: webhookEndpoints.deliveryState,
+              id: webhookEndpoints.id,
+              lastDeliveryAt: webhookEndpoints.lastDeliveryAt,
+              lastErrorCode: webhookEndpoints.lastErrorCode,
+              lastErrorMessage: webhookEndpoints.lastErrorMessage,
+              lastErrorOccurredAt: webhookEndpoints.lastErrorOccurredAt,
+              lastErrorRetryable: webhookEndpoints.lastErrorRetryable,
+              url: webhookEndpoints.url,
+            })
+            .from(webhookEndpointSubscriptions)
+            .innerJoin(
+              webhookEndpoints,
+              eq(webhookEndpointSubscriptions.webhookEndpointId, webhookEndpoints.id),
+            )
+            .where(eq(webhookEndpointSubscriptions.mailboxId, mailboxId))
+            .orderBy(asc(webhookEndpoints.id));
+
+          const webhookDeliveriesByEndpointId =
+            endpointRows.length === 0
+              ? new Map<
+                  string,
+                  {
+                    readonly failedDeliveries: number;
+                    readonly pendingDeliveries: number;
+                    readonly processingDeliveries: number;
+                  }
+                >()
+              : await database.db
+                  .select({
+                    failedDeliveries: sql<number>`COALESCE(SUM(CASE WHEN ${webhookDeliveries.state} = 'failed' THEN 1 ELSE 0 END), 0)`,
+                    pendingDeliveries: sql<number>`COALESCE(SUM(CASE WHEN ${webhookDeliveries.state} = 'pending' THEN 1 ELSE 0 END), 0)`,
+                    processingDeliveries: sql<number>`COALESCE(SUM(CASE WHEN ${webhookDeliveries.state} = 'processing' THEN 1 ELSE 0 END), 0)`,
+                    webhookEndpointId: webhookDeliveries.webhookEndpointId,
+                  })
+                  .from(webhookDeliveries)
+                  .where(
+                    inArray(
+                      webhookDeliveries.webhookEndpointId,
+                      endpointRows.map((endpoint) => endpoint.id),
+                    ),
+                  )
+                  .groupBy(webhookDeliveries.webhookEndpointId)
+                  .then((rows) =>
+                    rows.map((row) => ({
+                      webhookEndpointId: row.webhookEndpointId,
+                      failedDeliveries: Number.parseInt(String(row.failedDeliveries), 10),
+                      pendingDeliveries: Number.parseInt(String(row.pendingDeliveries), 10),
+                      processingDeliveries: Number.parseInt(
+                        String(row.processingDeliveries),
+                        10,
+                      ),
+                    })),
+                  )
+                  .then(
+                    (rows) =>
+                      new Map(
+                        rows.map((row) => [
+                          row.webhookEndpointId,
+                          {
+                            failedDeliveries: row.failedDeliveries,
+                            pendingDeliveries: row.pendingDeliveries,
+                            processingDeliveries: row.processingDeliveries,
+                          },
+                        ]),
+                      ),
+                  );
+
+          const latestSyncRunInspection =
+            latestSyncRun === undefined ? null : toMailboxSyncRunInspectionResource(latestSyncRun);
+          const latestCompletedSyncRunInspection =
+            latestCompletedSyncRun === undefined
+              ? null
+              : toMailboxSyncRunInspectionResource(latestCompletedSyncRun);
+
+          const cursor = {
+            currentCursor: mailboxRow.cursor,
+            previousCursor: latestCompletedSyncRunInspection?.previousCursor ?? null,
+            nextCursor: latestCompletedSyncRunInspection?.nextCursor ?? null,
+            advanced: latestCompletedSyncRunInspection?.cursorAdvanced ?? null,
+            advancedAt:
+              latestCompletedSyncRunInspection?.cursorAdvanced === true
+                ? latestCompletedSyncRunInspection.completedAt
+                : null,
+          };
+
+          return {
+            object: "mailbox_observability",
+            mailboxId,
+            generatedAt: observedAt,
+            lag: {
+              status: toMailboxStatus(mailboxRow.status),
+              syncState: toMailboxSyncState(mailboxRow.syncState),
+              watchState: toMailboxWatchState(mailboxRow.watchState),
+              lastSuccessfulSyncAt: toIsoString(mailboxRow.lastSuccessfulSyncAt),
+              lagSeconds:
+                mailboxRow.lastSuccessfulSyncAt === null
+                  ? null
+                  : Math.max(
+                      0,
+                      Math.floor(
+                        (observedAtDate.getTime() - mailboxRow.lastSuccessfulSyncAt.getTime()) / 1000,
+                      ),
+                    ),
+            },
+            cursor,
+            lease: {
+              activeLeaseOwner: mailboxRow.activeSyncLeaseOwner,
+              activeLeaseHeartbeatAt: toIsoString(mailboxRow.activeSyncLeaseHeartbeatAt),
+              activeLeaseExpiresAt: toIsoString(mailboxRow.activeSyncLeaseExpiresAt),
+              contentionCount24h: leaseContentionRows.length,
+              latestContentionAt: toIsoString(getLatestCompletedAt(leaseContentionRows)),
+              leaseLossCount24h: leaseLossRows.length,
+              latestLeaseLossAt: toIsoString(getLatestCompletedAt(leaseLossRows)),
+            },
+            webhookDeliveries: endpointRows.map((endpoint) => {
+              const counts = webhookDeliveriesByEndpointId.get(endpoint.id) ?? {
+                failedDeliveries: 0,
+                pendingDeliveries: 0,
+                processingDeliveries: 0,
+              };
+
+              return toMailboxWebhookDeliveryDegradationResource({
+                webhookEndpointId: endpoint.id,
+                webhookEndpointUrl: endpoint.url,
+                deliveryState: endpoint.deliveryState,
+                consecutiveFailures: endpoint.consecutiveFailures,
+                pendingDeliveries: counts.pendingDeliveries,
+                processingDeliveries: counts.processingDeliveries,
+                failedDeliveries: counts.failedDeliveries,
+                lastDeliveryAt: endpoint.lastDeliveryAt,
+                lastErrorCode: endpoint.lastErrorCode,
+                lastErrorMessage: endpoint.lastErrorMessage,
+                lastErrorOccurredAt: endpoint.lastErrorOccurredAt,
+                lastErrorRetryable: endpoint.lastErrorRetryable,
+              });
+            }),
+            latestSyncRun: latestSyncRunInspection,
+          } satisfies MailboxObservabilitySnapshotResource;
+        }),
+    };
+  }),
+);
+
 export const createMailboxConnectSessionStoreLayer = Layer.effect(
   MailboxConnectSessionStore,
   Effect.gen(function* () {
@@ -1930,6 +2325,7 @@ export const createMailboxStateStoreLayer = Layer.effect(
               .select({
                 activeSyncLeaseExpiresAt: mailboxes.activeSyncLeaseExpiresAt,
                 activeSyncLeaseOwner: mailboxes.activeSyncLeaseOwner,
+                cursor: mailboxes.cursor,
                 initializedAt: mailboxes.initializedAt,
                 tenantExternalId: mailboxes.tenantExternalId,
                 workspaceId: mailboxes.workspaceId,
@@ -2196,6 +2592,7 @@ export const createMailboxStateStoreLayer = Layer.effect(
                 completedAt: syncedAtDate,
                 detail: null,
                 eventsEmitted: String(emittedMailboxEvents.length),
+                previousCursor: row.cursor,
                 nextCursor,
                 status: "completed",
               })
@@ -2454,10 +2851,18 @@ export const createSyncRunStoreLayer = Layer.effect(
       startSyncRun: (mailboxId: string) =>
         Effect.promise(async () => {
           const startedSyncRun = createStartedSyncRun(mailboxId);
+          const [mailbox] = await database.db
+            .select({
+              cursor: mailboxes.cursor,
+            })
+            .from(mailboxes)
+            .where(eq(mailboxes.id, mailboxId))
+            .limit(1);
 
           await database.db.insert(syncRuns).values({
             id: startedSyncRun.syncRunId,
             mailboxId: startedSyncRun.mailboxId,
+            previousCursor: mailbox?.cursor ?? null,
             status: "running",
             startedAt: toDate(startedSyncRun.startedAt),
           });
@@ -2644,6 +3049,7 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
 export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxCatalogLayer,
   createMailboxConnectSessionStoreLayer,
+  createMailboxObservabilityCatalogLayer,
   createMailboxPushNotificationStoreLayer,
   createMailboxQueryCatalogLayer,
   createMailboxRepairStoreLayer,

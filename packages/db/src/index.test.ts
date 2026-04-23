@@ -31,6 +31,7 @@ describe("schema", () => {
     expect(schema.mailboxes.activeSyncLeaseOwner).toBeDefined();
     expect(schema.mailboxes.activeSyncLeaseExpiresAt).toBeDefined();
     expect(schema.syncRuns.leaseOwnerId).toBeDefined();
+    expect(schema.syncRuns.previousCursor).toBeDefined();
   });
 
   it("exports DB-backed core persistence helpers", () => {

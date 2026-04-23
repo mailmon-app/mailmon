@@ -2,6 +2,7 @@ import {
   MailboxCatalog,
   MailboxConnectProvider,
   MailboxConnectSessionStore,
+  MailboxObservabilityCatalog,
   MailboxQueryCatalog,
   MailboxSyncDispatcher,
   WebhookEndpointCatalog,
@@ -96,6 +97,68 @@ const threadFixture = {
   ],
 };
 
+const syncRunInspectionFixture = {
+  syncRunId: "sr_demo",
+  mailboxId: mailboxFixture.id,
+  startedAt: "2026-04-22T10:00:00.000Z",
+  completedAt: "2026-04-22T10:00:12.000Z",
+  status: "completed" as const,
+  detail: null,
+  eventsEmitted: 3,
+  leaseOwnerId: "lease_demo",
+  previousCursor: "hist_100",
+  nextCursor: "hist_105",
+  cursorAdvanced: true,
+};
+
+const mailboxObservabilityFixture = {
+  object: "mailbox_observability" as const,
+  mailboxId: mailboxFixture.id,
+  generatedAt: "2026-04-22T10:05:00.000Z",
+  lag: {
+    status: "active" as const,
+    syncState: "healthy" as const,
+    watchState: "active" as const,
+    lastSuccessfulSyncAt: "2026-04-22T10:00:12.000Z",
+    lagSeconds: 288,
+  },
+  cursor: {
+    currentCursor: "hist_105",
+    previousCursor: "hist_100",
+    nextCursor: "hist_105",
+    advanced: true,
+    advancedAt: "2026-04-22T10:00:12.000Z",
+  },
+  lease: {
+    activeLeaseOwner: null,
+    activeLeaseHeartbeatAt: null,
+    activeLeaseExpiresAt: null,
+    contentionCount24h: 2,
+    latestContentionAt: "2026-04-22T09:58:00.000Z",
+    leaseLossCount24h: 1,
+    latestLeaseLossAt: "2026-04-22T09:59:30.000Z",
+  },
+  webhookDeliveries: [
+    {
+      webhookEndpointId: webhookEndpointFixture.id,
+      webhookEndpointUrl: webhookEndpointFixture.url,
+      deliveryState: "degraded" as const,
+      consecutiveFailures: 2,
+      pendingDeliveries: 3,
+      processingDeliveries: 1,
+      failedDeliveries: 4,
+      lastDeliveryAt: "2026-04-22T10:04:00.000Z",
+      lastDeliveryError: {
+        code: "webhook_delivery_timeout",
+        message: "Webhook delivery timed out before the endpoint responded.",
+        occurredAt: "2026-04-22T10:04:00.000Z",
+        retryable: true,
+      },
+    },
+  ],
+  latestSyncRun: syncRunInspectionFixture,
+};
+
 const createRuntime = () => {
   const dispatchedMailboxIds: Array<string> = [];
   const connectSessions = new Map<string, StoredConnectSession>();
@@ -184,6 +247,15 @@ const createRuntime = () => {
               ? Option.some(threadFixture)
               : Option.none(),
           ),
+      }),
+      Layer.succeed(MailboxObservabilityCatalog, {
+        listSyncRuns: ({ mailboxId }) =>
+          Effect.succeed({
+            object: "list" as const,
+            data: mailboxId === mailboxFixture.id ? [syncRunInspectionFixture] : [],
+            nextCursor: null,
+          }),
+        getMailboxObservability: () => Effect.succeed(mailboxObservabilityFixture),
       }),
       Layer.succeed(WebhookEndpointStore, {
         createWebhookEndpoint: (params) =>
@@ -331,6 +403,34 @@ describe("createApp", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(mailboxFixture);
+  });
+
+  it("lists mailbox sync runs for the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/mailboxes/mbx_demo/sync-runs", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      object: "list",
+      data: [syncRunInspectionFixture],
+      nextCursor: null,
+    });
+  });
+
+  it("returns mailbox observability for the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/mailboxes/mbx_demo/observability", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(mailboxObservabilityFixture);
   });
 
   it("lists mailbox-scoped messages for the authenticated workspace", async () => {

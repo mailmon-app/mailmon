@@ -6,9 +6,12 @@ import type {
   CompletedSyncRun,
   CreatedWebhookEndpointResource,
   GmailPushNotification,
+  ListMailboxSyncRunsRequest,
   ListMailboxMessagesRequest,
   ListMailboxThreadsRequest,
   ListResource,
+  MailboxObservabilitySnapshotResource,
+  MailboxSyncRunInspectionResource,
   MessageResource,
   MailboxConnectAuthorization,
   ControlJobDispatchRequest,
@@ -121,6 +124,21 @@ export class MailboxQueryCatalog extends Context.Tag("@mailmon/core/MailboxQuery
         workspaceId?: string;
       }>,
     ) => Effect.Effect<Option.Option<ThreadResource>>;
+  }
+>() {}
+
+export class MailboxObservabilityCatalog extends Context.Tag(
+  "@mailmon/core/MailboxObservabilityCatalog",
+)<
+  MailboxObservabilityCatalog,
+  {
+    readonly listSyncRuns: (
+      request: ListMailboxSyncRunsRequest,
+    ) => Effect.Effect<ListResource<MailboxSyncRunInspectionResource>, ProblemDetails>;
+    readonly getMailboxObservability: (params: {
+      readonly mailboxId: string;
+      readonly observedAt: string;
+    }) => Effect.Effect<MailboxObservabilitySnapshotResource>;
   }
 >() {}
 
