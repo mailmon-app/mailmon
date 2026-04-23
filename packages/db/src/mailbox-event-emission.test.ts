@@ -1,6 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
-
 import { describe, expect, it } from "@effect/vitest";
 import {
   MailboxStateStore,
@@ -10,16 +7,13 @@ import {
 import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { asc, eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
-import postgres from "postgres";
 
 import { createCorePersistenceLayer, createDb, schema } from "./index.js";
+import { withIsolatedDatabaseEffect } from "./test-setup.js";
 
-const DEFAULT_DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgres://mailmon:mailmon@localhost:5432/mailmon";
 const workspaceId = "ws_events";
 const mailboxId = "mbx_events";
 const tenantExternalId = "tenant_events";
-const migrationDirectory = new URL("../drizzle/", import.meta.url);
 const testGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
   allowPlaintextFallback: true,
   encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
@@ -128,106 +122,6 @@ const deleteOnlySnapshot: MailboxSyncSnapshot = {
   threads: [],
   messages: [],
 };
-
-interface IsolatedDatabase {
-  readonly adminConnectionString: string;
-  readonly connectionString: string;
-  readonly databaseName: string;
-}
-
-const withDatabaseName = (connectionString: string, databaseName: string) => {
-  const url = new URL(connectionString);
-  url.pathname = `/${databaseName}`;
-
-  return url.toString();
-};
-
-const toAdminConnectionString = (connectionString: string) => {
-  return withDatabaseName(connectionString, "postgres");
-};
-
-const createDatabaseName = () => {
-  return `mailmon_test_${randomUUID().replaceAll("-", "")}`;
-};
-
-const readMigrationStatements = async () => {
-  const entries = await readdir(migrationDirectory);
-  const migrationFiles = entries.filter((entry) => entry.endsWith(".sql"));
-  // oxlint-disable-next-line unicorn/no-array-sort
-  migrationFiles.sort((left, right) => left.localeCompare(right));
-
-  const statements = await Promise.all(
-    migrationFiles.map(async (migrationFile: string) => {
-      const sqlText = await readFile(
-        new URL(`../drizzle/${migrationFile}`, import.meta.url),
-        "utf8",
-      );
-
-      return sqlText
-        .split("--> statement-breakpoint")
-        .map((statement) => statement.trim())
-        .filter((statement) => statement.length > 0);
-    }),
-  );
-
-  return statements.flat();
-};
-
-const applyMigrations = async (connectionString: string) => {
-  const client = postgres(connectionString, { max: 1 });
-
-  try {
-    for (const statement of await readMigrationStatements()) {
-      await client.unsafe(statement);
-    }
-  } finally {
-    await client.end();
-  }
-};
-
-const createIsolatedDatabase = async (): Promise<IsolatedDatabase> => {
-  const databaseName = createDatabaseName();
-  const adminConnectionString = toAdminConnectionString(DEFAULT_DATABASE_URL);
-  const connectionString = withDatabaseName(DEFAULT_DATABASE_URL, databaseName);
-  const adminClient = postgres(adminConnectionString, { max: 1 });
-
-  try {
-    await adminClient.unsafe(`CREATE DATABASE "${databaseName}"`);
-  } finally {
-    await adminClient.end();
-  }
-
-  await applyMigrations(connectionString);
-
-  return {
-    adminConnectionString,
-    connectionString,
-    databaseName,
-  };
-};
-
-const dropIsolatedDatabase = async (database: IsolatedDatabase) => {
-  const adminClient = postgres(database.adminConnectionString, { max: 1 });
-
-  try {
-    await adminClient.unsafe(`
-      SELECT pg_terminate_backend(pid)
-      FROM pg_stat_activity
-      WHERE datname = '${database.databaseName}'
-        AND pid <> pg_backend_pid()
-    `);
-    await adminClient.unsafe(`DROP DATABASE IF EXISTS "${database.databaseName}"`);
-  } finally {
-    await adminClient.end();
-  }
-};
-
-const withIsolatedDatabase = <A, E>(run: (database: IsolatedDatabase) => Effect.Effect<A, E>) =>
-  Effect.acquireUseRelease(
-    Effect.promise(() => createIsolatedDatabase()),
-    run,
-    (database) => Effect.promise(() => dropIsolatedDatabase(database)),
-  );
 
 const seedMailboxFixture = async (connectionString: string) => {
   const database = createDb(connectionString);
@@ -424,7 +318,7 @@ describe("DB-backed durable mailbox event emission", () => {
   it.effect(
     "emits baseline created and updated events in the sync finalization transaction",
     () =>
-      withIsolatedDatabase(({ connectionString }) => {
+      withIsolatedDatabaseEffect(({ connectionString }) => {
         const syncedAt = "2026-04-09T09:30:05.000Z";
         const syncRunId = "sr_initial";
         const leaseOwnerId = "lease_initial";
@@ -521,7 +415,7 @@ describe("DB-backed durable mailbox event emission", () => {
   it.effect(
     "emits only real canonical changes during incremental sync finalization",
     () =>
-      withIsolatedDatabase(({ connectionString }) => {
+      withIsolatedDatabaseEffect(({ connectionString }) => {
         const initialSyncRunId = "sr_initial";
         const incrementalSyncRunId = "sr_incremental";
 
@@ -601,7 +495,7 @@ describe("DB-backed durable mailbox event emission", () => {
   it.effect(
     "does not create duplicate mailbox events for duplicate wake-ups",
     () =>
-      withIsolatedDatabase(({ connectionString }) => {
+      withIsolatedDatabaseEffect(({ connectionString }) => {
         return Effect.gen(function* () {
           yield* Effect.promise(() => seedMailboxFixture(connectionString));
           yield* Effect.promise(() =>
@@ -669,7 +563,7 @@ describe("DB-backed durable mailbox event emission", () => {
   it.effect(
     "recomputes a surviving thread when a delete-only sync removes its latest message",
     () =>
-      withIsolatedDatabase(({ connectionString }) => {
+      withIsolatedDatabaseEffect(({ connectionString }) => {
         return Effect.gen(function* () {
           yield* Effect.promise(() => seedMailboxFixture(connectionString));
           yield* Effect.promise(() =>
@@ -763,7 +657,7 @@ describe("DB-backed durable mailbox event emission", () => {
   it.effect(
     "rolls back mailbox events when sync finalization cannot complete",
     () =>
-      withIsolatedDatabase(({ connectionString }) => {
+      withIsolatedDatabaseEffect(({ connectionString }) => {
         return Effect.gen(function* () {
           yield* Effect.promise(() => seedMailboxFixture(connectionString));
           yield* Effect.promise(() =>

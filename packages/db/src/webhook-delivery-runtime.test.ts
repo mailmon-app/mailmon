@@ -1,6 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
-
 import {
   recoverWebhookDeliveryScheduling,
   runWebhookDelivery,
@@ -13,14 +10,11 @@ import {
 import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
-import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 
 import { createCorePersistenceLayer, createDb, schema } from "./index.js";
+import { withIsolatedDatabasePromise } from "./test-setup.js";
 
-const DEFAULT_DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgres://mailmon:mailmon@localhost:5432/mailmon";
-const migrationDirectory = new URL("../drizzle/", import.meta.url);
 const workspaceId = "ws_delivery";
 const mailboxId = "mbx_delivery";
 const webhookEndpointId = "whe_delivery";
@@ -30,111 +24,8 @@ const testGmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLaye
   encryptionKey: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
 });
 
-interface IsolatedDatabase {
-  readonly adminConnectionString: string;
-  readonly connectionString: string;
-  readonly databaseName: string;
-}
-
-const withDatabaseName = (connectionString: string, databaseName: string) => {
-  const url = new URL(connectionString);
-  url.pathname = `/${databaseName}`;
-
-  return url.toString();
-};
-
-const toAdminConnectionString = (connectionString: string) => {
-  return withDatabaseName(connectionString, "postgres");
-};
-
-const createDatabaseName = () => {
-  return `mailmon_test_${randomUUID().replaceAll("-", "")}`;
-};
-
 const addMillisecondsToIsoTimestamp = (timestamp: string, milliseconds: number) => {
   return new Date(Date.parse(timestamp) + milliseconds).toISOString();
-};
-
-const readMigrationStatements = async () => {
-  const entries = await readdir(migrationDirectory);
-  const migrationFiles = entries.filter((entry) => entry.endsWith(".sql"));
-  // oxlint-disable-next-line unicorn/no-array-sort
-  migrationFiles.sort((left, right) => left.localeCompare(right));
-
-  const statements = await Promise.all(
-    migrationFiles.map(async (migrationFile: string) => {
-      const sqlText = await readFile(
-        new URL(`../drizzle/${migrationFile}`, import.meta.url),
-        "utf8",
-      );
-
-      return sqlText
-        .split("--> statement-breakpoint")
-        .map((statement) => statement.trim())
-        .filter((statement) => statement.length > 0);
-    }),
-  );
-
-  return statements.flat();
-};
-
-const applyMigrations = async (connectionString: string) => {
-  const client = postgres(connectionString, { max: 1 });
-
-  try {
-    for (const statement of await readMigrationStatements()) {
-      await client.unsafe(statement);
-    }
-  } finally {
-    await client.end();
-  }
-};
-
-const createIsolatedDatabase = async (): Promise<IsolatedDatabase> => {
-  const databaseName = createDatabaseName();
-  const adminConnectionString = toAdminConnectionString(DEFAULT_DATABASE_URL);
-  const connectionString = withDatabaseName(DEFAULT_DATABASE_URL, databaseName);
-  const adminClient = postgres(adminConnectionString, { max: 1 });
-
-  try {
-    await adminClient.unsafe(`CREATE DATABASE "${databaseName}"`);
-  } finally {
-    await adminClient.end();
-  }
-
-  await applyMigrations(connectionString);
-
-  return {
-    adminConnectionString,
-    connectionString,
-    databaseName,
-  };
-};
-
-const dropIsolatedDatabase = async (database: IsolatedDatabase) => {
-  const adminClient = postgres(database.adminConnectionString, { max: 1 });
-
-  try {
-    await adminClient.unsafe(`
-      SELECT pg_terminate_backend(pid)
-      FROM pg_stat_activity
-      WHERE datname = '${database.databaseName}'
-        AND pid <> pg_backend_pid()
-    `);
-    await adminClient.unsafe(`DROP DATABASE IF EXISTS "${database.databaseName}"`);
-  } finally {
-    await adminClient.end();
-  }
-};
-
-const withIsolatedDatabase = async <T>(run: (database: IsolatedDatabase) => Promise<T>) => {
-  const database = await createIsolatedDatabase();
-
-  try {
-    return await run(database);
-  } finally {
-    await dropIsolatedDatabase(database);
-  }
 };
 
 const mailboxEventFixture: MailboxEventEnvelope = {
@@ -364,7 +255,7 @@ const executeWebhookDelivery = async (
 
 describe("DB-backed webhook delivery runtime", () => {
   it("schedules durable deliveries and transitions endpoint health across retries and recovery", async () => {
-    await withIsolatedDatabase(async (database) => {
+    await withIsolatedDatabasePromise(async (database) => {
       await seedWebhookDeliveryFixture(database.connectionString);
 
       const scheduledDeliveryRequests: Array<{
@@ -566,7 +457,7 @@ describe("DB-backed webhook delivery runtime", () => {
   }, 15_000);
 
   it("ignores stale completion attempts after the delivery is reclaimed", async () => {
-    await withIsolatedDatabase(async (database) => {
+    await withIsolatedDatabasePromise(async (database) => {
       await seedWebhookDeliveryFixture(database.connectionString);
 
       const [{ deliveryId, notBefore }] = await scheduleDurableWebhookDeliveries(
@@ -655,7 +546,7 @@ describe("DB-backed webhook delivery runtime", () => {
   });
 
   it("recovers pending and in-flight webhook deliveries from durable state on startup", async () => {
-    await withIsolatedDatabase(async (database) => {
+    await withIsolatedDatabasePromise(async (database) => {
       await seedWebhookDeliveryFixture(database.connectionString);
 
       const [{ deliveryId }] = await scheduleDurableWebhookDeliveries(
