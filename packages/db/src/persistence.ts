@@ -901,6 +901,16 @@ const getMailboxSyncFailureState = (
     };
   }
 
+  if (result.detail === "gmail_rate_limited") {
+    return {
+      lastErrorCode: result.detail,
+      lastErrorMessage: "Gmail temporarily rate-limited sync operations for this mailbox.",
+      lastErrorOccurredAt: toDate(result.completedAt),
+      lastErrorRetryable: true,
+      syncState: "lagging",
+    };
+  }
+
   return {
     lastErrorCode: result.detail ?? result.status,
     lastErrorMessage:

@@ -416,6 +416,7 @@ This section translates the current repo state into launch language.
 - canonical message and thread reads
 - webhook endpoint and subscription registration
 - durable Mailbox Event emission with stable IDs
+- mailbox `lagging` degradation for Gmail `429` and quota-style `403` rate limits
 - repair and full-resync flow for invalid or expired Gmail history cursors
 - local webhook delivery runtime with retries, endpoint health, and startup recovery of pending/in-flight deliveries
 

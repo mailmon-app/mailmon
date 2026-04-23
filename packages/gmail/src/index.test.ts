@@ -586,6 +586,152 @@ describe("createHttpGmailSyncProviderLayer", () => {
     });
   });
 
+  it("classifies Gmail 429 sync responses as rate-limited failures", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        return new Response(JSON.stringify({ access_token: "access-token" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (
+        url.pathname === "/gmail/v1/users/me/profile" ||
+        url.pathname === "/gmail/v1/users/me/messages"
+      ) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 429,
+              message: "Rate Limit Exceeded",
+            },
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 429,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxSyncProvider;
+
+        return yield* provider
+          .syncMailbox({
+            mailbox: mailboxFixture,
+            cursor: null,
+          })
+          .pipe(
+            Effect.match({
+              onFailure: (problem) => problem,
+              onSuccess: () => {
+                throw new Error("Expected syncMailbox to fail for Gmail 429 responses.");
+              },
+            }),
+          );
+      }).pipe(
+        Effect.provide(
+          createHttpGmailSyncProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }).pipe(Layer.provide(credentialStoreLayer)),
+        ),
+      ),
+    );
+
+    expect(result).toMatchObject({
+      code: "gmail_rate_limited",
+      detail: "Gmail temporarily rate-limited sync operations for this mailbox.",
+      retryable: true,
+      status: 429,
+      title: "Gmail rate limited",
+    });
+  });
+
+  it("classifies Gmail 403 quota responses as rate-limited failures", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        return new Response(JSON.stringify({ access_token: "access-token" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/history") {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 403,
+              errors: [
+                {
+                  domain: "usageLimits",
+                  message: "User Rate Limit Exceeded",
+                  reason: "userRateLimitExceeded",
+                },
+              ],
+              message: "User Rate Limit Exceeded",
+            },
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 403,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxSyncProvider;
+
+        return yield* provider
+          .syncMailbox({
+            mailbox: mailboxFixture,
+            cursor: "hist_bootstrap",
+          })
+          .pipe(
+            Effect.match({
+              onFailure: (problem) => problem,
+              onSuccess: () => {
+                throw new Error("Expected syncMailbox to fail for Gmail 403 quota responses.");
+              },
+            }),
+          );
+      }).pipe(
+        Effect.provide(
+          createHttpGmailSyncProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }).pipe(Layer.provide(credentialStoreLayer)),
+        ),
+      ),
+    );
+
+    expect(result).toMatchObject({
+      code: "gmail_rate_limited",
+      detail: "Gmail temporarily rate-limited sync operations for this mailbox.",
+      retryable: true,
+      status: 403,
+      title: "Gmail rate limited",
+    });
+  });
+
   it("deduplicates repeated history references and keeps deletes dominant", async () => {
     const fetchedMessageIds: Array<string> = [];
     const fetchImpl: typeof fetch = async (input) => {

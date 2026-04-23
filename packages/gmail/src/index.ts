@@ -439,6 +439,13 @@ interface GmailHistoryChange {
   }>;
 }
 
+const GMAIL_RATE_LIMIT_REASONS = new Set([
+  "dailyLimitExceeded",
+  "quotaExceeded",
+  "rateLimitExceeded",
+  "userRateLimitExceeded",
+]);
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
@@ -449,6 +456,47 @@ const isStringArray = (value: unknown): value is ReadonlyArray<string> => {
 
 const isReadonlyRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
   return typeof value === "object" && value !== null;
+};
+
+const parseGmailErrorReasons = (payload: unknown): ReadonlyArray<string> => {
+  if (!isRecord(payload) || !isRecord(payload.error) || !Array.isArray(payload.error.errors)) {
+    return [];
+  }
+
+  return payload.error.errors.flatMap((errorEntry) => {
+    if (!isRecord(errorEntry) || typeof errorEntry.reason !== "string") {
+      return [];
+    }
+
+    return [errorEntry.reason];
+  });
+};
+
+const isGmailRateLimitedResponse = (status: number, payload: unknown) => {
+  if (status === 429) {
+    return true;
+  }
+
+  if (status !== 403) {
+    return false;
+  }
+
+  return parseGmailErrorReasons(payload).some((reason) => GMAIL_RATE_LIMIT_REASONS.has(reason));
+};
+
+const makeGmailRateLimitedProblem = (params: {
+  readonly mailboxId: string;
+  readonly operation: string;
+  readonly status: number;
+}) => {
+  return makeGmailProblem({
+    code: "gmail_rate_limited",
+    detail: `Gmail temporarily rate-limited ${params.operation} for this mailbox.`,
+    mailboxId: params.mailboxId,
+    retryable: true,
+    status: params.status,
+    title: "Gmail rate limited",
+  });
 };
 
 const isGmailHeader = (value: unknown): value is GmailHeader => {
@@ -1015,6 +1063,14 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
         });
       }
 
+      if (isGmailRateLimitedResponse(response.status, payload)) {
+        throw makeGmailRateLimitedProblem({
+          mailboxId: params.mailboxId,
+          operation: "sync operations",
+          status: response.status,
+        });
+      }
+
       throw makeGmailProblem({
         code: "gmail_token_refresh_failed",
         detail: `Refreshing the Gmail access token failed with HTTP ${response.status}.`,
@@ -1169,6 +1225,14 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
       pathname: "/users/me/profile",
     });
 
+    if (isGmailRateLimitedResponse(response.status, responseBody)) {
+      throw makeGmailRateLimitedProblem({
+        mailboxId: params.mailboxId,
+        operation: "sync operations",
+        status: response.status,
+      });
+    }
+
     if (!response.ok) {
       throw makeGmailProblem({
         code: "gmail_profile_fetch_failed",
@@ -1234,6 +1298,14 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
     });
 
     if (!response.ok) {
+      if (isGmailRateLimitedResponse(response.status, responseBody)) {
+        throw makeGmailRateLimitedProblem({
+          mailboxId: params.mailboxId,
+          operation: "mailbox watch renewal",
+          status: response.status,
+        });
+      }
+
       throw makeGmailProblem({
         code: "gmail_watch_renewal_failed",
         detail: `Renewing the Gmail mailbox watch failed with HTTP ${response.status}.`,
@@ -1271,6 +1343,14 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
     }
 
     if (!response.ok) {
+      if (isGmailRateLimitedResponse(response.status, responseBody)) {
+        throw makeGmailRateLimitedProblem({
+          mailboxId: params.mailboxId,
+          operation: "sync operations",
+          status: response.status,
+        });
+      }
+
       throw makeGmailProblem({
         code: "gmail_message_fetch_failed",
         detail: `Fetching Gmail message ${params.messageId} failed with HTTP ${response.status}.`,
@@ -1302,6 +1382,14 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
       });
 
       if (!response.ok) {
+        if (isGmailRateLimitedResponse(response.status, responseBody)) {
+          throw makeGmailRateLimitedProblem({
+            mailboxId: params.mailboxId,
+            operation: "sync operations",
+            status: response.status,
+          });
+        }
+
         throw makeGmailProblem({
           code: "gmail_message_list_failed",
           detail: `Listing Gmail messages failed with HTTP ${response.status}.`,
@@ -1368,6 +1456,14 @@ const createHttpGmailApi = (config: GmailSyncProviderConfig) => {
       }
 
       if (!response.ok) {
+        if (isGmailRateLimitedResponse(response.status, responseBody)) {
+          throw makeGmailRateLimitedProblem({
+            mailboxId: params.mailboxId,
+            operation: "sync operations",
+            status: response.status,
+          });
+        }
+
         throw makeGmailProblem({
           code: "gmail_history_fetch_failed",
           detail: `Fetching Gmail history failed with HTTP ${response.status}.`,

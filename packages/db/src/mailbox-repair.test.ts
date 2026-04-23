@@ -211,4 +211,59 @@ describe("mailbox repair store", () => {
       }),
     ),
   );
+
+  it.effect("marks Gmail rate-limited sync failures as lagging mailbox state", () =>
+    withIsolatedDatabaseEffect((database) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => seedMailboxRepairFixtures(database.connectionString));
+
+        const persistenceLayer = createWorkerPersistenceLayer(database.connectionString).pipe(
+          Layer.provide(testGmailRefreshTokenCipherLayer),
+        );
+
+        yield* Effect.gen(function* () {
+          const syncRunStore = yield* SyncRunStore;
+          const started = yield* syncRunStore.startSyncRun("mbx_healthy");
+
+          yield* syncRunStore.completeSyncRun({
+            syncRunId: started.syncRunId,
+            mailboxId: started.mailboxId,
+            completedAt: "2026-04-22T03:30:00.000Z",
+            status: "failed_after_lease_acquired",
+            eventsEmitted: 0,
+            nextCursor: null,
+            detail: "gmail_rate_limited",
+          });
+        }).pipe(Effect.provide(persistenceLayer));
+
+        const unhealthyMailbox = yield* Effect.promise(async () => {
+          const verificationDatabase = createDb(database.connectionString);
+
+          try {
+            const [row] = await verificationDatabase.db
+              .select({
+                lastErrorCode: schema.mailboxes.lastErrorCode,
+                lastErrorMessage: schema.mailboxes.lastErrorMessage,
+                lastErrorRetryable: schema.mailboxes.lastErrorRetryable,
+                syncState: schema.mailboxes.syncState,
+              })
+              .from(schema.mailboxes)
+              .where(eq(schema.mailboxes.id, "mbx_healthy"))
+              .limit(1);
+
+            return row;
+          } finally {
+            await verificationDatabase.client.end();
+          }
+        });
+
+        expect(unhealthyMailbox).toEqual({
+          lastErrorCode: "gmail_rate_limited",
+          lastErrorMessage: "Gmail temporarily rate-limited sync operations for this mailbox.",
+          lastErrorRetryable: true,
+          syncState: "lagging",
+        });
+      }),
+    ),
+  );
 });
