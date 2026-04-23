@@ -1,36 +1,24 @@
-# Mailmon Infrastructure
+resource "google_project_service" "required_api" {
+  for_each = local.required_api_services
 
-# Enable required GCP APIs
-resource "google_project_service" "required_apis" {
-  for_each = toset([
-    "run.googleapis.com",
-    "cloudbuild.googleapis.com",
-    "secretmanager.googleapis.com",
-    "sqladmin.googleapis.com",
-    "pubsub.googleapis.com",
-    "cloudtasks.googleapis.com",
-    "cloudscheduler.googleapis.com"
-  ])
   service            = each.key
   disable_on_destroy = false
 }
 
-# Example Secret to test Varlock Integration
 resource "google_secret_manager_secret" "example_secret" {
+  depends_on = [google_project_service.required_api]
+
   secret_id = "mailmon-db-url"
+
   replication {
     auto {}
   }
-  depends_on = [google_project_service.required_apis]
-}
-
-locals {
-  worker_base_url = trimsuffix(var.worker_base_url, "/")
 }
 
 resource "google_pubsub_topic" "gmail_push" {
-  name       = var.gmail_push_topic_name
-  depends_on = [google_project_service.required_apis]
+  depends_on = [google_project_service.required_api]
+
+  name = var.gmail_push_topic_name
 }
 
 resource "google_pubsub_topic_iam_member" "gmail_api_publisher" {
@@ -40,6 +28,8 @@ resource "google_pubsub_topic_iam_member" "gmail_api_publisher" {
 }
 
 resource "google_pubsub_subscription" "gmail_push_worker" {
+  depends_on = [google_project_service.required_api]
+
   name  = var.gmail_push_subscription_name
   topic = google_pubsub_topic.gmail_push.id
 
@@ -64,11 +54,11 @@ resource "google_pubsub_subscription" "gmail_push_worker" {
     maximum_backoff = "60s"
     minimum_backoff = "10s"
   }
-
-  depends_on = [google_project_service.required_apis]
 }
 
 resource "google_cloud_scheduler_job" "renew_gmail_watches" {
+  depends_on = [google_project_service.required_api]
+
   name        = "mailmon-renew-gmail-watches"
   description = "Renews Gmail mailbox watches before expiration."
   schedule    = var.watch_renewal_schedule
@@ -94,11 +84,4 @@ resource "google_cloud_scheduler_job" "renew_gmail_watches" {
       }
     }
   }
-
-  depends_on = [google_project_service.required_apis]
-}
-
-output "gmail_pubsub_topic_name" {
-  description = "Full Gmail Pub/Sub topic resource name for MAILMON_GMAIL_PUBSUB_TOPIC_NAME."
-  value       = google_pubsub_topic.gmail_push.id
 }
