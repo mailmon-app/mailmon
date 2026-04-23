@@ -5,6 +5,7 @@ import {
   MailboxConnectSessionStore,
   MailboxPushNotificationStore,
   MailboxQueryCatalog,
+  MailboxRepairStore,
   MailboxSyncCoordinator,
   MailboxStateStore,
   MailboxWatchStore,
@@ -29,6 +30,7 @@ import {
   type ListMailboxThreadsRequest,
   type ListResource,
   type MailboxOperationalError,
+  type MailboxRepairTarget,
   type MailboxResource,
   type MailboxEventEnvelope,
   type MailboxEventType,
@@ -345,6 +347,21 @@ const toMailboxWatchRenewalTarget = (row: MailboxRow): MailboxWatchRenewalTarget
   return {
     mailbox: toMailboxResource(row),
     watchExpiresAt: toIsoString(row.watchExpirationAt),
+  };
+};
+
+const toMailboxRepairTarget = (row: MailboxRow): MailboxRepairTarget => {
+  const reason =
+    row.lastErrorCode === "gmail_history_cursor_invalid"
+      ? "invalid_cursor"
+      : row.watchState === "expired"
+        ? "watch_expired"
+        : "watch_unhealthy";
+
+  return {
+    mailbox: toMailboxResource(row),
+    reason,
+    requiresCursorReset: reason === "invalid_cursor",
   };
 };
 
@@ -870,6 +887,17 @@ const getMailboxSyncFailureState = (
       lastErrorRetryable: false,
       status: "reconnect_required",
       syncState: "failed",
+    };
+  }
+
+  if (result.detail === "gmail_history_cursor_invalid") {
+    return {
+      lastErrorCode: result.detail,
+      lastErrorMessage:
+        "Mailbox requires a repair sync because the stored Gmail history cursor is invalid or expired.",
+      lastErrorOccurredAt: toDate(result.completedAt),
+      lastErrorRetryable: true,
+      syncState: "lagging",
     };
   }
 
@@ -2308,6 +2336,65 @@ export const createMailboxWatchStoreLayer = Layer.effect(
   }),
 );
 
+export const createMailboxRepairStoreLayer = Layer.effect(
+  MailboxRepairStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      listMailboxesNeedingRepair: ({ limit, observedAt }) =>
+        Effect.promise(async () => {
+          const observedAtDate = toDate(observedAt);
+          const rows = await database.db
+            .select()
+            .from(mailboxes)
+            .where(
+              and(
+                eq(mailboxes.provider, "gmail"),
+                eq(mailboxes.status, "active"),
+                or(
+                  eq(mailboxes.lastErrorCode, "gmail_history_cursor_invalid"),
+                  eq(mailboxes.watchState, "expired"),
+                  eq(mailboxes.watchState, "unhealthy"),
+                ),
+                or(
+                  isNull(mailboxes.activeSyncLeaseExpiresAt),
+                  lte(mailboxes.activeSyncLeaseExpiresAt, observedAtDate),
+                ),
+              ),
+            )
+            .orderBy(
+              desc(
+                sql`CASE WHEN ${mailboxes.lastErrorCode} = 'gmail_history_cursor_invalid' THEN 1 ELSE 0 END`,
+              ),
+              asc(mailboxes.lastErrorOccurredAt),
+              asc(mailboxes.watchExpirationAt),
+              asc(mailboxes.id),
+            )
+            .limit(limit)
+            .for("update", { skipLocked: true });
+
+          return rows.map((row) => toMailboxRepairTarget(row));
+        }),
+      prepareMailboxForRepair: ({ mailboxId, observedAt, resetCursor }) =>
+        Effect.promise(async () => {
+          const observedAtDate = toDate(observedAt);
+          const [updatedMailbox] = await database.db
+            .update(mailboxes)
+            .set({
+              ...(resetCursor ? { cursor: null } : {}),
+              syncState: "lagging",
+              updatedAt: observedAtDate,
+            })
+            .where(and(eq(mailboxes.id, mailboxId), eq(mailboxes.status, "active")))
+            .returning({ id: mailboxes.id });
+
+          return updatedMailbox !== undefined;
+        }),
+    };
+  }),
+);
+
 export const createGmailMailboxCredentialStoreLayer = Layer.effect(
   GmailMailboxCredentialStore,
   Effect.gen(function* () {
@@ -2549,6 +2636,7 @@ export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxConnectSessionStoreLayer,
   createMailboxPushNotificationStoreLayer,
   createMailboxQueryCatalogLayer,
+  createMailboxRepairStoreLayer,
   createMailboxStateStoreLayer,
   createMailboxSyncCoordinatorLayer,
   createMailboxWatchStoreLayer,

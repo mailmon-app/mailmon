@@ -13,6 +13,7 @@ import {
   MailboxCatalog,
   MailboxPushNotificationStore,
   MailboxQueryCatalog,
+  MailboxRepairStore,
   MailboxSyncCoordinator,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
@@ -37,6 +38,7 @@ import {
   ingestGmailPushNotification,
   listMailboxMessages,
   listMailboxThreads,
+  repairMailboxes,
   recoverWebhookDeliveryScheduling,
   renewExpiringMailboxWatches,
   runControlJob,
@@ -1053,6 +1055,79 @@ describe("renewExpiringMailboxWatches", () => {
           problemCode: "gmail_watch_renewal_failed",
         },
       ]);
+    }),
+  );
+});
+
+describe("repairMailboxes", () => {
+  it.effect("resets invalid cursors and dispatches mailbox repairs", () =>
+    Effect.gen(function* () {
+      const prepared: Array<{
+        mailboxId: string;
+        observedAt: string;
+        resetCursor: boolean;
+      }> = [];
+      const dispatchedMailboxIds: string[] = [];
+      const observedAt = "2026-04-22T00:00:00.000Z";
+
+      const result = yield* repairMailboxes({ limit: 10, observedAt }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(MailboxRepairStore, {
+              listMailboxesNeedingRepair: () =>
+                Effect.succeed([
+                  {
+                    mailbox: mailboxFixture,
+                    reason: "invalid_cursor" as const,
+                    requiresCursorReset: true,
+                  },
+                  {
+                    mailbox: {
+                      ...mailboxFixture,
+                      id: "mbx_watch_expired",
+                      watchState: "expired" as const,
+                    },
+                    reason: "watch_expired" as const,
+                    requiresCursorReset: false,
+                  },
+                ]),
+              prepareMailboxForRepair: (params) =>
+                Effect.sync(() => {
+                  prepared.push(params);
+                  return true;
+                }),
+            }),
+            Layer.succeed(MailboxSyncDispatcher, {
+              dispatchMailboxSync: (mailboxId: string) =>
+                Effect.sync(() => {
+                  dispatchedMailboxIds.push(mailboxId);
+                }),
+            }),
+          ),
+        ),
+      );
+
+      expect(result).toEqual({
+        completedAt: observedAt,
+        cursorResets: 1,
+        dispatched: 2,
+        kind: "repair_mailboxes",
+        scanned: 2,
+        status: "completed",
+      });
+      expect(prepared).toEqual([
+        {
+          mailboxId: mailboxFixture.id,
+          observedAt,
+          resetCursor: true,
+        },
+        {
+          mailboxId: "mbx_watch_expired",
+          observedAt,
+          resetCursor: false,
+        },
+      ]);
+      expect(dispatchedMailboxIds).toEqual([mailboxFixture.id, "mbx_watch_expired"]);
     }),
   );
 });

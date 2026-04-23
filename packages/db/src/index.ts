@@ -14,6 +14,7 @@ export {
   createMailboxConnectSessionStoreLayer,
   createMailboxPushNotificationStoreLayer,
   createMailboxQueryCatalogLayer,
+  createMailboxRepairStoreLayer,
   createMailboxSyncCoordinatorLayer,
   createMailboxStateStoreLayer,
   createMailboxWatchStoreLayer,

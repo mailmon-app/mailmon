@@ -416,14 +416,13 @@ This section translates the current repo state into launch language.
 - canonical message and thread reads
 - webhook endpoint and subscription registration
 - durable Mailbox Event emission with stable IDs
+- repair and full-resync flow for invalid or expired Gmail history cursors
 - local webhook delivery runtime with retries, endpoint health, and startup recovery of pending/in-flight deliveries
 
 ### 6.2 Immediate Launch Blockers
 
 - staging and production delivery adapter
 - Gmail push/watch production path
-- encrypted refresh-token storage
-- invalid history cursor repair path
 
 ### 6.3 Likely Public-Launch Blockers
 
@@ -507,11 +506,11 @@ Use this as the final go/no-go list.
 - [x] endpoint health works
 - [x] delivery retries work
 - [ ] Gmail push/watch production path works
-- [ ] repair/resync path exists for invalid cursors
+- [x] repair/resync path exists for invalid cursors
 
 ### Security
 
-- [ ] refresh tokens are encrypted before persistence
+- [x] refresh tokens are encrypted before persistence
 - [ ] API keys can be created and rotated safely
 - [ ] webhook secrets are protected and rotatable
 - [ ] IAM and environment boundaries are production-safe

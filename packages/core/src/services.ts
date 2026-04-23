@@ -12,6 +12,7 @@ import type {
   MessageResource,
   MailboxConnectAuthorization,
   ControlJobDispatchRequest,
+  MailboxRepairTarget,
   MailboxWatchRenewalRequest,
   MailboxWatchRenewalResult,
   MailboxWatchRenewalTarget,
@@ -254,6 +255,21 @@ export class MailboxWatchStore extends Context.Tag("@mailmon/core/MailboxWatchSt
       readonly observedAt: string;
       readonly problem: ProblemDetails;
     }) => Effect.Effect<void>;
+  }
+>() {}
+
+export class MailboxRepairStore extends Context.Tag("@mailmon/core/MailboxRepairStore")<
+  MailboxRepairStore,
+  {
+    readonly listMailboxesNeedingRepair: (params: {
+      readonly limit: number;
+      readonly observedAt: string;
+    }) => Effect.Effect<ReadonlyArray<MailboxRepairTarget>>;
+    readonly prepareMailboxForRepair: (params: {
+      readonly mailboxId: string;
+      readonly observedAt: string;
+      readonly resetCursor: boolean;
+    }) => Effect.Effect<boolean>;
   }
 >() {}
 

@@ -5,6 +5,7 @@ import {
   createCorePersistenceLayer,
   createMailboxPushNotificationStoreLayer,
   createMailboxQueryCatalogLayer,
+  createMailboxRepairStoreLayer,
   createMailboxWatchStoreLayer,
   createWorkerPersistenceLayer,
   MailmonDatabase,
@@ -36,6 +37,7 @@ describe("schema", () => {
     expect(createCorePersistenceLayer).toBeDefined();
     expect(createMailboxPushNotificationStoreLayer).toBeDefined();
     expect(createMailboxQueryCatalogLayer).toBeDefined();
+    expect(createMailboxRepairStoreLayer).toBeDefined();
     expect(createMailboxWatchStoreLayer).toBeDefined();
     expect(createWorkerPersistenceLayer).toBeDefined();
     expect(MailmonDatabase).toBeDefined();

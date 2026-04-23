@@ -389,6 +389,12 @@ export interface MailboxWatchRenewalTarget {
   readonly watchExpiresAt: string | null;
 }
 
+export interface MailboxRepairTarget {
+  readonly mailbox: MailboxResource;
+  readonly reason: "invalid_cursor" | "watch_expired" | "watch_unhealthy";
+  readonly requiresCursorReset: boolean;
+}
+
 export interface MailboxWatchRenewalRequest {
   readonly mailbox: MailboxResource;
 }
@@ -481,10 +487,22 @@ export interface RenewMailboxWatchesResult {
   readonly status: "completed";
 }
 
+export interface RepairMailboxesResult {
+  readonly completedAt: string;
+  readonly cursorResets: number;
+  readonly dispatched: number;
+  readonly kind: "repair_mailboxes";
+  readonly scanned: number;
+  readonly status: "completed";
+}
+
 export interface NoopControlJobResult {
   readonly completedAt: string;
-  readonly kind: Exclude<ControlJobKind, "renew_watches">;
+  readonly kind: Exclude<ControlJobKind, "renew_watches" | "repair_mailboxes">;
   readonly status: "noop";
 }
 
-export type ControlJobRunResult = RenewMailboxWatchesResult | NoopControlJobResult;
+export type ControlJobRunResult =
+  | RenewMailboxWatchesResult
+  | RepairMailboxesResult
+  | NoopControlJobResult;

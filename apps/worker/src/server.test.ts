@@ -34,6 +34,17 @@ const workerEnvFixture: WorkerEnv = {
 };
 
 const defaultProcessControlJob = async (request: ControlJobDispatchRequest) => {
+  if (request.kind === "repair_mailboxes") {
+    return {
+      completedAt: "2026-03-25T00:00:00.000Z",
+      cursorResets: 0,
+      dispatched: 0,
+      kind: request.kind,
+      scanned: 0,
+      status: "completed" as const,
+    };
+  }
+
   if (request.kind !== "renew_watches") {
     return {
       completedAt: "2026-03-25T00:00:00.000Z",
@@ -395,11 +406,20 @@ describe("startWorkerHttpRuntime", () => {
               scanned: 3,
               status: "completed" as const,
             }
-          : {
-              completedAt: "2026-03-25T00:00:00.000Z",
-              kind: request.kind,
-              status: "noop" as const,
-            },
+          : request.kind === "repair_mailboxes"
+            ? {
+                completedAt: "2026-03-25T00:00:00.000Z",
+                cursorResets: 1,
+                dispatched: 2,
+                kind: request.kind,
+                scanned: 2,
+                status: "completed" as const,
+              }
+            : {
+                completedAt: "2026-03-25T00:00:00.000Z",
+                kind: request.kind,
+                status: "noop" as const,
+              },
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",

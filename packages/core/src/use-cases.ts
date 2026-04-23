@@ -12,7 +12,9 @@ import type {
   GmailPushNotification,
   GmailPushNotificationResult,
   MailboxResource,
+  NoopControlJobResult,
   ProcessWebhookDeliveryResult,
+  RepairMailboxesResult,
   RenewMailboxWatchesResult,
   StoredConnectSession,
   SyncMailboxResult,
@@ -36,6 +38,7 @@ import {
   MailboxConnectProvider,
   MailboxConnectSessionStore,
   MailboxPushNotificationStore,
+  MailboxRepairStore,
   MailboxSyncCoordinator,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
@@ -57,6 +60,7 @@ const DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS = 90_000;
 const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DEFAULT_GMAIL_WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60_000;
 const DEFAULT_GMAIL_WATCH_RENEWAL_BATCH_SIZE = 100;
+const DEFAULT_MAILBOX_REPAIR_BATCH_SIZE = 100;
 const DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS = 5;
 const DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 5_000;
 const MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 15 * 60_000;
@@ -808,22 +812,89 @@ export const renewExpiringMailboxWatches = (
     } satisfies RenewMailboxWatchesResult;
   });
 
-export const runControlJob = (
+export const repairMailboxes = (
+  options: Readonly<{
+    limit?: number;
+    observedAt?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const observedAt = options.observedAt ?? new Date().toISOString();
+    const limit = options.limit ?? DEFAULT_MAILBOX_REPAIR_BATCH_SIZE;
+    const mailboxRepairStore = yield* MailboxRepairStore;
+    const dispatcher = yield* MailboxSyncDispatcher;
+    const targets = yield* mailboxRepairStore.listMailboxesNeedingRepair({
+      limit,
+      observedAt,
+    });
+
+    const prepared = yield* Effect.forEach(
+      targets,
+      (target) =>
+        mailboxRepairStore
+          .prepareMailboxForRepair({
+            mailboxId: target.mailbox.id,
+            observedAt,
+            resetCursor: target.requiresCursorReset,
+          })
+          .pipe(
+            Effect.flatMap((scheduled) =>
+              scheduled
+                ? dispatcher.dispatchMailboxSync(target.mailbox.id).pipe(
+                    Effect.as({
+                      dispatched: true,
+                      resetCursor: target.requiresCursorReset,
+                    }),
+                  )
+                : Effect.succeed({
+                    dispatched: false,
+                    resetCursor: false,
+                  }),
+            ),
+          ),
+      { concurrency: 10 },
+    );
+
+    return {
+      completedAt: observedAt,
+      cursorResets: prepared.filter((item) => item.resetCursor).length,
+      dispatched: prepared.filter((item) => item.dispatched).length,
+      kind: "repair_mailboxes",
+      scanned: targets.length,
+      status: "completed",
+    } satisfies RepairMailboxesResult;
+  });
+
+export function runControlJob(
+  request: Readonly<{ kind: "renew_watches" }>,
+): Effect.Effect<RenewMailboxWatchesResult, never, MailboxWatchProvider | MailboxWatchStore>;
+export function runControlJob(
+  request: Readonly<{ kind: "repair_mailboxes" }>,
+): Effect.Effect<RepairMailboxesResult, never, MailboxRepairStore | MailboxSyncDispatcher>;
+export function runControlJob(
+  request: Readonly<{ kind: "cleanup" | "dispatch_replays" }>,
+): Effect.Effect<NoopControlJobResult>;
+export function runControlJob(
   request: ControlJobDispatchRequest,
-): Effect.Effect<ControlJobRunResult, never, MailboxWatchProvider | MailboxWatchStore> => {
+): Effect.Effect<
+  ControlJobRunResult,
+  never,
+  MailboxRepairStore | MailboxSyncDispatcher | MailboxWatchProvider | MailboxWatchStore
+> {
   switch (request.kind) {
     case "renew_watches":
       return renewExpiringMailboxWatches();
     case "cleanup":
     case "dispatch_replays":
-    case "repair_mailboxes":
       return Effect.succeed({
         completedAt: new Date().toISOString(),
         kind: request.kind,
         status: "noop",
       });
+    case "repair_mailboxes":
+      return repairMailboxes();
   }
-};
+}
 
 export const runMailboxSync = (mailboxId: string) =>
   Effect.gen(function* () {

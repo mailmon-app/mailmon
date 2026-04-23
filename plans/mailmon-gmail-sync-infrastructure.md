@@ -268,8 +268,8 @@ Harden the system for production behavior under failure and scale. This slice fo
 - [x] Watch expiration is detected and mailboxes move through `expiring` and `expired` states appropriately
 - [x] Staging and production include Gmail watch registration, renewal, and Pub/Sub push ingress handling
 - [ ] Gmail `429` and `403` rate limits degrade mailbox sync state without surfacing as unrelated synchronous API failures
-- [ ] Invalid or expired Gmail history cursors trigger a repair or full-resync path instead of leaving the mailbox permanently failed
-- [ ] Repair or catch-up sync paths exist for missed changes and unhealthy watches
+- [x] Invalid or expired Gmail history cursors trigger a repair or full-resync path instead of leaving the mailbox permanently failed
+- [x] Repair or catch-up sync paths exist for missed changes and unhealthy watches
 - [ ] Sync runs, cursor movement, mailbox lag, and webhook delivery degradation are observable
 - [ ] Stuck mailbox execution recovers through lease expiry and takeover
 - [ ] Repeated lease contention or lease loss is observable and alertable
