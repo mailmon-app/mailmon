@@ -1,94 +1,96 @@
 # Mailmon Testing Requirements & Strategy
 
-This document outlines the testing requirements to bring the `mailmon-dev` event-driven synchronization engine to full production readiness.
+This document tracks the current Mailmon test baseline and the remaining work needed for launch-grade confidence.
 
-It is based on the system's architecture, which heavily utilizes the **Effect** framework for dependency injection and concurrency control, **PostgreSQL (Drizzle)** for state management and leases, and **Google Cloud Tasks** for background queueing.
+The repo is no longer at the "mostly unit tests" stage. It already has meaningful coverage across core workflows, provider contracts, DB-backed persistence, and runtime adapters. The main gaps are now black-box end-to-end coverage and infrastructure-level failure testing.
 
-## 1. Current State Assessment
+## 1. Current Baseline
 
-The current test harness provides an excellent foundation:
+The following layers are already implemented and should be treated as the required foundation for future work:
 
-- **Unit & Business Logic:** Extensive use of Effect `Layer`s to mock external services (Gmail, Webhooks) resulting in blazing-fast, deterministic API tests (`apps/api/src/server.test.ts`).
-- **Database Hardening:** High-fidelity, isolated database testing spins up real PostgreSQL instances, applies Drizzle migrations, and asserts against actual indexes and queries (`packages/db/src/read-model.test.ts`).
+- **API contract tests:** `apps/api/src/server.test.ts` exercises authenticated workspace-scoped HTTP behavior and request/response shaping.
+- **Worker runtime contract tests:** `apps/worker/src/server.test.ts` exercises `/health`, `/internal/sync`, `/internal/gmail-push`, `/internal/webhook-deliveries`, and `/internal/control-jobs`.
+- **Sandbox E2E happy path:** `apps/api/src/sandbox-e2e.test.ts` runs the hosted connect flow, a real worker runtime, DB-backed sync, durable event emission, and webhook delivery against a stateful Gmail sandbox server plus a local webhook receiver.
+- **Core workflow tests:** `packages/core/src/use-cases.test.ts` covers mailbox lease acquisition/skip behavior, reconnect-required transitions, lease heartbeat/loss, webhook retry scheduling, and stale completion handling.
+- **Gmail provider contract tests:** `packages/gmail/src/index.test.ts` covers token refresh failures, rate-limit classification, incremental history handling, and snapshot shaping.
+- **DB-backed integration tests:** `packages/db/src/read-model.test.ts`, `packages/db/src/mailbox-event-emission.test.ts`, `packages/db/src/webhook-delivery-runtime.test.ts`, `packages/db/src/gmail-credentials.test.ts`, and related suites exercise real PostgreSQL migrations, pagination/index behavior, transactional sync finalization, event durability, webhook recovery, and reconnect-required persistence.
+- **Queue/runtime adapter tests:** `packages/queue/src/index.test.ts` covers local async dispatch, delayed local webhook scheduling, worker HTTP adapters, and Cloud Tasks task creation/idempotency.
 
-However, to ensure reliability in a distributed, asynchronous production environment interacting with third-party APIs, the following testing layers must be implemented.
+## 2. Contract And Resilience Coverage
 
----
+The following contract-level scenarios are now part of the expected baseline and should not regress:
 
-## 2. End-to-End (E2E) Sandbox Testing
+- Gmail `invalid_grant` transitions the Mailbox into `reconnect_required`.
+- Gmail rate-limit responses (`429` and quota-style `403`) surface retryable provider problems.
+- Gmail `503 Service Unavailable` responses surface retryable provider problems.
+- Mailbox lease contention records `skipped_due_to_active_lease`.
+- Lease heartbeat failures record `lease_lost` and stop sync finalization.
+- Webhook deliveries retry on timeout and `5xx`, and stop retrying after `DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS`.
+- Internal worker HTTP routes preserve retry signals by returning non-`2xx` responses when sync or delivery processing fails.
 
-**Objective:** Prove that the entire distributed pipeline (Gmail -> Poller/Worker -> DB -> Webhook) works holistically without mocks.
+These scenarios are covered today by the existing test suites and should stay in the normal PR-time test path.
 
-### Requirements:
+## 3. CI/CD Enforcement
 
-- **Sandbox Accounts:** Maintain dedicated test Gmail accounts specifically for automated testing.
-- **Workflow Verification:**
-  1. Authenticate a sandbox mailbox.
-  2. Programmatically send an email to the sandbox account.
-  3. Wait for the `worker` (`apps/worker`) to process the incoming webhook or sync job.
-  4. Assert that the `worker` successfully processes the thread and emits a `message.created` webhook to a local mock HTTP server (e.g., WireMock or MSW).
-- **Execution:** Run nightly or on pre-merge to `main` due to API latency and rate limits.
+The minimum CI baseline for this repo is:
 
----
+- run install, build, lint, typecheck, format checks, and tests on every push and pull request
+- run DB-backed tests against a real PostgreSQL service container
+- generate coverage via `@vitest/coverage-v8`
+- enforce practical global thresholds plus stricter thresholds for the most critical workflow files
+- publish coverage artifacts for inspection
 
-## 3. Resilience & Contract Testing (Fault Injection)
+Follow-up work here should focus on tightening thresholds over time, not on introducing the baseline for the first time.
 
-**Objective:** Ensure the system respects third-party limits and degrades gracefully when external services fail.
+## 4. Remaining Required Work
 
-### Requirements:
+The following areas are still missing and are the real testing roadmap from here.
 
-- **Gmail API Faults:**
-  - Mock the Gmail API to return HTTP `429 Too Many Requests` and `503 Service Unavailable`.
-  - Assert that the `MailboxSyncProvider` surfaces the error and the queue mechanism triggers exponential backoff without dropping the sync job.
-  - Mock an `invalid_grant` response on token refresh. Assert the mailbox transitions to the `reconnect_required` state (`runMailboxSync` logic).
-- **Webhook Delivery Faults:**
-  - Simulate customer webhook endpoints returning HTTP `500` or timing out (the "Tarpit" scenario).
-  - Assert that `runWebhookDelivery` properly captures the failure (`WebhookDeliverySendFailure`), schedules a retry based on `calculateWebhookDeliveryRetryDelayMs`, and respects `DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS` (5 attempts).
+### 4.1 End-to-End Sandbox Testing
 
----
+**Current state:** the repo now has one DB-backed sandbox E2E happy path using a stateful local Gmail sandbox server and the real API/worker runtime wiring.
 
-## 4. Chaos Testing (Infrastructure Failures)
+**Still required:**
 
-**Objective:** Prove the deployed system survives infrastructure outages and recovers without data loss or duplicate event emissions.
+1. Expand from the single happy path into a small E2E matrix covering reconnect, retry, and incremental ordering behavior.
+2. Add a live external sandbox tier with dedicated Gmail accounts if launch requires validation against Google itself rather than only the local sandbox.
+3. Run the heavier sandbox suite nightly and before releases rather than only on normal PR-time coverage runs.
 
-### Requirements:
+### 4.2 Chaos Testing
 
-- **The "Dead Worker" (Lease Recovery):**
-  - **Scenario:** Violently kill (`SIGKILL`) a worker container in the middle of executing `runMailboxSync`.
-  - **Assertion:** The `activeSyncLeaseOwner` lock in Postgres must expire after `DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS` (90s). A new worker must successfully acquire the lease and resume the sync.
-- **The "Flaky Database":**
-  - **Scenario:** Inject high latency (5s+) or randomly drop TCP connections to the PostgreSQL database using a tool like Toxiproxy.
-  - **Assertion:** Effect runtimes must gracefully handle the connection failure, and the Google Cloud Tasks queue must automatically retry the HTTP dispatch to the worker.
+**Objective:** Prove the deployed system recovers from runtime and infrastructure failures without corrupting canonical state.
 
----
+**Still required:**
 
-## 5. Load & Performance Testing
+- Kill a worker during `runMailboxSync` and assert lease expiry plus successful takeover by another worker.
+- Inject PostgreSQL latency and dropped connections with a proxy such as Toxiproxy.
+- Verify that transport-level retries eventually re-dispatch failed worker HTTP requests in deployed environments.
 
-**Objective:** Identify bottlenecks in database concurrency and worker memory usage under high volume.
+### 4.3 Load And Performance Testing
 
-### Requirements:
+**Objective:** Find concurrency, memory, and DB pool bottlenecks before staging traffic does it first.
 
-- **High-Throughput Syncs:** Simulate the dispatch of 10,000 concurrent `MailboxSyncJobData` requests to the local worker via the `LocalAsyncTransport`.
-- **Assertion:** Monitor PostgreSQL connection pool limits and verify that the Effect `MailboxSyncCoordinator` does not experience deadlock when acquiring leases.
-- **Tools:** Use tools like **k6** or **Artillery** targeting the `/internal/sync` and `/internal/webhook-deliveries` endpoints.
+**Still required:**
 
----
+- Drive high concurrency against `/internal/sync` and `/internal/webhook-deliveries`.
+- Measure Postgres pool pressure and lease acquisition contention under load.
+- Add repeatable `k6` or `Artillery` scenarios and define pass/fail budgets.
 
-## 6. Deterministic Simulation Testing (DST)
+### 4.4 Deterministic Simulation Testing
 
-**Objective:** Uncover rare race conditions in the state machine (Lease ownership, Webhook ordering) using property-based testing.
+**Objective:** Use deterministic clocks plus property-based inputs to shake out rare state-machine bugs.
 
-### Requirements:
+**Still required:**
 
-- Leverage `@effect/test` and `TestClock` combined with `fast-check`.
-- **Concurrency Simulation:** Spin up multiple simulated concurrent workers attempting to execute `runMailboxSync` for the exact same `mailboxId`.
-- **Assertion:** Ensure that exactly _one_ worker acquires the lease, while the others immediately skip (`skipped_due_to_active_lease`).
-- **Event Ordering:** Generate random incoming Gmail history changes out of order. Assert that the `toSyncSnapshot` and DB application logic results in an eventually consistent state matching the Gmail remote state.
+- Add `fast-check`-driven concurrent Mailbox sync contention scenarios on the same `mailboxId`.
+- Add randomized out-of-order Gmail history sequences and assert eventual canonical-state convergence.
+- Keep these tests transport-neutral and centered on `@mailmon/core` plus DB-backed finalization boundaries.
 
----
+## 5. Recommended Execution Order
 
-## 7. CI/CD Enforcement
+1. Build and stabilize the sandbox E2E harness.
+2. Add a first chaos suite around worker death and DB impairment.
+3. Add repeatable load scenarios with explicit budgets.
+4. Add property-based DST for lease contention and history ordering.
 
-- Add strict code coverage enforcement via `@vitest/coverage-v8` in `vitest.config.ts`.
-- Require `100%` coverage on critical domain logic inside `packages/core/src/use-cases.ts` (specifically lease management and webhook delivery retry logic).
-- Run the isolated PostgreSQL tests natively in CI using Service Containers (e.g., GitHub Actions `services: postgres:16`).
+That sequence keeps the next effort focused on the highest-value missing confidence layers rather than over-investing in more unit coverage.

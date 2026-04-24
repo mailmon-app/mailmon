@@ -2120,6 +2120,132 @@ describe("runWebhookDelivery", () => {
     }),
   );
 
+  it.effect("fails retryable timeout failures after the fifth attempt without rescheduling", () =>
+    Effect.gen(function* () {
+      const completedAttempts: Array<{
+        deliveryId: string;
+        attemptCount: number;
+        processingStartedAt: string;
+        state: "pending" | "delivered" | "failed";
+        nextAttemptAt: string | null;
+        responseStatusCode: number | null;
+        errorCode: string | null;
+        errorMessage: string | null;
+        retryable: boolean | null;
+      }> = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
+
+      const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            createWebhookDeliveryStoreTestLayer({
+              preparedDelivery: {
+                ...deliveryFixture,
+                attemptCount: 5,
+              },
+              completedAttempts,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+            createWebhookDeliverySenderTestLayer(() =>
+              Effect.fail({
+                code: "webhook_delivery_timeout",
+                message: "Webhook delivery timed out after 5 seconds.",
+                retryable: true,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      expect(result).toEqual({
+        deliveryId: deliveryFixture.deliveryId,
+        status: "failed",
+        attemptCount: 5,
+        nextAttemptAt: null,
+      });
+      expect(completedAttempts).toEqual([
+        {
+          deliveryId: deliveryFixture.deliveryId,
+          attemptCount: 5,
+          processingStartedAt: deliveryFixture.processingStartedAt,
+          state: "failed",
+          nextAttemptAt: null,
+          responseStatusCode: null,
+          errorCode: "webhook_delivery_timeout",
+          errorMessage: "Webhook delivery timed out after 5 seconds.",
+          retryable: true,
+        },
+      ]);
+      expect(scheduledDeliveryRequests).toEqual([]);
+    }),
+  );
+
+  it.effect(
+    "fails retryable 5xx endpoint responses after the fifth attempt without rescheduling",
+    () =>
+      Effect.gen(function* () {
+        const completedAttempts: Array<{
+          deliveryId: string;
+          attemptCount: number;
+          processingStartedAt: string;
+          state: "pending" | "delivered" | "failed";
+          nextAttemptAt: string | null;
+          responseStatusCode: number | null;
+          errorCode: string | null;
+          errorMessage: string | null;
+          retryable: boolean | null;
+        }> = [];
+        const scheduledDeliveryRequests: Array<{
+          deliveryId: string;
+          notBefore: string;
+        }> = [];
+
+        const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              createWebhookDeliveryStoreTestLayer({
+                preparedDelivery: {
+                  ...deliveryFixture,
+                  attemptCount: 5,
+                },
+                completedAttempts,
+              }),
+              createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+              createWebhookDeliverySenderTestLayer(() =>
+                Effect.succeed({
+                  statusCode: 503,
+                }),
+              ),
+            ),
+          ),
+        );
+
+        expect(result).toEqual({
+          deliveryId: deliveryFixture.deliveryId,
+          status: "failed",
+          attemptCount: 5,
+          nextAttemptAt: null,
+        });
+        expect(completedAttempts).toEqual([
+          {
+            deliveryId: deliveryFixture.deliveryId,
+            attemptCount: 5,
+            processingStartedAt: deliveryFixture.processingStartedAt,
+            state: "failed",
+            nextAttemptAt: null,
+            responseStatusCode: 503,
+            errorCode: "webhook_endpoint_http_503",
+            errorMessage: "Webhook endpoint responded with HTTP 503.",
+            retryable: true,
+          },
+        ]);
+        expect(scheduledDeliveryRequests).toEqual([]);
+      }),
+  );
+
   it.effect("fails non-retryable endpoint responses without rescheduling", () =>
     Effect.gen(function* () {
       const completedAttempts: Array<{

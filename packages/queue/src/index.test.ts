@@ -242,6 +242,29 @@ describe("createWorkerHttpMailboxSyncDispatcherLayer", () => {
 
     expect(requests).toEqual([`${DEFAULT_LOCAL_WORKER_BASE_URL}/internal/sync`]);
   });
+
+  it("surfaces non-2xx worker responses so callers can retry dispatch", async () => {
+    const program = Effect.gen(function* () {
+      const mailboxSyncDispatcher = yield* MailboxSyncDispatcher;
+
+      yield* mailboxSyncDispatcher.dispatchMailboxSync("mbx_http");
+    });
+
+    await expect(
+      Effect.runPromise(
+        program.pipe(
+          Effect.provide(
+            createWorkerHttpMailboxSyncDispatcherLayer({
+              fetch: async () =>
+                new Response("retry later", {
+                  status: 503,
+                }),
+            }),
+          ),
+        ),
+      ),
+    ).rejects.toThrow("Mailbox sync dispatch failed with 503: retry later");
+  });
 });
 
 describe("createWorkerHttpControlJobDispatcherLayer", () => {

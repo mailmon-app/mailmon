@@ -657,6 +657,78 @@ describe("createHttpGmailSyncProviderLayer", () => {
     });
   });
 
+  it("classifies Gmail 503 history fetch responses as retryable sync failures", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        return new Response(JSON.stringify({ access_token: "access-token" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/history") {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 503,
+              message: "Service Unavailable",
+            },
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 503,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxSyncProvider;
+
+        return yield* provider
+          .syncMailbox({
+            mailbox: {
+              ...mailboxFixture,
+              initializedAt: "2026-03-29T09:30:00.000Z",
+              lastSuccessfulSyncAt: "2026-03-29T09:30:00.000Z",
+            },
+            cursor: "hist_bootstrap",
+          })
+          .pipe(
+            Effect.match({
+              onFailure: (problem) => problem,
+              onSuccess: () => {
+                throw new Error("Expected syncMailbox to fail for Gmail 503 responses.");
+              },
+            }),
+          );
+      }).pipe(
+        Effect.provide(
+          createHttpGmailSyncProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }).pipe(Layer.provide(credentialStoreLayer)),
+        ),
+      ),
+    );
+
+    expect(result).toMatchObject({
+      code: "gmail_history_fetch_failed",
+      detail: "Fetching Gmail history failed with HTTP 503.",
+      retryable: true,
+      status: 503,
+      title: "Gmail history fetch failed",
+    });
+  });
+
   it("classifies Gmail 403 quota responses as rate-limited failures", async () => {
     const fetchImpl: typeof fetch = async (input) => {
       const url = new URL(getInputUrl(input));

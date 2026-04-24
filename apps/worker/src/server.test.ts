@@ -194,6 +194,51 @@ describe("startWorkerHttpRuntime", () => {
     });
   });
 
+  it("preserves retryable sync failures across the internal http boundary", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: defaultProcessControlJob,
+      processSyncJob: async () => {
+        throw {
+          code: "gmail_history_fetch_failed",
+          detail: "Fetching Gmail history failed with HTTP 503.",
+          retryable: true,
+          status: 503,
+          title: "Gmail history fetch failed",
+          type: "https://api.mailmon.dev/problems/gmail-history-fetch-failed",
+        };
+      },
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxId: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "gmail_history_fetch_failed",
+      detail: "Fetching Gmail history failed with HTTP 503.",
+      retryable: true,
+      status: 503,
+    });
+  });
+
   it("allows the runtime to close more than once", async () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: workerEnvFixture.asyncTransportMode,
@@ -385,6 +430,58 @@ describe("startWorkerHttpRuntime", () => {
       status: "scheduled_for_retry",
       attemptCount: 2,
       nextAttemptAt: "2026-03-25T00:00:10.000Z",
+    });
+  });
+
+  it("preserves retryable webhook delivery failures across the internal http boundary", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: defaultProcessControlJob,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async () => {
+        throw {
+          code: "webhook_delivery_timeout",
+          detail: "Webhook delivery timed out before the endpoint responded.",
+          retryable: true,
+          status: 503,
+          title: "Webhook delivery timeout",
+          type: "https://api.mailmon.dev/problems/webhook-delivery-timeout",
+        };
+      },
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(
+      `http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          deliveryId: "del_demo",
+          notBefore: "2026-03-25T00:00:00.000Z",
+        }),
+      },
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "webhook_delivery_timeout",
+      detail: "Webhook delivery timed out before the endpoint responded.",
+      retryable: true,
+      status: 503,
     });
   });
 
