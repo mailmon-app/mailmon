@@ -434,12 +434,16 @@ const toMailboxSyncRunInspectionResource = (row: SyncRunRow): MailboxSyncRunInsp
     status: toSyncRunInspectionStatus(row.status),
     detail: row.detail,
     eventsEmitted:
-      parsedEventsEmitted !== null && Number.isNaN(parsedEventsEmitted) ? null : parsedEventsEmitted,
+      parsedEventsEmitted !== null && Number.isNaN(parsedEventsEmitted)
+        ? null
+        : parsedEventsEmitted,
     leaseOwnerId: row.leaseOwnerId,
     previousCursor: row.previousCursor,
     nextCursor: row.nextCursor,
     cursorAdvanced:
-      row.previousCursor === null || row.nextCursor === null ? null : row.previousCursor !== row.nextCursor,
+      row.previousCursor === null || row.nextCursor === null
+        ? null
+        : row.previousCursor !== row.nextCursor,
   };
 };
 
@@ -2036,10 +2040,7 @@ export const createMailboxObservabilityCatalogLayer = Layer.effect(
                       webhookEndpointId: row.webhookEndpointId,
                       failedDeliveries: Number.parseInt(String(row.failedDeliveries), 10),
                       pendingDeliveries: Number.parseInt(String(row.pendingDeliveries), 10),
-                      processingDeliveries: Number.parseInt(
-                        String(row.processingDeliveries),
-                        10,
-                      ),
+                      processingDeliveries: Number.parseInt(String(row.processingDeliveries), 10),
                     })),
                   )
                   .then(
@@ -2089,7 +2090,8 @@ export const createMailboxObservabilityCatalogLayer = Layer.effect(
                   : Math.max(
                       0,
                       Math.floor(
-                        (observedAtDate.getTime() - mailboxRow.lastSuccessfulSyncAt.getTime()) / 1000,
+                        (observedAtDate.getTime() - mailboxRow.lastSuccessfulSyncAt.getTime()) /
+                          1000,
                       ),
                     ),
             },

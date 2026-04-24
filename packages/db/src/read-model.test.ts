@@ -787,153 +787,157 @@ describe("DB-backed mailbox read hardening", () => {
     }),
   );
 
-  it.effect("returns mailbox observability snapshot with lag, cursor, lease, and delivery signals", () =>
-    withIsolatedDatabaseEffect(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
-        Layer.provide(testGmailRefreshTokenCipherLayer),
-      );
+  it.effect(
+    "returns mailbox observability snapshot with lag, cursor, lease, and delivery signals",
+    () =>
+      withIsolatedDatabaseEffect(({ connectionString }) => {
+        const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+          Layer.provide(testGmailRefreshTokenCipherLayer),
+        );
 
-      return Effect.gen(function* () {
-        yield* Effect.promise(() => seedObservabilityFixtures(connectionString));
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => seedObservabilityFixtures(connectionString));
 
-        const snapshot = yield* getMailboxObservability(primaryMailboxId, {
-          workspaceId: primaryWorkspaceId,
-          observedAt: "2026-04-22T10:05:00.000Z",
-        });
+          const snapshot = yield* getMailboxObservability(primaryMailboxId, {
+            workspaceId: primaryWorkspaceId,
+            observedAt: "2026-04-22T10:05:00.000Z",
+          });
 
-        expect(snapshot.object).toBe("mailbox_observability");
-        expect(snapshot.mailboxId).toBe(primaryMailboxId);
-        expect(snapshot.generatedAt).toBe("2026-04-22T10:05:00.000Z");
+          expect(snapshot.object).toBe("mailbox_observability");
+          expect(snapshot.mailboxId).toBe(primaryMailboxId);
+          expect(snapshot.generatedAt).toBe("2026-04-22T10:05:00.000Z");
 
-        expect(snapshot.lag).toEqual({
-          status: "active",
-          syncState: "lagging",
-          watchState: "expiring",
-          lastSuccessfulSyncAt: "2026-04-22T09:59:00.000Z",
-          lagSeconds: 360,
-        });
+          expect(snapshot.lag).toEqual({
+            status: "active",
+            syncState: "lagging",
+            watchState: "expiring",
+            lastSuccessfulSyncAt: "2026-04-22T09:59:00.000Z",
+            lagSeconds: 360,
+          });
 
-        expect(snapshot.cursor).toEqual({
-          currentCursor: "hist_205",
-          previousCursor: "hist_200",
-          nextCursor: "hist_205",
-          advanced: true,
-          advancedAt: "2026-04-22T10:00:10.000Z",
-        });
+          expect(snapshot.cursor).toEqual({
+            currentCursor: "hist_205",
+            previousCursor: "hist_200",
+            nextCursor: "hist_205",
+            advanced: true,
+            advancedAt: "2026-04-22T10:00:10.000Z",
+          });
 
-        expect(snapshot.lease).toEqual({
-          activeLeaseOwner: "lease_active",
-          activeLeaseHeartbeatAt: "2026-04-22T10:04:40.000Z",
-          activeLeaseExpiresAt: "2026-04-22T10:05:30.000Z",
-          contentionCount24h: 1,
-          latestContentionAt: "2026-04-22T09:50:02.000Z",
-          leaseLossCount24h: 1,
-          latestLeaseLossAt: "2026-04-22T09:40:20.000Z",
-        });
+          expect(snapshot.lease).toEqual({
+            activeLeaseOwner: "lease_active",
+            activeLeaseHeartbeatAt: "2026-04-22T10:04:40.000Z",
+            activeLeaseExpiresAt: "2026-04-22T10:05:30.000Z",
+            contentionCount24h: 1,
+            latestContentionAt: "2026-04-22T09:50:02.000Z",
+            leaseLossCount24h: 1,
+            latestLeaseLossAt: "2026-04-22T09:40:20.000Z",
+          });
 
-        expect(snapshot.webhookDeliveries).toEqual([
-          {
-            webhookEndpointId: "whe_primary_1",
-            webhookEndpointUrl: "https://app.example.com/webhooks/mailmon",
-            deliveryState: "degraded",
-            consecutiveFailures: 2,
-            pendingDeliveries: 1,
-            processingDeliveries: 1,
-            failedDeliveries: 2,
-            lastDeliveryAt: "2026-04-22T10:04:00.000Z",
-            lastDeliveryError: {
-              code: "webhook_delivery_timeout",
-              message: "Webhook delivery timed out before the endpoint responded.",
-              occurredAt: "2026-04-22T10:04:00.000Z",
-              retryable: true,
+          expect(snapshot.webhookDeliveries).toEqual([
+            {
+              webhookEndpointId: "whe_primary_1",
+              webhookEndpointUrl: "https://app.example.com/webhooks/mailmon",
+              deliveryState: "degraded",
+              consecutiveFailures: 2,
+              pendingDeliveries: 1,
+              processingDeliveries: 1,
+              failedDeliveries: 2,
+              lastDeliveryAt: "2026-04-22T10:04:00.000Z",
+              lastDeliveryError: {
+                code: "webhook_delivery_timeout",
+                message: "Webhook delivery timed out before the endpoint responded.",
+                occurredAt: "2026-04-22T10:04:00.000Z",
+                retryable: true,
+              },
             },
-          },
-          {
-            webhookEndpointId: "whe_primary_2",
-            webhookEndpointUrl: "https://app.example.com/webhooks/secondary",
-            deliveryState: "healthy",
-            consecutiveFailures: 0,
-            pendingDeliveries: 0,
-            processingDeliveries: 0,
-            failedDeliveries: 0,
-            lastDeliveryAt: null,
-            lastDeliveryError: null,
-          },
-        ]);
+            {
+              webhookEndpointId: "whe_primary_2",
+              webhookEndpointUrl: "https://app.example.com/webhooks/secondary",
+              deliveryState: "healthy",
+              consecutiveFailures: 0,
+              pendingDeliveries: 0,
+              processingDeliveries: 0,
+              failedDeliveries: 0,
+              lastDeliveryAt: null,
+              lastDeliveryError: null,
+            },
+          ]);
 
-        expect(snapshot.latestSyncRun).toMatchObject({
-          syncRunId: "sr_newest",
-          mailboxId: primaryMailboxId,
-          status: "completed",
-          previousCursor: "hist_200",
-          nextCursor: "hist_205",
-          cursorAdvanced: true,
-        });
-      }).pipe(Effect.provide(persistenceLayer));
-    }),
+          expect(snapshot.latestSyncRun).toMatchObject({
+            syncRunId: "sr_newest",
+            mailboxId: primaryMailboxId,
+            status: "completed",
+            previousCursor: "hist_200",
+            nextCursor: "hist_205",
+            cursorAdvanced: true,
+          });
+        }).pipe(Effect.provide(persistenceLayer));
+      }),
   );
 
-  it.effect("keeps shared endpoint counts consistent and omits advancedAt when the latest sync did not move the cursor", () =>
-    withIsolatedDatabaseEffect(({ connectionString }) => {
-      const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
-        Layer.provide(testGmailRefreshTokenCipherLayer),
-      );
+  it.effect(
+    "keeps shared endpoint counts consistent and omits advancedAt when the latest sync did not move the cursor",
+    () =>
+      withIsolatedDatabaseEffect(({ connectionString }) => {
+        const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+          Layer.provide(testGmailRefreshTokenCipherLayer),
+        );
 
-      return Effect.gen(function* () {
-        yield* Effect.promise(() => seedObservabilityFixtures(connectionString));
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => seedObservabilityFixtures(connectionString));
 
-        const snapshot = yield* getMailboxObservability(secondaryPrimaryMailboxId, {
-          workspaceId: primaryWorkspaceId,
-          observedAt: "2026-04-22T10:05:00.000Z",
-        });
+          const snapshot = yield* getMailboxObservability(secondaryPrimaryMailboxId, {
+            workspaceId: primaryWorkspaceId,
+            observedAt: "2026-04-22T10:05:00.000Z",
+          });
 
-        expect(snapshot.cursor).toEqual({
-          currentCursor: "hist_secondary_10",
-          previousCursor: "hist_secondary_10",
-          nextCursor: "hist_secondary_10",
-          advanced: false,
-          advancedAt: null,
-        });
+          expect(snapshot.cursor).toEqual({
+            currentCursor: "hist_secondary_10",
+            previousCursor: "hist_secondary_10",
+            nextCursor: "hist_secondary_10",
+            advanced: false,
+            advancedAt: null,
+          });
 
-        expect(snapshot.lease).toEqual({
-          activeLeaseOwner: null,
-          activeLeaseHeartbeatAt: null,
-          activeLeaseExpiresAt: null,
-          contentionCount24h: 1,
-          latestContentionAt: "2026-04-21T10:05:01.000Z",
-          leaseLossCount24h: 0,
-          latestLeaseLossAt: null,
-        });
+          expect(snapshot.lease).toEqual({
+            activeLeaseOwner: null,
+            activeLeaseHeartbeatAt: null,
+            activeLeaseExpiresAt: null,
+            contentionCount24h: 1,
+            latestContentionAt: "2026-04-21T10:05:01.000Z",
+            leaseLossCount24h: 0,
+            latestLeaseLossAt: null,
+          });
 
-        expect(snapshot.webhookDeliveries).toEqual([
-          {
-            webhookEndpointId: "whe_primary_1",
-            webhookEndpointUrl: "https://app.example.com/webhooks/mailmon",
-            deliveryState: "degraded",
-            consecutiveFailures: 2,
-            pendingDeliveries: 1,
-            processingDeliveries: 1,
-            failedDeliveries: 2,
-            lastDeliveryAt: "2026-04-22T10:04:00.000Z",
-            lastDeliveryError: {
-              code: "webhook_delivery_timeout",
-              message: "Webhook delivery timed out before the endpoint responded.",
-              occurredAt: "2026-04-22T10:04:00.000Z",
-              retryable: true,
+          expect(snapshot.webhookDeliveries).toEqual([
+            {
+              webhookEndpointId: "whe_primary_1",
+              webhookEndpointUrl: "https://app.example.com/webhooks/mailmon",
+              deliveryState: "degraded",
+              consecutiveFailures: 2,
+              pendingDeliveries: 1,
+              processingDeliveries: 1,
+              failedDeliveries: 2,
+              lastDeliveryAt: "2026-04-22T10:04:00.000Z",
+              lastDeliveryError: {
+                code: "webhook_delivery_timeout",
+                message: "Webhook delivery timed out before the endpoint responded.",
+                occurredAt: "2026-04-22T10:04:00.000Z",
+                retryable: true,
+              },
             },
-          },
-        ]);
+          ]);
 
-        expect(snapshot.latestSyncRun).toMatchObject({
-          syncRunId: "sr_secondary_stable",
-          mailboxId: secondaryPrimaryMailboxId,
-          status: "completed",
-          previousCursor: "hist_secondary_10",
-          nextCursor: "hist_secondary_10",
-          cursorAdvanced: false,
-        });
-      }).pipe(Effect.provide(persistenceLayer));
-    }),
+          expect(snapshot.latestSyncRun).toMatchObject({
+            syncRunId: "sr_secondary_stable",
+            mailboxId: secondaryPrimaryMailboxId,
+            status: "completed",
+            previousCursor: "hist_secondary_10",
+            nextCursor: "hist_secondary_10",
+            cursorAdvanced: false,
+          });
+        }).pipe(Effect.provide(persistenceLayer));
+      }),
   );
 
   it.effect("enforces workspace ownership for mailbox observability reads", () =>
