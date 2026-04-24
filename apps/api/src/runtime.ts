@@ -40,19 +40,15 @@ const createApiRuntimeLayer = (
     oauthClientSecret: env.gmailOauthClientSecret,
     oauthTokenUrl: env.gmailOauthTokenUrl,
   });
-  const mailboxSyncDispatcherLayer = (() => {
-    switch (env.asyncTransportMode) {
-      case "local":
-      case "gcp":
-        return createWorkerHttpMailboxSyncDispatcherLayer({
-          workerBaseUrl: env.workerBaseUrl,
-        });
-      case "legacy_bullmq":
-        throw new Error(
-          "apps/api does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq; use local or gcp",
-        );
-    }
-  })();
+  if (env.asyncTransportMode === "legacy_bullmq") {
+    throw new Error(
+      "apps/api does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq; use local or gcp",
+    );
+  }
+
+  const mailboxSyncDispatcherLayer = createWorkerHttpMailboxSyncDispatcherLayer({
+    workerBaseUrl: env.workerBaseUrl,
+  });
 
   return Layer.mergeAll(persistenceLayer, mailboxConnectProviderLayer, mailboxSyncDispatcherLayer);
 };
