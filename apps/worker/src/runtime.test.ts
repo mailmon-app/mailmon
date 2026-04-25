@@ -1,15 +1,23 @@
 import { createHmac } from "node:crypto";
 import { createServer, type Server } from "node:http";
 
-import { type PreparedWebhookDelivery, WebhookDeliverySender } from "@mailmon/core";
-import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vitest";
+import {
+  type PreparedWebhookDelivery,
+  WebhookDeliveryScheduler,
+  WebhookDeliverySender,
+} from "@mailmon/core";
+import { Effect, ManagedRuntime } from "effect";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createWebhookDeliverySenderLayer } from "./runtime.js";
+import {
+  createInProcessWebhookDeliverySchedulerLayer,
+  createWebhookDeliverySenderLayer,
+} from "./runtime.js";
 
 const activeServers: Array<Server> = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(
     activeServers.splice(0).map(
       (server) =>
@@ -25,6 +33,65 @@ afterEach(async () => {
         }),
     ),
   );
+});
+
+describe("createInProcessWebhookDeliverySchedulerLayer", () => {
+  it("does not dispatch before the durable notBefore timestamp when timers fire early", async () => {
+    vi.useFakeTimers();
+
+    const scheduledAtMs = Date.parse("2026-04-25T00:00:00.000Z");
+    const notBefore = new Date(scheduledAtMs + 100).toISOString();
+    let nowMs = scheduledAtMs;
+    const dispatched: Array<{
+      readonly deliveryId: string;
+      readonly notBefore: string;
+    }> = [];
+    const runtime = ManagedRuntime.make(
+      createInProcessWebhookDeliverySchedulerLayer({
+        dispatch: (request) => {
+          dispatched.push(request);
+
+          return Promise.resolve({
+            deliveryId: request.deliveryId,
+            status: "delivered",
+            attemptCount: 1,
+            nextAttemptAt: null,
+          });
+        },
+        now: () => nowMs,
+      }),
+    );
+
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const scheduler = yield* WebhookDeliveryScheduler;
+
+          yield* scheduler.scheduleWebhookDelivery({
+            deliveryId: "del_early_timer",
+            notBefore,
+          });
+        }),
+      );
+
+      nowMs = scheduledAtMs + 99;
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(dispatched).toEqual([]);
+
+      nowMs = scheduledAtMs + 100;
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(dispatched).toEqual([
+        {
+          deliveryId: "del_early_timer",
+          notBefore,
+        },
+      ]);
+    } finally {
+      await runtime.dispose();
+    }
+  });
 });
 
 const startCaptureServer = async (

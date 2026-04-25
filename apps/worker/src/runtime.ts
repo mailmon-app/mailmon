@@ -124,17 +124,27 @@ export const createInProcessWebhookDeliverySchedulerLayer = (
           service: {
             scheduleWebhookDelivery: (request: WebhookDeliveryScheduleRequest) =>
               Effect.sync(() => {
-                const delayMs = calculateWebhookDeliveryDelayMs(request.notBefore, now());
-                let timer: ReturnType<typeof globalThis.setTimeout>;
-                const dispatch = () => {
-                  timers.delete(timer);
-                  void options.dispatch(request).catch((error) => {
-                    options.onDispatchError?.(error, request);
-                  });
+                const scheduleTimer = () => {
+                  const delayMs = calculateWebhookDeliveryDelayMs(request.notBefore, now());
+                  let timer: ReturnType<typeof globalThis.setTimeout>;
+                  const dispatch = () => {
+                    timers.delete(timer);
+
+                    if (calculateWebhookDeliveryDelayMs(request.notBefore, now()) > 0) {
+                      scheduleTimer();
+                      return;
+                    }
+
+                    void options.dispatch(request).catch((error) => {
+                      options.onDispatchError?.(error, request);
+                    });
+                  };
+
+                  timer = globalThis.setTimeout(dispatch, delayMs);
+                  timers.add(timer);
                 };
 
-                timer = globalThis.setTimeout(dispatch, delayMs);
-                timers.add(timer);
+                scheduleTimer();
               }),
           },
           timers,
