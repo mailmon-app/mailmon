@@ -6,10 +6,10 @@ import type { ConnectSessionResource, CreatedWebhookEndpointResource } from "@ma
 import { createDb, schema } from "@mailmon/db";
 import { describe, expect, it } from "vitest";
 
+import { withIsolatedDatabasePromise } from "../../../packages/db/src/test-setup.js";
 import { startWorkerRuntime, type WorkerRuntimeHandle } from "../../worker/src/index.js";
 import { createApiRuntime } from "./runtime.js";
 import { createApp } from "./server.js";
-import { withIsolatedDatabasePromise } from "../../../packages/db/src/test-setup.js";
 
 const testRefreshTokenEncryptionKey = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
 const primaryWorkspaceId = "ws_sandbox_e2e";
@@ -236,6 +236,7 @@ const startGmailSandbox = async (emailAddress: string) => {
   const issuedAuthorizationCodes = new Set<string>();
   const refreshToken = "sandbox_refresh_token";
   const accessToken = "sandbox_access_token";
+  let refreshTokenRevoked = false;
   let currentHistoryId = 1;
   const knownHistoryIds = new Set<string>([String(currentHistoryId)]);
   const messages: SandboxMessageRecord[] = [];
@@ -298,7 +299,7 @@ const startGmailSandbox = async (emailAddress: string) => {
       }
 
       if (grantType === "refresh_token") {
-        if (body.get("refresh_token") !== refreshToken) {
+        if (refreshTokenRevoked || body.get("refresh_token") !== refreshToken) {
           sendJson(response, 400, {
             error: "invalid_grant",
           });
@@ -465,6 +466,9 @@ const startGmailSandbox = async (emailAddress: string) => {
     baseUrl: server.baseUrl,
     close: server.close,
     emailAddress,
+    revokeRefreshToken: () => {
+      refreshTokenRevoked = true;
+    },
     sendEmail: async (params: {
       readonly fromEmail: string;
       readonly fromName: string;
@@ -489,19 +493,27 @@ const startGmailSandbox = async (emailAddress: string) => {
   };
 };
 
-const startWebhookReceiver = async () => {
+const startWebhookReceiver = async (
+  options: Readonly<{
+    responseStatuses?: ReadonlyArray<number>;
+  }> = {},
+) => {
   const deliveries: Array<{
     readonly body: unknown;
     readonly headers: IncomingMessage["headers"];
+    readonly responseStatusCode: number;
   }> = [];
   const server = await startHttpServer(async (request, response) => {
+    const responseStatusCode = options.responseStatuses?.[deliveries.length] ?? 202;
+
     deliveries.push({
       body: JSON.parse(await readRequestBody(request)) as unknown,
       headers: request.headers,
+      responseStatusCode,
     });
 
-    sendJson(response, 202, {
-      accepted: true,
+    sendJson(response, responseStatusCode, {
+      accepted: responseStatusCode >= 200 && responseStatusCode < 300,
     });
   });
 
@@ -568,304 +580,737 @@ const readMailboxPersistence = async (connectionString: string, mailboxId: strin
   }
 };
 
+interface SandboxE2eHarness {
+  readonly apiHeaders: Readonly<Record<string, string>>;
+  readonly apiOrigin: string;
+  readonly app: ReturnType<typeof createApp>;
+  readonly close: () => Promise<void>;
+  readonly sandbox: Awaited<ReturnType<typeof startGmailSandbox>>;
+  readonly webhookReceiver: Awaited<ReturnType<typeof startWebhookReceiver>>;
+  readonly workerBaseUrl: string;
+}
+
+const startSandboxE2eHarness = async (
+  connectionString: string,
+  options: Readonly<{
+    emailAddress: string;
+    webhookResponseStatuses?: ReadonlyArray<number>;
+  }>,
+): Promise<SandboxE2eHarness> => {
+  const workerPort = await reservePort();
+  const workerBaseUrl = `http://127.0.0.1:${workerPort}`;
+  const sandbox = await startGmailSandbox(options.emailAddress);
+  const webhookReceiver = await startWebhookReceiver({
+    responseStatuses: options.webhookResponseStatuses,
+  });
+  let workerRuntime: WorkerRuntimeHandle | null = null;
+  let apiRuntime: ReturnType<typeof createApiRuntime> | null = null;
+
+  const close = async () => {
+    await Promise.all([
+      apiRuntime?.dispose(),
+      workerRuntime?.close(),
+      webhookReceiver.close(),
+      sandbox.close(),
+    ]);
+  };
+
+  try {
+    await seedWorkspaceApiKey(connectionString);
+
+    const workerEnv: WorkerEnv = {
+      asyncTransportMode: "local",
+      databaseUrl: connectionString,
+      gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
+      gmailOauthClientId: "sandbox-client-id",
+      gmailOauthClientSecret: "sandbox-client-secret",
+      gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
+      gmailRefreshTokenEncryptionKeyId: "primary",
+      gmailRefreshTokenPreviousEncryptionKeys: [],
+      gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
+      gmailPubSubTopicName: null,
+      gcpProjectId: null,
+      gcpRegion: null,
+      gcpTasksAudience: null,
+      gcpTasksServiceAccountEmail: null,
+      gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
+      host: "127.0.0.1",
+      nodeEnv: "test",
+      port: workerPort,
+      redisUrl: null,
+      workerBaseUrl,
+    };
+
+    workerRuntime = await startWorkerRuntime(workerEnv);
+
+    const apiEnv: Pick<
+      ApiEnv,
+      | "asyncTransportMode"
+      | "databaseUrl"
+      | "gmailApiBaseUrl"
+      | "gmailOauthAuthorizeUrl"
+      | "gmailOauthClientId"
+      | "gmailOauthClientSecret"
+      | "gmailRefreshTokenEncryptionKey"
+      | "gmailRefreshTokenEncryptionKeyId"
+      | "gmailRefreshTokenPreviousEncryptionKeys"
+      | "gmailOauthTokenUrl"
+      | "nodeEnv"
+      | "workerBaseUrl"
+    > = {
+      asyncTransportMode: "local",
+      databaseUrl: connectionString,
+      gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
+      gmailOauthAuthorizeUrl: `${sandbox.baseUrl}/oauth/authorize`,
+      gmailOauthClientId: "sandbox-client-id",
+      gmailOauthClientSecret: "sandbox-client-secret",
+      gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
+      gmailRefreshTokenEncryptionKeyId: "primary",
+      gmailRefreshTokenPreviousEncryptionKeys: [],
+      gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
+      nodeEnv: "test",
+      workerBaseUrl,
+    };
+
+    apiRuntime = createApiRuntime(apiEnv);
+
+    return {
+      apiHeaders: {
+        authorization: `Bearer ${primaryApiKey}`,
+        "content-type": "application/json",
+      },
+      apiOrigin: "http://api.mailmon.test",
+      app: createApp(apiRuntime),
+      close,
+      sandbox,
+      webhookReceiver,
+      workerBaseUrl,
+    };
+  } catch (error) {
+    await close();
+    throw error;
+  }
+};
+
+const connectSandboxMailbox = async (
+  harness: SandboxE2eHarness,
+  params: Readonly<{
+    mailboxExternalId: string;
+    tenantExternalId: string;
+  }>,
+) => {
+  const connectSessionResponse = await harness.app.request(
+    `${harness.apiOrigin}/v1/mailboxes/connect-sessions`,
+    {
+      method: "POST",
+      headers: harness.apiHeaders,
+      body: JSON.stringify({
+        provider: "gmail",
+        tenantExternalId: params.tenantExternalId,
+        mailboxExternalId: params.mailboxExternalId,
+        redirectUrl: "https://app.example.com/settings/gmail/callback",
+      }),
+    },
+  );
+
+  expect(connectSessionResponse.status).toBe(201);
+
+  const connectSession = parseConnectSessionResponse(
+    await readJsonResponse(connectSessionResponse),
+  );
+  const hostedConnectResponse = await harness.app.request(connectSession.connectUrl);
+
+  expect(hostedConnectResponse.status).toBe(302);
+
+  const authorizationUrl = hostedConnectResponse.headers.get("location");
+
+  expect(authorizationUrl).not.toBeNull();
+
+  const sandboxAuthorizationResponse = await fetch(authorizationUrl!, {
+    redirect: "manual",
+  });
+
+  expect(sandboxAuthorizationResponse.status).toBe(302);
+
+  const callbackUrl = sandboxAuthorizationResponse.headers.get("location");
+
+  if (callbackUrl === null) {
+    throw new Error("Expected the sandbox authorization step to redirect to the callback.");
+  }
+
+  const callbackResponse = await harness.app.request(callbackUrl);
+
+  expect(callbackResponse.status).toBe(302);
+
+  const frontendRedirectLocation = callbackResponse.headers.get("location");
+
+  if (frontendRedirectLocation === null) {
+    throw new Error("Expected the callback to redirect back to the client redirect URL.");
+  }
+
+  const frontendRedirectUrl = new URL(frontendRedirectLocation);
+  const mailboxId = frontendRedirectUrl.searchParams.get("mailbox_id");
+
+  expect(frontendRedirectUrl.searchParams.get("status")).toBe("success");
+  expect(frontendRedirectUrl.searchParams.get("created")).toBe("true");
+
+  if (mailboxId === null) {
+    throw new Error("Expected the hosted connect callback to return a mailbox_id.");
+  }
+
+  return mailboxId;
+};
+
+const createMessageCreatedSubscription = async (harness: SandboxE2eHarness, mailboxId: string) => {
+  const webhookEndpointResponse = await harness.app.request(
+    `${harness.apiOrigin}/v1/webhook-endpoints`,
+    {
+      method: "POST",
+      headers: harness.apiHeaders,
+      body: JSON.stringify({
+        url: harness.webhookReceiver.url,
+        description: "sandbox e2e",
+      }),
+    },
+  );
+
+  expect(webhookEndpointResponse.status).toBe(201);
+
+  const webhookEndpoint = parseCreatedWebhookEndpointResponse(
+    await readJsonResponse(webhookEndpointResponse),
+  );
+  const subscriptionResponse = await harness.app.request(
+    `${harness.apiOrigin}/v1/webhook-endpoints/${webhookEndpoint.id}/subscriptions`,
+    {
+      method: "POST",
+      headers: harness.apiHeaders,
+      body: JSON.stringify({
+        mailbox_ids: [mailboxId],
+        event_types: ["message.created"],
+      }),
+    },
+  );
+
+  expect(subscriptionResponse.status).toBe(201);
+};
+
+const runWorkerSync = async (workerBaseUrl: string, mailboxId: string) => {
+  const response = await fetch(`${workerBaseUrl}/internal/sync`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      mailboxId,
+    }),
+  });
+
+  return {
+    body: await readJsonResponse(response),
+    status: response.status,
+  };
+};
+
 describe("sandbox end-to-end happy path", () => {
-  it(
-    "connects a sandbox mailbox, syncs a new message, and delivers a webhook through the real runtimes",
-    async () => {
-      await withIsolatedDatabasePromise(async ({ connectionString }) => {
-        const workerPort = await reservePort();
-        const workerBaseUrl = `http://127.0.0.1:${workerPort}`;
-        const sandbox = await startGmailSandbox("sandbox@mailmon.dev");
-        const webhookReceiver = await startWebhookReceiver();
-        let workerRuntime: WorkerRuntimeHandle | null = null;
-        let apiRuntime: ReturnType<typeof createApiRuntime> | null = null;
+  it("connects a sandbox mailbox, syncs a new message, and delivers a webhook through the real runtimes", async () => {
+    await withIsolatedDatabasePromise(async ({ connectionString }) => {
+      const workerPort = await reservePort();
+      const workerBaseUrl = `http://127.0.0.1:${workerPort}`;
+      const sandbox = await startGmailSandbox("sandbox@mailmon.dev");
+      const webhookReceiver = await startWebhookReceiver();
+      let workerRuntime: WorkerRuntimeHandle | null = null;
+      let apiRuntime: ReturnType<typeof createApiRuntime> | null = null;
 
-        try {
-          await seedWorkspaceApiKey(connectionString);
+      try {
+        await seedWorkspaceApiKey(connectionString);
 
-          const workerEnv: WorkerEnv = {
-            asyncTransportMode: "local",
-            databaseUrl: connectionString,
-            gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
-            gmailOauthClientId: "sandbox-client-id",
-            gmailOauthClientSecret: "sandbox-client-secret",
-            gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
-            gmailRefreshTokenEncryptionKeyId: "primary",
-            gmailRefreshTokenPreviousEncryptionKeys: [],
-            gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
-            gmailPubSubTopicName: null,
-            gcpProjectId: null,
-            gcpRegion: null,
-            gcpTasksAudience: null,
-            gcpTasksServiceAccountEmail: null,
-            gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
-            host: "127.0.0.1",
-            nodeEnv: "test",
-            port: workerPort,
-            redisUrl: null,
-            workerBaseUrl,
-          };
+        const workerEnv: WorkerEnv = {
+          asyncTransportMode: "local",
+          databaseUrl: connectionString,
+          gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
+          gmailOauthClientId: "sandbox-client-id",
+          gmailOauthClientSecret: "sandbox-client-secret",
+          gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
+          gmailRefreshTokenEncryptionKeyId: "primary",
+          gmailRefreshTokenPreviousEncryptionKeys: [],
+          gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
+          gmailPubSubTopicName: null,
+          gcpProjectId: null,
+          gcpRegion: null,
+          gcpTasksAudience: null,
+          gcpTasksServiceAccountEmail: null,
+          gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
+          host: "127.0.0.1",
+          nodeEnv: "test",
+          port: workerPort,
+          redisUrl: null,
+          workerBaseUrl,
+        };
 
-          workerRuntime = await startWorkerRuntime(workerEnv);
+        workerRuntime = await startWorkerRuntime(workerEnv);
 
-          const apiEnv: Pick<
-            ApiEnv,
-            | "asyncTransportMode"
-            | "databaseUrl"
-            | "gmailApiBaseUrl"
-            | "gmailOauthAuthorizeUrl"
-            | "gmailOauthClientId"
-            | "gmailOauthClientSecret"
-            | "gmailRefreshTokenEncryptionKey"
-            | "gmailRefreshTokenEncryptionKeyId"
-            | "gmailRefreshTokenPreviousEncryptionKeys"
-            | "gmailOauthTokenUrl"
-            | "nodeEnv"
-            | "workerBaseUrl"
-          > = {
-            asyncTransportMode: "local",
-            databaseUrl: connectionString,
-            gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
-            gmailOauthAuthorizeUrl: `${sandbox.baseUrl}/oauth/authorize`,
-            gmailOauthClientId: "sandbox-client-id",
-            gmailOauthClientSecret: "sandbox-client-secret",
-            gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
-            gmailRefreshTokenEncryptionKeyId: "primary",
-            gmailRefreshTokenPreviousEncryptionKeys: [],
-            gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
-            nodeEnv: "test",
-            workerBaseUrl,
-          };
+        const apiEnv: Pick<
+          ApiEnv,
+          | "asyncTransportMode"
+          | "databaseUrl"
+          | "gmailApiBaseUrl"
+          | "gmailOauthAuthorizeUrl"
+          | "gmailOauthClientId"
+          | "gmailOauthClientSecret"
+          | "gmailRefreshTokenEncryptionKey"
+          | "gmailRefreshTokenEncryptionKeyId"
+          | "gmailRefreshTokenPreviousEncryptionKeys"
+          | "gmailOauthTokenUrl"
+          | "nodeEnv"
+          | "workerBaseUrl"
+        > = {
+          asyncTransportMode: "local",
+          databaseUrl: connectionString,
+          gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
+          gmailOauthAuthorizeUrl: `${sandbox.baseUrl}/oauth/authorize`,
+          gmailOauthClientId: "sandbox-client-id",
+          gmailOauthClientSecret: "sandbox-client-secret",
+          gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
+          gmailRefreshTokenEncryptionKeyId: "primary",
+          gmailRefreshTokenPreviousEncryptionKeys: [],
+          gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
+          nodeEnv: "test",
+          workerBaseUrl,
+        };
 
-          apiRuntime = createApiRuntime(apiEnv);
+        apiRuntime = createApiRuntime(apiEnv);
 
-          const app = createApp(apiRuntime);
-          const apiHeaders = {
-            authorization: `Bearer ${primaryApiKey}`,
-            "content-type": "application/json",
-          };
-          const apiOrigin = "http://api.mailmon.test";
+        const app = createApp(apiRuntime);
+        const apiHeaders = {
+          authorization: `Bearer ${primaryApiKey}`,
+          "content-type": "application/json",
+        };
+        const apiOrigin = "http://api.mailmon.test";
 
-          const connectSessionResponse = await app.request(
-            `${apiOrigin}/v1/mailboxes/connect-sessions`,
-            {
-              method: "POST",
-              headers: apiHeaders,
-              body: JSON.stringify({
-                provider: "gmail",
-                tenantExternalId: "tenant_sandbox",
-                mailboxExternalId: "mailbox_sandbox",
-                redirectUrl: "https://app.example.com/settings/gmail/callback",
-              }),
-            },
-          );
-
-          expect(connectSessionResponse.status).toBe(201);
-
-          const connectSession = parseConnectSessionResponse(
-            await readJsonResponse(connectSessionResponse),
-          );
-
-          const hostedConnectResponse = await app.request(connectSession.connectUrl);
-
-          expect(hostedConnectResponse.status).toBe(302);
-
-          const authorizationUrl = hostedConnectResponse.headers.get("location");
-
-          expect(authorizationUrl).not.toBeNull();
-
-          const sandboxAuthorizationResponse = await fetch(authorizationUrl!, {
-            redirect: "manual",
-          });
-
-          expect(sandboxAuthorizationResponse.status).toBe(302);
-          expect(sandbox.authorizationRequests).toHaveLength(1);
-          expect(sandbox.authorizationRequests[0]?.searchParams.get("client_id")).toBe(
-            "sandbox-client-id",
-          );
-          expect(sandbox.authorizationRequests[0]?.searchParams.get("state")).toBe(connectSession.id);
-
-          const callbackUrl = sandboxAuthorizationResponse.headers.get("location");
-
-          expect(callbackUrl).not.toBeNull();
-
-          if (callbackUrl === null) {
-            throw new Error("Expected the sandbox authorization step to redirect to the callback.");
-          }
-
-          const callbackResponse = await app.request(callbackUrl);
-
-          expect(callbackResponse.status).toBe(302);
-
-          const frontendRedirectLocation = callbackResponse.headers.get("location");
-
-          if (frontendRedirectLocation === null) {
-            throw new Error("Expected the callback to redirect back to the client redirect URL.");
-          }
-
-          const frontendRedirectUrl = new URL(frontendRedirectLocation);
-          const mailboxId = frontendRedirectUrl.searchParams.get("mailbox_id");
-
-          expect(frontendRedirectUrl.searchParams.get("status")).toBe("success");
-          expect(frontendRedirectUrl.searchParams.get("created")).toBe("true");
-
-          if (mailboxId === null) {
-            throw new Error("Expected the hosted connect callback to return a mailbox_id.");
-          }
-
-          const initialMessagesResponse = await app.request(
-            `${apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
-            {
-              headers: {
-                authorization: `Bearer ${primaryApiKey}`,
-              },
-            },
-          );
-
-          expect(initialMessagesResponse.status).toBe(200);
-          await expect(initialMessagesResponse.json()).resolves.toEqual({
-            object: "list",
-            data: [],
-            nextCursor: null,
-          });
-
-          const webhookEndpointResponse = await app.request(`${apiOrigin}/v1/webhook-endpoints`, {
+        const connectSessionResponse = await app.request(
+          `${apiOrigin}/v1/mailboxes/connect-sessions`,
+          {
             method: "POST",
             headers: apiHeaders,
             body: JSON.stringify({
-              url: webhookReceiver.url,
-              description: "sandbox e2e",
+              provider: "gmail",
+              tenantExternalId: "tenant_sandbox",
+              mailboxExternalId: "mailbox_sandbox",
+              redirectUrl: "https://app.example.com/settings/gmail/callback",
             }),
-          });
+          },
+        );
 
-          expect(webhookEndpointResponse.status).toBe(201);
+        expect(connectSessionResponse.status).toBe(201);
 
-          const webhookEndpoint = parseCreatedWebhookEndpointResponse(
-            await readJsonResponse(webhookEndpointResponse),
-          );
+        const connectSession = parseConnectSessionResponse(
+          await readJsonResponse(connectSessionResponse),
+        );
 
-          const subscriptionResponse = await app.request(
-            `${apiOrigin}/v1/webhook-endpoints/${webhookEndpoint.id}/subscriptions`,
-            {
-              method: "POST",
-              headers: apiHeaders,
-              body: JSON.stringify({
-                mailbox_ids: [mailboxId],
-                event_types: ["message.created"],
-              }),
-            },
-          );
+        const hostedConnectResponse = await app.request(connectSession.connectUrl);
 
-          expect(subscriptionResponse.status).toBe(201);
+        expect(hostedConnectResponse.status).toBe(302);
 
-          const sentMessage = await sandbox.sendEmail({
-            to: sandbox.emailAddress,
-            fromEmail: "alerts@sandbox.mailmon.dev",
-            fromName: "Sandbox Alerts",
-            subject: "Sandbox hello",
-            snippet: "Hello from the sandbox mailbox.",
-          });
+        const authorizationUrl = hostedConnectResponse.headers.get("location");
 
-          const syncResponse = await fetch(`${workerBaseUrl}/internal/sync`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({
-              mailboxId,
-            }),
-          });
+        expect(authorizationUrl).not.toBeNull();
 
-          expect(syncResponse.status).toBe(200);
-          await expect(syncResponse.json()).resolves.toMatchObject({
-            mailboxId,
-            status: "completed",
-            eventsEmitted: 2,
-            nextCursor: sentMessage.historyId,
-          });
+        const sandboxAuthorizationResponse = await fetch(authorizationUrl!, {
+          redirect: "manual",
+        });
 
-          const deliveredWebhook = await waitFor(
-            async () => webhookReceiver.deliveries[0] ?? null,
-            (value) => value !== null,
-          );
+        expect(sandboxAuthorizationResponse.status).toBe(302);
+        expect(sandbox.authorizationRequests).toHaveLength(1);
+        expect(sandbox.authorizationRequests[0]?.searchParams.get("client_id")).toBe(
+          "sandbox-client-id",
+        );
+        expect(sandbox.authorizationRequests[0]?.searchParams.get("state")).toBe(connectSession.id);
 
-          expect(deliveredWebhook?.headers["x-mailmon-event-id"]).toEqual(expect.any(String));
-          expect(deliveredWebhook?.headers["x-mailmon-signature"]).toEqual(expect.any(String));
-          expect(deliveredWebhook?.body).toMatchObject({
-            type: "message.created",
-            workspaceId: primaryWorkspaceId,
-            mailboxId,
-            data: {
-              messageId: `msg_${mailboxId}_${sentMessage.messageId}`,
-              providerMessageId: sentMessage.messageId,
-              providerThreadId: sentMessage.threadId,
-              subject: "Sandbox hello",
-              snippet: "Hello from the sandbox mailbox.",
-              labelIds: ["INBOX", "UNREAD"],
-            },
-          });
+        const callbackUrl = sandboxAuthorizationResponse.headers.get("location");
 
-          const persistedState = await waitFor(
-            () => readMailboxPersistence(connectionString, mailboxId),
-            (value) => value.webhookDeliveries.some((delivery) => delivery.state === "delivered"),
-          );
-          const mailboxEventTypes = persistedState.mailboxEvents.map((event) => event.eventType);
+        expect(callbackUrl).not.toBeNull();
 
-          mailboxEventTypes.sort((left, right) => left.localeCompare(right));
+        if (callbackUrl === null) {
+          throw new Error("Expected the sandbox authorization step to redirect to the callback.");
+        }
 
-          expect(persistedState.mailbox).toMatchObject({
-            id: mailboxId,
-            status: "active",
-            syncState: "healthy",
-            cursor: sentMessage.historyId,
-          });
-          expect(persistedState.messages).toHaveLength(1);
-          expect(persistedState.threads).toHaveLength(1);
-          expect(mailboxEventTypes).toEqual(["message.created", "thread.updated"]);
-          expect(persistedState.webhookDeliveries).toEqual([
-            expect.objectContaining({
-              state: "delivered",
-              lastResponseStatus: 202,
-            }),
-          ]);
+        const callbackResponse = await app.request(callbackUrl);
 
-          const messagesResponse = await app.request(`${apiOrigin}/v1/messages?mailboxId=${mailboxId}`, {
+        expect(callbackResponse.status).toBe(302);
+
+        const frontendRedirectLocation = callbackResponse.headers.get("location");
+
+        if (frontendRedirectLocation === null) {
+          throw new Error("Expected the callback to redirect back to the client redirect URL.");
+        }
+
+        const frontendRedirectUrl = new URL(frontendRedirectLocation);
+        const mailboxId = frontendRedirectUrl.searchParams.get("mailbox_id");
+
+        expect(frontendRedirectUrl.searchParams.get("status")).toBe("success");
+        expect(frontendRedirectUrl.searchParams.get("created")).toBe("true");
+
+        if (mailboxId === null) {
+          throw new Error("Expected the hosted connect callback to return a mailbox_id.");
+        }
+
+        const initialMessagesResponse = await app.request(
+          `${apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
+          {
             headers: {
               authorization: `Bearer ${primaryApiKey}`,
             },
-          });
+          },
+        );
 
-          expect(messagesResponse.status).toBe(200);
-          await expect(messagesResponse.json()).resolves.toEqual({
-            object: "list",
-            data: [
-              {
-                id: `msg_${mailboxId}_${sentMessage.messageId}`,
-                mailboxId,
-                threadId: `thr_${mailboxId}_${sentMessage.threadId}`,
-                providerMessageId: sentMessage.messageId,
-                subject: "Sandbox hello",
-                from: {
-                  name: "Sandbox Alerts",
-                  email: "alerts@sandbox.mailmon.dev",
-                },
-                snippet: "Hello from the sandbox mailbox.",
-                receivedAt: expect.any(String),
-                labelIds: ["INBOX", "UNREAD"],
+        expect(initialMessagesResponse.status).toBe(200);
+        await expect(initialMessagesResponse.json()).resolves.toEqual({
+          object: "list",
+          data: [],
+          nextCursor: null,
+        });
+
+        const webhookEndpointResponse = await app.request(`${apiOrigin}/v1/webhook-endpoints`, {
+          method: "POST",
+          headers: apiHeaders,
+          body: JSON.stringify({
+            url: webhookReceiver.url,
+            description: "sandbox e2e",
+          }),
+        });
+
+        expect(webhookEndpointResponse.status).toBe(201);
+
+        const webhookEndpoint = parseCreatedWebhookEndpointResponse(
+          await readJsonResponse(webhookEndpointResponse),
+        );
+
+        const subscriptionResponse = await app.request(
+          `${apiOrigin}/v1/webhook-endpoints/${webhookEndpoint.id}/subscriptions`,
+          {
+            method: "POST",
+            headers: apiHeaders,
+            body: JSON.stringify({
+              mailbox_ids: [mailboxId],
+              event_types: ["message.created"],
+            }),
+          },
+        );
+
+        expect(subscriptionResponse.status).toBe(201);
+
+        const sentMessage = await sandbox.sendEmail({
+          to: sandbox.emailAddress,
+          fromEmail: "alerts@sandbox.mailmon.dev",
+          fromName: "Sandbox Alerts",
+          subject: "Sandbox hello",
+          snippet: "Hello from the sandbox mailbox.",
+        });
+
+        const syncResponse = await fetch(`${workerBaseUrl}/internal/sync`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mailboxId,
+          }),
+        });
+
+        expect(syncResponse.status).toBe(200);
+        await expect(syncResponse.json()).resolves.toMatchObject({
+          mailboxId,
+          status: "completed",
+          eventsEmitted: 2,
+          nextCursor: sentMessage.historyId,
+        });
+
+        const deliveredWebhook = await waitFor(
+          async () => webhookReceiver.deliveries[0] ?? null,
+          (value) => value !== null,
+        );
+
+        expect(deliveredWebhook?.headers["x-mailmon-event-id"]).toEqual(expect.any(String));
+        expect(deliveredWebhook?.headers["x-mailmon-signature"]).toEqual(expect.any(String));
+        expect(deliveredWebhook?.body).toMatchObject({
+          type: "message.created",
+          workspaceId: primaryWorkspaceId,
+          mailboxId,
+          data: {
+            messageId: `msg_${mailboxId}_${sentMessage.messageId}`,
+            providerMessageId: sentMessage.messageId,
+            providerThreadId: sentMessage.threadId,
+            subject: "Sandbox hello",
+            snippet: "Hello from the sandbox mailbox.",
+            labelIds: ["INBOX", "UNREAD"],
+          },
+        });
+
+        const persistedState = await waitFor(
+          () => readMailboxPersistence(connectionString, mailboxId),
+          (value) => value.webhookDeliveries.some((delivery) => delivery.state === "delivered"),
+        );
+        const mailboxEventTypes = persistedState.mailboxEvents.map((event) => event.eventType);
+
+        mailboxEventTypes.sort((left, right) => left.localeCompare(right));
+
+        expect(persistedState.mailbox).toMatchObject({
+          id: mailboxId,
+          status: "active",
+          syncState: "healthy",
+          cursor: sentMessage.historyId,
+        });
+        expect(persistedState.messages).toHaveLength(1);
+        expect(persistedState.threads).toHaveLength(1);
+        expect(mailboxEventTypes).toEqual(["message.created", "thread.updated"]);
+        expect(persistedState.webhookDeliveries).toEqual([
+          expect.objectContaining({
+            state: "delivered",
+            lastResponseStatus: 202,
+          }),
+        ]);
+
+        const messagesResponse = await app.request(
+          `${apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
+          {
+            headers: {
+              authorization: `Bearer ${primaryApiKey}`,
+            },
+          },
+        );
+
+        expect(messagesResponse.status).toBe(200);
+        await expect(messagesResponse.json()).resolves.toEqual({
+          object: "list",
+          data: [
+            {
+              id: `msg_${mailboxId}_${sentMessage.messageId}`,
+              mailboxId,
+              threadId: `thr_${mailboxId}_${sentMessage.threadId}`,
+              providerMessageId: sentMessage.messageId,
+              subject: "Sandbox hello",
+              from: {
+                name: "Sandbox Alerts",
+                email: "alerts@sandbox.mailmon.dev",
               },
-            ],
-            nextCursor: null,
-          });
-        } finally {
-          await Promise.all([
-            apiRuntime?.dispose(),
-            workerRuntime?.close(),
-            webhookReceiver.close(),
-            sandbox.close(),
-          ]);
-        }
+              snippet: "Hello from the sandbox mailbox.",
+              receivedAt: expect.any(String),
+              labelIds: ["INBOX", "UNREAD"],
+            },
+          ],
+          nextCursor: null,
+        });
+      } finally {
+        await Promise.all([
+          apiRuntime?.dispose(),
+          workerRuntime?.close(),
+          webhookReceiver.close(),
+          sandbox.close(),
+        ]);
+      }
+    });
+  }, 30_000);
+});
+
+describe("sandbox end-to-end resilience matrix", () => {
+  it("moves a mailbox to reconnect_required when the sandbox refresh token is revoked", async () => {
+    await withIsolatedDatabasePromise(async ({ connectionString }) => {
+      const harness = await startSandboxE2eHarness(connectionString, {
+        emailAddress: "reconnect@mailmon.dev",
       });
-    },
-    30_000,
-  );
+
+      try {
+        const mailboxId = await connectSandboxMailbox(harness, {
+          tenantExternalId: "tenant_reconnect",
+          mailboxExternalId: "mailbox_reconnect",
+        });
+
+        await waitFor(
+          () => readMailboxPersistence(connectionString, mailboxId),
+          (value) => value.mailbox?.cursor === "1",
+        );
+
+        harness.sandbox.revokeRefreshToken();
+
+        const reconnectSync = await runWorkerSync(harness.workerBaseUrl, mailboxId);
+
+        expect(reconnectSync.status).toBe(200);
+        expect(reconnectSync.body).toMatchObject({
+          mailboxId,
+          status: "reconnect_required",
+          eventsEmitted: 0,
+          nextCursor: null,
+        });
+
+        const persistedState = await waitFor(
+          () => readMailboxPersistence(connectionString, mailboxId),
+          (value) => value.mailbox?.status === "reconnect_required",
+        );
+
+        expect(persistedState.mailbox).toMatchObject({
+          id: mailboxId,
+          status: "reconnect_required",
+          syncState: "failed",
+          cursor: "1",
+          lastErrorCode: "gmail_token_refresh_reconnect_required",
+          lastErrorRetryable: false,
+        });
+
+        const alreadyReconnectRequiredSync = await runWorkerSync(harness.workerBaseUrl, mailboxId);
+
+        expect(alreadyReconnectRequiredSync.status).toBe(200);
+        expect(alreadyReconnectRequiredSync.body).toMatchObject({
+          mailboxId,
+          status: "reconnect_required",
+          eventsEmitted: 0,
+          nextCursor: null,
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+  }, 30_000);
+
+  it("retries webhook delivery, avoids duplicate incremental work, and preserves newest-first reads", async () => {
+    await withIsolatedDatabasePromise(async ({ connectionString }) => {
+      const harness = await startSandboxE2eHarness(connectionString, {
+        emailAddress: "incremental@mailmon.dev",
+        webhookResponseStatuses: [500, 202, 202],
+      });
+
+      try {
+        const mailboxId = await connectSandboxMailbox(harness, {
+          tenantExternalId: "tenant_incremental",
+          mailboxExternalId: "mailbox_incremental",
+        });
+
+        await waitFor(
+          () => readMailboxPersistence(connectionString, mailboxId),
+          (value) => value.mailbox?.cursor === "1",
+        );
+
+        await createMessageCreatedSubscription(harness, mailboxId);
+
+        const firstMessage = await harness.sandbox.sendEmail({
+          to: harness.sandbox.emailAddress,
+          fromEmail: "alerts@sandbox.mailmon.dev",
+          fromName: "Sandbox Alerts",
+          subject: "First incremental message",
+          snippet: "The first incremental message.",
+        });
+        const firstSync = await runWorkerSync(harness.workerBaseUrl, mailboxId);
+
+        expect(firstSync.status).toBe(200);
+        expect(firstSync.body).toMatchObject({
+          mailboxId,
+          status: "completed",
+          eventsEmitted: 2,
+          nextCursor: firstMessage.historyId,
+        });
+
+        const retriedDeliveryState = await waitFor(
+          () => readMailboxPersistence(connectionString, mailboxId),
+          (value) =>
+            value.webhookDeliveries.some(
+              (delivery) => delivery.state === "delivered" && delivery.attemptCount === 2,
+            ),
+          {
+            timeoutMs: 15_000,
+          },
+        );
+
+        expect(
+          harness.webhookReceiver.deliveries.map((delivery) => delivery.responseStatusCode),
+        ).toEqual([500, 202]);
+        expect(retriedDeliveryState.webhookDeliveries).toEqual([
+          expect.objectContaining({
+            attemptCount: 2,
+            lastResponseStatus: 202,
+            state: "delivered",
+          }),
+        ]);
+
+        const duplicateSync = await runWorkerSync(harness.workerBaseUrl, mailboxId);
+
+        expect(duplicateSync.status).toBe(200);
+        expect(duplicateSync.body).toMatchObject({
+          mailboxId,
+          status: "completed",
+          eventsEmitted: 0,
+          nextCursor: firstMessage.historyId,
+        });
+
+        const stateAfterDuplicateSync = await readMailboxPersistence(connectionString, mailboxId);
+
+        expect(stateAfterDuplicateSync.mailboxEvents).toHaveLength(2);
+        expect(stateAfterDuplicateSync.webhookDeliveries).toHaveLength(1);
+
+        const secondMessage = await harness.sandbox.sendEmail({
+          to: harness.sandbox.emailAddress,
+          fromEmail: "reports@sandbox.mailmon.dev",
+          fromName: "Sandbox Reports",
+          subject: "Second incremental message",
+          snippet: "The second incremental message.",
+        });
+        const secondSync = await runWorkerSync(harness.workerBaseUrl, mailboxId);
+
+        expect(secondSync.status).toBe(200);
+        expect(secondSync.body).toMatchObject({
+          mailboxId,
+          status: "completed",
+          eventsEmitted: 2,
+          nextCursor: secondMessage.historyId,
+        });
+
+        const finalPersistedState = await waitFor(
+          () => readMailboxPersistence(connectionString, mailboxId),
+          (value) =>
+            value.webhookDeliveries.filter((delivery) => delivery.state === "delivered").length ===
+            2,
+        );
+
+        expect(finalPersistedState.mailbox).toMatchObject({
+          id: mailboxId,
+          status: "active",
+          syncState: "healthy",
+          cursor: secondMessage.historyId,
+        });
+        expect(finalPersistedState.mailboxEvents).toHaveLength(4);
+        expect(finalPersistedState.messages).toHaveLength(2);
+        expect(finalPersistedState.threads).toHaveLength(2);
+        expect(
+          harness.webhookReceiver.deliveries.map((delivery) => delivery.responseStatusCode),
+        ).toEqual([500, 202, 202]);
+
+        const messagesResponse = await harness.app.request(
+          `${harness.apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
+          {
+            headers: {
+              authorization: `Bearer ${primaryApiKey}`,
+            },
+          },
+        );
+
+        expect(messagesResponse.status).toBe(200);
+        await expect(messagesResponse.json()).resolves.toMatchObject({
+          object: "list",
+          data: [
+            {
+              id: `msg_${mailboxId}_${secondMessage.messageId}`,
+              providerMessageId: secondMessage.messageId,
+              subject: "Second incremental message",
+            },
+            {
+              id: `msg_${mailboxId}_${firstMessage.messageId}`,
+              providerMessageId: firstMessage.messageId,
+              subject: "First incremental message",
+            },
+          ],
+          nextCursor: null,
+        });
+      } finally {
+        await harness.close();
+      }
+    });
+  }, 45_000);
 });
