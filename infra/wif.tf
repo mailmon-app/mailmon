@@ -8,7 +8,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "${var.name_prefix}-github-provider"
   display_name                       = "GitHub Actions Provider"
-  
+
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.actor"      = "assertion.actor"
@@ -44,5 +44,20 @@ resource "google_project_iam_member" "deployer_editor" {
 resource "google_project_iam_member" "deployer_iam_admin" {
   project = var.project_id
   role    = "roles/resourcemanager.projectIamAdmin"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+# OpenTofu manages IAM bindings on Pub/Sub topics and Cloud Tasks queues. Those
+# resource-level IAM updates require service-specific getIamPolicy/setIamPolicy
+# permissions in addition to general infrastructure editing permissions.
+resource "google_project_iam_member" "deployer_pubsub_editor" {
+  project = var.project_id
+  role    = "roles/pubsub.editor"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
+resource "google_project_iam_member" "deployer_cloud_tasks_queue_admin" {
+  project = var.project_id
+  role    = "roles/cloudtasks.queueAdmin"
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
