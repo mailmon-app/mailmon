@@ -136,8 +136,9 @@ jobs:
       - name: Tofu Apply
         working-directory: infra
         run: |
-          tofu apply -auto-approve \
+          tofu apply -auto-approve -input=false \
             -var="project_id=${{ env.GCP_PROJECT_ID }}" \
+            -var="github_repository=${{ github.repository }}" \
             -var="api_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}" \
             -var="worker_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:${{ github.sha }}" \
             -var="database_password=${{ secrets.DATABASE_PASSWORD }}" \
