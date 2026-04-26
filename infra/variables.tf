@@ -368,3 +368,8 @@ variable "worker_traffic_revision_name" {
   default     = null
   nullable    = true
 }
+
+variable "github_repository" {
+  description = "GitHub repository name in the format 'owner/repo' that is authorized to deploy."
+  type        = string
+}

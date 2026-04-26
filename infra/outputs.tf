@@ -72,3 +72,13 @@ output "worker_service_url" {
   description = "Cloud Run URL for the worker service."
   value       = google_cloud_run_v2_service.worker.uri
 }
+
+output "github_wif_provider_id" {
+  description = "Workload Identity Provider ID for GitHub Actions."
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "github_deployer_service_account_email" {
+  description = "Service account email used by GitHub Actions for deployment."
+  value       = google_service_account.github_deployer.email
+}
