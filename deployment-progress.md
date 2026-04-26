@@ -39,7 +39,7 @@ Secrets have been manually updated in Secret Manager using `gcloud`.
 
 ---
 
-## 🛠 Phase 3: GitHub Configuration (IN PROGRESS)
+## 🛠 Phase 3: GitHub Configuration (COMPLETED)
 
 Repository secrets must be configured in GitHub **Settings > Secrets and variables > Actions**.
 
@@ -53,7 +53,7 @@ Repository secrets must be configured in GitHub **Settings > Secrets and variabl
 
 ---
 
-## 🚀 Phase 4: The Final Push (PENDING)
+## 🚀 Phase 4: The Final Push (COMPLETED)
 
-- [ ] Commit infrastructure changes (`infra/wif.tf`, `infra/variables.tf`, etc.)
-- [ ] Push to `main` branch to trigger the CI/CD pipeline.
+- [x] Commit infrastructure changes (`infra/wif.tf`, `infra/variables.tf`, etc.)
+- [x] Push to `main` branch to trigger the CI/CD pipeline.
