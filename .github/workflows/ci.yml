@@ -137,10 +137,11 @@ jobs:
         working-directory: infra
         run: |
           tofu apply -auto-approve -input=false \
-            -target=google_project_iam_member.deployer_pubsub_editor \
+            -target=google_project_iam_member.deployer_pubsub_admin \
             -target=google_project_iam_member.deployer_cloud_tasks_queue_admin \
             -var="project_id=${{ env.GCP_PROJECT_ID }}" \
             -var="github_repository=${{ github.repository }}" \
+            -var="deployment_service_account_email=${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}" \
             -var="api_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}" \
             -var="worker_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:${{ github.sha }}" \
             -var="database_password=${{ secrets.DATABASE_PASSWORD }}" \
@@ -155,6 +156,7 @@ jobs:
           tofu apply -auto-approve -input=false \
             -var="project_id=${{ env.GCP_PROJECT_ID }}" \
             -var="github_repository=${{ github.repository }}" \
+            -var="deployment_service_account_email=${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}" \
             -var="api_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}" \
             -var="worker_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:${{ github.sha }}" \
             -var="database_password=${{ secrets.DATABASE_PASSWORD }}" \

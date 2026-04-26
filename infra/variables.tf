@@ -136,6 +136,13 @@ variable "database_version" {
   default     = "POSTGRES_16"
 }
 
+variable "deployment_service_account_email" {
+  description = "Optional service account email used by CI/CD to run OpenTofu. Defaults to the Terraform-managed GitHub deployer service account."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "environment" {
   description = "Deployment environment name."
   type        = string

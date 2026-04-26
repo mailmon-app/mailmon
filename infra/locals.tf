@@ -3,6 +3,7 @@ locals {
   artifact_repository_id = "${var.name_prefix}-containers"
   database_name          = replace("${var.name_prefix}_${var.environment}", "-", "_")
   database_url_secret_id = "${var.name_prefix}-database-url"
+  deployer_email         = coalesce(var.deployment_service_account_email, "${var.name_prefix}-github-deployer@${var.project_id}.iam.gserviceaccount.com")
   migrations_job_name    = "${var.name_prefix}-migrations"
   worker_service_name    = "${var.name_prefix}-worker"
 
