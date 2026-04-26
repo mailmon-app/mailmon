@@ -5,6 +5,12 @@ resource "google_project_service" "required_api" {
   disable_on_destroy = false
 }
 
+resource "google_project_service_identity" "secret_manager" {
+  provider = google-beta
+  project  = var.project_id
+  service  = "secretmanager.googleapis.com"
+}
+
 data "google_project" "current" {
   project_id = var.project_id
 }
@@ -79,6 +85,7 @@ resource "google_sql_database_instance" "main" {
     disk_size         = var.database_disk_size_gb
     disk_type         = "PD_SSD"
     tier              = var.database_tier
+    edition           = "ENTERPRISE"
 
     backup_configuration {
       enabled                        = true
@@ -353,7 +360,7 @@ resource "google_cloud_run_v2_service" "api" {
 
   name                = local.api_service_name
   location            = var.region
-  deletion_protection = var.cloud_run_deletion_protection
+  deletion_protection = false
   ingress             = var.api_ingress
   labels              = local.labels
 
@@ -380,12 +387,8 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
-        name  = "PORT"
-        value = "8080"
-      }
-
-      env {
         name  = "MAILMON_ASYNC_TRANSPORT_MODE"
+
         value = "gcp"
       }
 
@@ -400,7 +403,7 @@ resource "google_cloud_run_v2_service" "api" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.database_url.secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.database_url.version
           }
         }
       }
@@ -411,7 +414,7 @@ resource "google_cloud_run_v2_service" "api" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.gmail_oauth_client_id.secret_id
-            version = "latest"
+            version = var.gmail_oauth_client_id == null ? "latest" : google_secret_manager_secret_version.gmail_oauth_client_id[0].version
           }
         }
       }
@@ -422,7 +425,7 @@ resource "google_cloud_run_v2_service" "api" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.gmail_oauth_client_secret.secret_id
-            version = "latest"
+            version = var.gmail_oauth_client_secret == null ? "latest" : google_secret_manager_secret_version.gmail_oauth_client_secret[0].version
           }
         }
       }
@@ -479,7 +482,7 @@ resource "google_cloud_run_v2_service" "worker" {
 
   name                = local.worker_service_name
   location            = var.region
-  deletion_protection = var.cloud_run_deletion_protection
+  deletion_protection = false
   ingress             = var.worker_ingress
   labels              = local.labels
 
@@ -511,12 +514,8 @@ resource "google_cloud_run_v2_service" "worker" {
       }
 
       env {
-        name  = "PORT"
-        value = "8080"
-      }
-
-      env {
         name  = "MAILMON_ASYNC_TRANSPORT_MODE"
+
         value = "gcp"
       }
 
@@ -561,7 +560,7 @@ resource "google_cloud_run_v2_service" "worker" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.database_url.secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.database_url.version
           }
         }
       }
@@ -572,7 +571,7 @@ resource "google_cloud_run_v2_service" "worker" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.gmail_oauth_client_id.secret_id
-            version = "latest"
+            version = var.gmail_oauth_client_id == null ? "latest" : google_secret_manager_secret_version.gmail_oauth_client_id[0].version
           }
         }
       }
@@ -583,7 +582,7 @@ resource "google_cloud_run_v2_service" "worker" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.gmail_oauth_client_secret.secret_id
-            version = "latest"
+            version = var.gmail_oauth_client_secret == null ? "latest" : google_secret_manager_secret_version.gmail_oauth_client_secret[0].version
           }
         }
       }
@@ -636,7 +635,7 @@ resource "google_cloud_run_v2_job" "migrations" {
 
   name                = local.migrations_job_name
   location            = var.region
-  deletion_protection = var.cloud_run_deletion_protection
+  deletion_protection = false
   labels              = local.labels
 
   template {
@@ -661,7 +660,7 @@ resource "google_cloud_run_v2_job" "migrations" {
           value_source {
             secret_key_ref {
               secret  = google_secret_manager_secret.database_url.secret_id
-              version = "latest"
+              version = google_secret_manager_secret_version.database_url.version
             }
           }
         }
@@ -734,7 +733,7 @@ resource "google_service_account_iam_member" "tasks_oidc_token_creator" {
 resource "google_kms_crypto_key_iam_member" "secret_manager_encrypter_decrypter" {
   crypto_key_id = google_kms_crypto_key.secret_manager.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
+  member        = "serviceAccount:${google_project_service_identity.secret_manager.email}"
 }
 
 resource "google_pubsub_subscription" "gmail_push_worker" {
