@@ -1,11 +1,12 @@
 {
-  "$schema": "https://v2-9-6.turborepo.dev/schema.json",
+  "$schema": "https://turborepo.dev/schema.json",
   "globalDependencies": [
     ".env.schema",
     ".oxfmtrc.json",
     ".oxlintrc.json",
     "pnpm-workspace.yaml",
-    "tsconfig.base.json"
+    "tsconfig.base.json",
+    "tsconfig.json"
   ],
   "tasks": {
     "build": {
