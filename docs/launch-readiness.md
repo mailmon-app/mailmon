@@ -250,6 +250,7 @@ Must have:
 - auth guide
 - troubleshooting guide
 - production guide
+- deployment guide for the private beta GCP stack
 
 Should have:
 
