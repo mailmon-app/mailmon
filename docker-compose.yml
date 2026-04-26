@@ -1,4 +1,43 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: "@mailmon/api"
+        APP_PATH: "apps/api"
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://mailmon:mailmon@postgres:5432/mailmon
+      - MAILMON_ASYNC_TRANSPORT_MODE=local
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: "@mailmon/worker"
+        APP_PATH: "apps/worker"
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://mailmon:mailmon@postgres:5432/mailmon
+      - MAILMON_ASYNC_TRANSPORT_MODE=local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   postgres:
     image: postgres:17-alpine
     environment:

@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # Required for GCP Workload Identity Federation
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -15,6 +16,7 @@ concurrency:
 
 jobs:
   verify:
+    name: Verify (Lint, Typecheck, Test)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -71,3 +73,78 @@ jobs:
           name: coverage
           path: coverage
           if-no-files-found: error
+
+  build-and-deploy:
+    name: Build & Deploy
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_REGION: us-central1
+      ARTIFACT_REPO: mailmon-containers
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          # Prefer Workload Identity Federation.
+          # Create a provider and service account, then set these secrets.
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            APP_NAME=@mailmon/api
+            APP_PATH=api
+          tags: |
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:latest
+
+      - name: Build and Push Worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: |
+            APP_NAME=@mailmon/worker
+            APP_PATH=worker
+          tags: |
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:${{ github.sha }}
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:latest
+
+      - name: Setup Tofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu Init
+        working-directory: infra
+        run: tofu init
+
+      - name: Tofu Apply
+        working-directory: infra
+        run: |
+          tofu apply -auto-approve \
+            -var="project_id=${{ env.GCP_PROJECT_ID }}" \
+            -var="api_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}" \
+            -var="worker_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:${{ github.sha }}" \
+            -var="database_password=${{ secrets.DATABASE_PASSWORD }}" \
+            -var="worker_base_url=${{ secrets.WORKER_BASE_URL }}"
+
+      - name: Run Database Migrations
+        run: |
+          gcloud run jobs execute mailmon-migrations \
+            --region ${{ env.GCP_REGION }} \
+            --wait
