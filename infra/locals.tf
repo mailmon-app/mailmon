@@ -15,6 +15,7 @@ locals {
   migrations_image = coalesce(var.migrations_image, var.api_image)
 
   required_api_services = toset([
+    "cloudresourcemanager.googleapis.com",
     "run.googleapis.com",
     "cloudbuild.googleapis.com",
     "artifactregistry.googleapis.com",
