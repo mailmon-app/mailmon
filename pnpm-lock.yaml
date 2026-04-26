@@ -152,6 +152,8 @@ importers:
         specifier: 'catalog:'
         version: 0.9.1
 
+  apps/docs: {}
+
   apps/worker:
     dependencies:
       '@mailmon/config':

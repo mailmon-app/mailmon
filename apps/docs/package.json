@@ -1,0 +1,8 @@
+{
+  "name": "@mailmon/docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mint dev --port 3333"
+  }
+}
