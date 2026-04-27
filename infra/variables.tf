@@ -36,7 +36,7 @@ variable "api_max_instance_request_concurrency" {
 variable "api_memory" {
   description = "Memory limit for the API Cloud Run container."
   type        = string
-  default     = "512Mi"
+  default     = "1024Mi"
 }
 
 variable "api_min_instance_count" {
@@ -240,7 +240,7 @@ variable "migrations_image" {
 variable "migrations_memory" {
   description = "Memory limit for the migration job container."
   type        = string
-  default     = "512Mi"
+  default     = "1024Mi"
 }
 
 variable "migrations_timeout" {
@@ -369,7 +369,7 @@ variable "worker_max_instance_request_concurrency" {
 variable "worker_memory" {
   description = "Memory limit for the worker Cloud Run container."
   type        = string
-  default     = "512Mi"
+  default     = "1024Mi"
 }
 
 variable "worker_min_instance_count" {
