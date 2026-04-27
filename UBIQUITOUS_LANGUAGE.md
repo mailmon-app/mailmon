@@ -31,6 +31,8 @@
 | Term                 | Definition                                                                   | Aliases to avoid              |
 | -------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
 | **API Key**          | A workspace-scoped secret used to authenticate Mailmon’s server-side API     | Token, credential             |
+| **Live Key**         | An API Key used for production API access with a specific `mm_live_` prefix  | Production Key                |
+| **Test Key**         | An API Key used for sandbox/local development with a `mm_test_` prefix       | Sandbox Key, Dev Key          |
 | **Connect Session**  | A short-lived resource that starts a Mailmon-hosted Gmail authorization flow | OAuth session, auth link      |
 | **Webhook Endpoint** | A customer-managed destination that receives mailbox events                  | Webhook, callback URL         |
 | **Subscription**     | The mailbox-scoped event selection attached to a webhook endpoint            | Listener, binding             |

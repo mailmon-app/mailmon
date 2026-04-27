@@ -35,6 +35,8 @@ Durable decisions that apply across all phases:
   - `POST /internal/sync`
   - `POST /internal/webhook-deliveries`
 - **Schema**:
+  - `workspace_api_keys`
+    - stores hashed keys, prefixes (e.g. `mm_live_`), rotation and revocation state
   - `mailboxes`
     - includes active sync lease fields for owner, acquisition, heartbeat, expiry, and optional current sync run linkage
   - `messages`
@@ -235,16 +237,21 @@ Use the durable mailbox event log as a replay source. Developers should be able 
 
 ## Phase 8: Local Dev And Operator Flows
 
-**User stories**: `mailmon listen --forward-to ...`; replay events into localhost; support deterministic local webhook testing without local Gmail Pub/Sub.
+**User stories**: `mailmon listen --forward-to ...`; replay events into localhost; support deterministic local webhook testing without local Gmail Pub/Sub; manage workspaces and API keys securely from the CLI.
 
 ### What to build
 
-Complete the developer local-dev story. The CLI should become a real operator tool that can forward deliveries to localhost and replay stored events into a local endpoint, with test signatures and deterministic behavior, without requiring local emulation of Pub/Sub, Cloud Tasks, Secret Manager, or Cloud Scheduler.
+Complete the developer local-dev story and back-office operations. The CLI should become a real operator tool that can:
+
+1. Forward deliveries to localhost and replay stored events into a local endpoint, with test signatures and deterministic behavior, without requiring local emulation.
+2. Provide a back-office flow for Workspace and API key management to securely onboard beta users without manual DB updates, returning generated raw keys exactly once and hashing them before storage.
 
 ### Acceptance criteria
 
 - [ ] `mailmon listen --forward-to <url>` forwards Mailmon deliveries to a local endpoint
 - [ ] `mailmon replay --mailbox ... --last ... --forward-to ...` replays stored events into localhost
+- [ ] `mailmon admin workspace create` and `mailmon admin keys create/revoke` commands exist
+- [ ] API keys are generated with secure prefixes (`mm_live_`, `mm_test_`) and stored only as hashes
 - [ ] Local testing does not require local Gmail Pub/Sub or watch infrastructure
 - [ ] Test signatures are supported for local webhook verification
 - [ ] Developers can run control-job behavior manually through CLI or local runtime entrypoints instead of cloud schedulers

@@ -269,8 +269,10 @@ Mailmon exposes a server-side API authenticated via project/workspace API keys.
 
 There are two key types in v1:
 
-- **live secret key**: production API access
-- **test secret key**: sandbox and local development only
+- **live secret key**: production API access (prefix: `mm_live_`)
+- **test secret key**: sandbox and local development only (prefix: `mm_test_`)
+
+Keys support explicit rotation and revocation. A compromised key can be revoked immediately, permanently disabling access. API keys are generated securely, returning the raw string only once, while only a hash and the key prefix are stored durably.
 
 Keys are scoped to a workspace. A workspace owns:
 
