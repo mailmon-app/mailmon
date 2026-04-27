@@ -42,6 +42,7 @@ WORKDIR /app
 RUN corepack enable
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+RUN pnpm add -g turbo@^2
 
 # Set production environment
 ENV NODE_ENV=production
@@ -61,6 +62,9 @@ COPY --from=builder /app/apps ./apps
 # Install only production dependencies
 # Use --ignore-scripts to avoid failing on dev-only prepare scripts
 RUN pnpm install --prod --no-frozen-lockfile --ignore-scripts
+
+# Create .turbo directory to prevent permission errors
+RUN mkdir -p /app/.turbo && chown -R nodejs:nodejs /app/.turbo
 
 USER nodejs
 

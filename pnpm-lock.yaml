@@ -204,6 +204,9 @@ importers:
       '@mailmon/gmail':
         specifier: workspace:*
         version: link:../gmail
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.1(postgres@3.4.9)
@@ -213,10 +216,6 @@ importers:
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
-    devDependencies:
-      drizzle-kit:
-        specifier: ^0.31.10
-        version: 0.31.10
 
   packages/gmail:
     dependencies:
@@ -303,10 +302,10 @@ packages:
     resolution: {integrity: sha512-cBQ7yg/P4+kAp+JFX+9Bk5bc1jG3UMVq8pgtW5VAWBl/yiTjWlCGMKC4UxX2KlpREvjTkvS8BKi1wYw0phWmAQ==}
     hasBin: true
 
-  '@effect/platform-bun@4.0.0-beta.56':
-    resolution: {integrity: sha512-MsCAS+HDHV7Mbv3e2erOlSz1jKZOv55cppKnWmwN+1R6SgwwWK9PZMFBpckideXVeLynwy85+8fqwuPjF2Anpg==}
+  '@effect/platform-bun@4.0.0-beta.57':
+    resolution: {integrity: sha512-Z/nG9KLUAPpd4UZXfjjz2giT0W/9iVItbVRJiQ8WReA6n5CEnBsrrE4ioRYOdamq/vRakxWBgqpG/4Mu6Ac7Hg==}
     peerDependencies:
-      effect: ^4.0.0-beta.56
+      effect: ^4.0.0-beta.57
 
   '@effect/platform-node-shared@0.59.0':
     resolution: {integrity: sha512-3bq2YKKfLY7UFauZSxqZUneCXoA3SMSls82V+0RKunvRlfPuPQW0hVn6t1RkvEdh0PDoygWG2mZXYQa6Iqgp9A==}
@@ -317,11 +316,11 @@ packages:
       '@effect/sql': ^0.51.0
       effect: ^3.21.0
 
-  '@effect/platform-node-shared@4.0.0-beta.56':
-    resolution: {integrity: sha512-bwIGYjdOMhrQZdBqgE5/cJW+k3+/xVmutYFzSZTAlFU0FJRW/ymrMp8hQ+Cj2J+rjuLal0QOh3FRC/YfvmK0jw==}
+  '@effect/platform-node-shared@4.0.0-beta.57':
+    resolution: {integrity: sha512-C976X6f+qHUtLSqcqImuCrjhAHnJV17NC2RvvybsAuDfkyIWU4MyiO2XwgiBeijeNupyr1M/KPKnyjtkNxV9Hw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: ^4.0.0-beta.56
+      effect: ^4.0.0-beta.57
 
   '@effect/platform-node@0.106.0':
     resolution: {integrity: sha512-mpsJK2jNLVd0jQAjHKBo8j3wdKWznSGvfnKBcAuG/9Rr4mb8bMRZFLXHHT9wUP7EvnZ0tDZJgEDxkC+j+ByRag==}
@@ -1786,8 +1785,8 @@ packages:
   effect@3.21.1:
     resolution: {integrity: sha512-bA3TsBd0mByThuCnE6FQqS+L3DLazk4UbE9jp0CqVfIjQl5DKi8sAe93O/ZKeF7clL65fJxcsVGiAKYXdnHByA==}
 
-  effect@4.0.0-beta.56:
-    resolution: {integrity: sha512-VToZmpoEkH4hHFHeHDMPRwsPQY7BOCEY7uy8yI1LaFEtjZ5w3T3S4yDbKFA7L63OhPo+kZdSvL3tBLOLLcmrQA==}
+  effect@4.0.0-beta.57:
+    resolution: {integrity: sha512-rg32VgXnLKaPRs9tbRDaZ5jxmzNY7ojXt85gSHGUTwdlbWH5Ik+OCUY2q14TXliygPGoHwCAvNWS4bQJOqf00g==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -2707,10 +2706,10 @@ snapshots:
 
   '@effect/language-service@0.83.1': {}
 
-  '@effect/platform-bun@4.0.0-beta.56(effect@4.0.0-beta.56)':
+  '@effect/platform-bun@4.0.0-beta.57(effect@4.0.0-beta.57)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.0-beta.56(effect@4.0.0-beta.56)
-      effect: 4.0.0-beta.56
+      '@effect/platform-node-shared': 4.0.0-beta.57(effect@4.0.0-beta.57)
+      effect: 4.0.0-beta.57
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -2729,10 +2728,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node-shared@4.0.0-beta.56(effect@4.0.0-beta.56)':
+  '@effect/platform-node-shared@4.0.0-beta.57(effect@4.0.0-beta.57)':
     dependencies:
       '@types/ws': 8.18.1
-      effect: 4.0.0-beta.56
+      effect: 4.0.0-beta.57
       ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
@@ -3674,8 +3673,8 @@ snapshots:
 
   effect-solutions@0.5.2:
     dependencies:
-      '@effect/platform-bun': 4.0.0-beta.56(effect@4.0.0-beta.56)
-      effect: 4.0.0-beta.56
+      '@effect/platform-bun': 4.0.0-beta.57(effect@4.0.0-beta.57)
+      effect: 4.0.0-beta.57
       gray-matter: 4.0.3
       picocolors: 1.1.1
     transitivePeerDependencies:
@@ -3687,7 +3686,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       fast-check: 3.23.2
 
-  effect@4.0.0-beta.56:
+  effect@4.0.0-beta.57:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.7.0
