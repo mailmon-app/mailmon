@@ -179,13 +179,6 @@ const startLegacyBullmqWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRun
 
 const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHandle> => {
   const effectRuntime = createWorkerProcessorRuntime(env);
-  const recoveredWebhookDeliveries = await effectRuntime.recoverWebhookDeliveries();
-
-  if (recoveredWebhookDeliveries.length > 0) {
-    console.log(
-      `recovered ${recoveredWebhookDeliveries.length} durable webhook deliveries for retry scheduling`,
-    );
-  }
   const httpRuntime = await startWorkerHttpRuntime({
     asyncTransportMode: env.asyncTransportMode,
     host: env.host,
@@ -199,6 +192,19 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
   console.log(
     `worker listening on http://${httpRuntime.host}:${httpRuntime.port} using ${env.asyncTransportMode} async transport`,
   );
+
+  void effectRuntime
+    .recoverWebhookDeliveries()
+    .then((recoveredWebhookDeliveries) => {
+      if (recoveredWebhookDeliveries.length > 0) {
+        console.log(
+          `recovered ${recoveredWebhookDeliveries.length} durable webhook deliveries for retry scheduling`,
+        );
+      }
+    })
+    .catch((error: unknown) => {
+      console.error("failed to recover durable webhook deliveries after worker startup", error);
+    });
 
   return {
     close: async () => {

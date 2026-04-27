@@ -173,6 +173,11 @@ variable "gmail_oauth_client_id" {
   default     = null
   nullable    = true
   sensitive   = true
+
+  validation {
+    condition     = var.gmail_oauth_client_id == null || length(var.gmail_oauth_client_id) > 0
+    error_message = "gmail_oauth_client_id must be null or a non-empty string."
+  }
 }
 
 variable "gmail_oauth_client_secret" {
@@ -181,6 +186,11 @@ variable "gmail_oauth_client_secret" {
   default     = null
   nullable    = true
   sensitive   = true
+
+  validation {
+    condition     = var.gmail_oauth_client_secret == null || length(var.gmail_oauth_client_secret) > 0
+    error_message = "gmail_oauth_client_secret must be null or a non-empty string."
+  }
 }
 
 variable "gmail_refresh_token_encryption_key" {
@@ -189,6 +199,11 @@ variable "gmail_refresh_token_encryption_key" {
   default     = null
   nullable    = true
   sensitive   = true
+
+  validation {
+    condition     = var.gmail_refresh_token_encryption_key == null || length(var.gmail_refresh_token_encryption_key) > 0
+    error_message = "gmail_refresh_token_encryption_key must be null or a non-empty string."
+  }
 }
 
 variable "labels" {

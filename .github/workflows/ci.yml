@@ -135,7 +135,22 @@ jobs:
 
       - name: Tofu Bootstrap Deployer IAM
         working-directory: infra
+        env:
+          GMAIL_OAUTH_CLIENT_ID: ${{ secrets.GMAIL_OAUTH_CLIENT_ID }}
+          GMAIL_OAUTH_CLIENT_SECRET: ${{ secrets.GMAIL_OAUTH_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: ${{ secrets.GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY }}
         run: |
+          secret_args=()
+          if [ -n "$GMAIL_OAUTH_CLIENT_ID" ]; then
+            secret_args+=("-var=gmail_oauth_client_id=${GMAIL_OAUTH_CLIENT_ID}")
+          fi
+          if [ -n "$GMAIL_OAUTH_CLIENT_SECRET" ]; then
+            secret_args+=("-var=gmail_oauth_client_secret=${GMAIL_OAUTH_CLIENT_SECRET}")
+          fi
+          if [ -n "$GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY" ]; then
+            secret_args+=("-var=gmail_refresh_token_encryption_key=${GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY}")
+          fi
+
           tofu apply -auto-approve -input=false \
             -target=google_project_iam_member.deployer_pubsub_admin \
             -target=google_project_iam_member.deployer_cloud_tasks_queue_admin \
@@ -145,14 +160,30 @@ jobs:
             -var="api_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}" \
             -var="worker_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:${{ github.sha }}" \
             -var="database_password=${{ secrets.DATABASE_PASSWORD }}" \
-            -var="worker_base_url=${{ secrets.WORKER_BASE_URL }}"
+            -var="worker_base_url=${{ secrets.WORKER_BASE_URL }}" \
+            "${secret_args[@]}"
 
       - name: Wait For Deployer IAM Propagation
         run: sleep 30
 
       - name: Tofu Apply
         working-directory: infra
+        env:
+          GMAIL_OAUTH_CLIENT_ID: ${{ secrets.GMAIL_OAUTH_CLIENT_ID }}
+          GMAIL_OAUTH_CLIENT_SECRET: ${{ secrets.GMAIL_OAUTH_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: ${{ secrets.GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY }}
         run: |
+          secret_args=()
+          if [ -n "$GMAIL_OAUTH_CLIENT_ID" ]; then
+            secret_args+=("-var=gmail_oauth_client_id=${GMAIL_OAUTH_CLIENT_ID}")
+          fi
+          if [ -n "$GMAIL_OAUTH_CLIENT_SECRET" ]; then
+            secret_args+=("-var=gmail_oauth_client_secret=${GMAIL_OAUTH_CLIENT_SECRET}")
+          fi
+          if [ -n "$GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY" ]; then
+            secret_args+=("-var=gmail_refresh_token_encryption_key=${GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY}")
+          fi
+
           tofu apply -auto-approve -input=false \
             -var="project_id=${{ env.GCP_PROJECT_ID }}" \
             -var="github_repository=${{ github.repository }}" \
@@ -160,7 +191,8 @@ jobs:
             -var="api_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/api:${{ github.sha }}" \
             -var="worker_image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/worker:${{ github.sha }}" \
             -var="database_password=${{ secrets.DATABASE_PASSWORD }}" \
-            -var="worker_base_url=${{ secrets.WORKER_BASE_URL }}"
+            -var="worker_base_url=${{ secrets.WORKER_BASE_URL }}" \
+            "${secret_args[@]}"
 
       - name: Run Database Migrations
         run: |
