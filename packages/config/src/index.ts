@@ -136,6 +136,7 @@ export interface ApiEnv extends CommonEnv {
   readonly gmailRefreshTokenEncryptionKeyId: string;
   readonly gmailRefreshTokenPreviousEncryptionKeys: ReadonlyArray<GmailRefreshTokenPreviousEncryptionKey>;
   readonly gmailOauthTokenUrl: string;
+  readonly host: string;
   readonly port: number;
   readonly workerBaseUrl: string;
 }
@@ -201,6 +202,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
       gmailRefreshTokenEncryptionKeyId: loadGmailRefreshTokenEncryptionKeyId,
       gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
       gmailOauthTokenUrl: loadGmailOauthTokenUrl,
+      host: loadHost,
       nodeEnv: loadNodeEnv,
       port: loadPort(3000),
       workerBaseUrl: loadMailboxWorkerBaseUrl,
@@ -218,6 +220,10 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
           config.gmailRefreshTokenPreviousEncryptionKeys,
         ),
         gmailOauthTokenUrl: config.gmailOauthTokenUrl,
+        host: Option.match(config.host, {
+          onNone: () => (config.asyncTransportMode === "gcp" ? "0.0.0.0" : "127.0.0.1"),
+          onSome: (value) => value,
+        }),
         nodeEnv: config.nodeEnv,
         port: config.port,
         workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
@@ -236,6 +242,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
     gmailRefreshTokenEncryptionKeyId: "primary",
     gmailRefreshTokenPreviousEncryptionKeys: [],
     gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
+    host: "127.0.0.1",
     nodeEnv: "test",
     port: 3000,
     workerBaseUrl: "http://127.0.0.1:3001",

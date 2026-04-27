@@ -387,9 +387,14 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
-        name  = "MAILMON_ASYNC_TRANSPORT_MODE"
+        name = "MAILMON_ASYNC_TRANSPORT_MODE"
 
         value = "gcp"
+      }
+
+      env {
+        name  = "HOST"
+        value = "0.0.0.0"
       }
 
       env {
@@ -514,7 +519,7 @@ resource "google_cloud_run_v2_service" "worker" {
       }
 
       env {
-        name  = "MAILMON_ASYNC_TRANSPORT_MODE"
+        name = "MAILMON_ASYNC_TRANSPORT_MODE"
 
         value = "gcp"
       }

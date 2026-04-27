@@ -26,6 +26,7 @@ describe("ApiConfig", () => {
         gmailRefreshTokenEncryptionKeyId: "primary",
         gmailRefreshTokenPreviousEncryptionKeys: [],
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
+        host: "127.0.0.1",
         nodeEnv: "test",
         port: 3000,
         workerBaseUrl: "http://127.0.0.1:3001",
@@ -121,6 +122,26 @@ describe("WorkerConfig", () => {
       ),
     ).rejects.toThrow("MAILMON_WORKER_BASE_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp");
   });
+
+  it.effect("binds the api to all interfaces in gcp mode by default", () =>
+    Effect.gen(function* () {
+      const config = yield* ApiConfig;
+
+      expect(config.host).toBe("0.0.0.0");
+      expect(config.workerBaseUrl).toBe("https://worker.example.com");
+    }).pipe(
+      Effect.provide(ApiConfig.layer),
+      Effect.withConfigProvider(
+        ConfigProvider.fromJson({
+          DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+          MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+          MAILMON_WORKER_BASE_URL: "https://worker.example.com",
+          NODE_ENV: "test",
+        }),
+      ),
+    ),
+  );
 
   it("requires gcp routing values when worker gcp mode is selected", async () => {
     await expect(

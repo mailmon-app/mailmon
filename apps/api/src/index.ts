@@ -18,9 +18,10 @@ process.once("SIGTERM", shutdown);
 serve(
   {
     fetch: app.fetch,
+    hostname: env.host,
     port: env.port,
   },
   (info) => {
-    console.log(`api listening on http://localhost:${info.port}`);
+    console.log(`api listening on http://${env.host}:${info.port}`);
   },
 );
