@@ -22,9 +22,8 @@
     "@mailmon/core": "workspace:*",
     "@mailmon/gmail": "workspace:*",
     "drizzle-kit": "^0.31.10",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "effect": "catalog:",
     "postgres": "^3.4.9"
-  },
-  "devDependencies": {}
+  }
 }

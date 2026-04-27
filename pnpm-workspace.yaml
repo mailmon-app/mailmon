@@ -3,13 +3,13 @@ packages:
   - packages/*
 
 catalog:
-  "@effect/cli": ^0.75.0
-  "@effect/language-service": ^0.83.1
+  "@effect/cli": ^0.75.1
+  "@effect/language-service": ^0.85.1
   "@effect/platform-node": ^0.106.0
   "@google-cloud/tasks": ^6.2.1
-  "@types/node": ^25.5.0
+  "@types/node": ^25.6.0
   "@varlock/google-secret-manager-plugin": ^0.2.1
-  effect: ^3.21.1
+  effect: ^3.21.2
   typescript: ^6.0.3
   varlock: ^0.9.1
 enableGlobalVirtualStore: true
