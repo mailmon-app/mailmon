@@ -154,7 +154,7 @@ resource "google_secret_manager_secret_version" "database_url" {
   secret = google_secret_manager_secret.database_url.id
 
   secret_data = format(
-    "postgresql://%s:%s@/%s?host=/cloudsql/%s",
+    "postgresql://%s:%s@localhost/%s?host=/cloudsql/%s",
     urlencode(google_sql_user.mailmon.name),
     urlencode(var.database_password),
     urlencode(google_sql_database.mailmon.name),

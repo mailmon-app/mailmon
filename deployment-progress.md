@@ -62,4 +62,4 @@ Repository secrets must be configured in GitHub **Settings > Secrets and variabl
   - [x] Updated `infra/main.tf` to use a more robust `DATABASE_URL` format for unix sockets (`@localhost/` instead of `@/`).
   - [x] Enabled `verbose` and `strict` mode in `packages/db/drizzle.config.ts` for better debugging.
   - [x] Added `DEBUG=drizzle-kit:*` to `db:migrate` script in `packages/db/package.json`.
-  - [x] Switched to `postgresql://` protocol in `DATABASE_URL` and removed `localhost` dummy for broader compatibility.
+  - [x] Switched to `postgresql://` protocol in `DATABASE_URL` and added `localhost` dummy host to satisfy Node's `new URL()` parser used by `postgres.js`.
