@@ -7,4 +7,6 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL ?? "postgres://mailmon:mailmon@localhost:5432/mailmon",
   },
+  verbose: true,
+  strict: true,
 });

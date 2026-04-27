@@ -8,6 +8,7 @@
     "tsconfig.base.json",
     "tsconfig.json"
   ],
+  "globalPassThroughEnv": ["DATABASE_URL", "NODE_ENV"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"]
