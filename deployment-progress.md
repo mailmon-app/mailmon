@@ -61,3 +61,5 @@ Repository secrets must be configured in GitHub **Settings > Secrets and variabl
   - [x] Fixed `turbo.json` to include `DATABASE_URL` and `NODE_ENV` in `globalPassThroughEnv` (Turbo 2.0+ filters env vars by default).
   - [x] Updated `infra/main.tf` to use a more robust `DATABASE_URL` format for unix sockets (`@localhost/` instead of `@/`).
   - [x] Enabled `verbose` and `strict` mode in `packages/db/drizzle.config.ts` for better debugging.
+  - [x] Added `DEBUG=drizzle-kit:*` to `db:migrate` script in `packages/db/package.json`.
+  - [x] Switched to `postgresql://` protocol in `DATABASE_URL` and removed `localhost` dummy for broader compatibility.

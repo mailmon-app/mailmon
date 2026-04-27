@@ -16,7 +16,7 @@
     "format": "oxfmt --config ../../.oxfmtrc.json .",
     "format:check": "oxfmt --config ../../.oxfmtrc.json --check .",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "DEBUG=drizzle-kit:* drizzle-kit migrate"
   },
   "dependencies": {
     "@mailmon/core": "workspace:*",
