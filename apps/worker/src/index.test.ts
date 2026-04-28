@@ -17,6 +17,7 @@ const workerEnvFixture: WorkerEnv = {
   syncDispatchPubSubTopicName: null,
   gcpProjectId: null,
   gcpRegion: null,
+  gcpSchedulerServiceAccountEmail: null,
   gcpTasksAudience: null,
   gcpTasksServiceAccountEmail: null,
   gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",

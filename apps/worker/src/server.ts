@@ -12,11 +12,30 @@ import type {
   SyncMailboxResult,
   WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
+import { OAuth2Client } from "google-auth-library";
+
+interface VerifiedGoogleOidcToken {
+  readonly audience: string | ReadonlyArray<string>;
+  readonly email: string | null;
+  readonly emailVerified: boolean | null;
+  readonly issuer: string | null;
+}
+
+interface GoogleOidcVerifier {
+  readonly verify: (idToken: string, audience: string) => Promise<VerifiedGoogleOidcToken | null>;
+}
+
+interface WorkerInternalAuthOptions {
+  readonly allowedServiceAccountEmails: ReadonlyArray<string>;
+  readonly audience: string;
+  readonly verifier?: GoogleOidcVerifier;
+}
 
 interface WorkerHttpRuntimeOptions {
   readonly host: string;
   readonly port: number;
   readonly asyncTransportMode: AsyncTransportMode;
+  readonly internalAuth?: WorkerInternalAuthOptions;
   readonly processGmailPushNotification: (
     notification: GmailPushNotification,
   ) => Promise<GmailPushNotificationResult>;
@@ -33,6 +52,45 @@ interface WorkerHttpRuntimeHandle {
   readonly port: number;
   readonly transport: "http";
 }
+
+type InternalAuthResult =
+  | {
+      readonly authorized: true;
+    }
+  | {
+      readonly authorized: false;
+      readonly body: {
+        readonly code: string;
+        readonly detail: string;
+      };
+      readonly statusCode: number;
+    };
+
+const googleOidcClient = new OAuth2Client();
+const GOOGLE_OIDC_ISSUERS = new Set(["https://accounts.google.com", "accounts.google.com"]);
+
+const createGoogleOidcVerifier = (): GoogleOidcVerifier => {
+  return {
+    verify: async (idToken, audience) => {
+      const ticket = await googleOidcClient.verifyIdToken({
+        audience,
+        idToken,
+      });
+      const payload = ticket.getPayload();
+
+      if (payload === undefined) {
+        return null;
+      }
+
+      return {
+        audience: payload.aud,
+        email: payload.email ?? null,
+        emailVerified: payload.email_verified ?? null,
+        issuer: payload.iss ?? null,
+      };
+    },
+  };
+};
 
 const readJsonBody = async (request: IncomingMessage) => {
   const chunks: Array<Buffer> = [];
@@ -196,6 +254,143 @@ const sendJson = (response: ServerResponse, statusCode: number, body: unknown) =
   response.end(JSON.stringify(body));
 };
 
+const isInternalRoute = (request: IncomingMessage) => {
+  return typeof request.url === "string" && request.url.startsWith("/internal/");
+};
+
+const extractBearerToken = (authorizationHeader: string | undefined) => {
+  if (authorizationHeader === undefined) {
+    return null;
+  }
+
+  const [scheme, token, extra] = authorizationHeader.split(" ");
+
+  if (scheme !== "Bearer" || token === undefined || token.length === 0 || extra !== undefined) {
+    return null;
+  }
+
+  return token;
+};
+
+const tokenAudienceMatches = (
+  actualAudience: string | ReadonlyArray<string>,
+  expectedAudience: string,
+) => {
+  return Array.isArray(actualAudience)
+    ? actualAudience.includes(expectedAudience)
+    : actualAudience === expectedAudience;
+};
+
+const normalizeEmail = (email: string) => email.toLowerCase();
+
+const authorizeInternalRequest = async (
+  request: IncomingMessage,
+  options: WorkerHttpRuntimeOptions,
+): Promise<InternalAuthResult> => {
+  if (!isInternalRoute(request) || options.asyncTransportMode === "local") {
+    return {
+      authorized: true,
+    };
+  }
+
+  if (options.internalAuth === undefined) {
+    return {
+      authorized: false,
+      body: {
+        code: "worker_internal_auth_not_configured",
+        detail: "Internal worker authentication is not configured.",
+      },
+      statusCode: 500,
+    };
+  }
+
+  const token = extractBearerToken(request.headers.authorization);
+
+  if (token === null) {
+    return {
+      authorized: false,
+      body: {
+        code: "worker_internal_auth_required",
+        detail: "Internal worker requests must include Authorization: Bearer <google_oidc_token>.",
+      },
+      statusCode: 401,
+    };
+  }
+
+  const verifier = options.internalAuth.verifier ?? createGoogleOidcVerifier();
+  let verifiedToken: VerifiedGoogleOidcToken | null;
+
+  try {
+    verifiedToken = await verifier.verify(token, options.internalAuth.audience);
+  } catch {
+    return {
+      authorized: false,
+      body: {
+        code: "worker_internal_auth_invalid",
+        detail: "The internal worker authorization token is invalid.",
+      },
+      statusCode: 401,
+    };
+  }
+
+  if (verifiedToken === null) {
+    return {
+      authorized: false,
+      body: {
+        code: "worker_internal_auth_invalid",
+        detail: "The internal worker authorization token is invalid.",
+      },
+      statusCode: 401,
+    };
+  }
+
+  if (
+    verifiedToken.issuer === null ||
+    !GOOGLE_OIDC_ISSUERS.has(verifiedToken.issuer) ||
+    !tokenAudienceMatches(verifiedToken.audience, options.internalAuth.audience)
+  ) {
+    return {
+      authorized: false,
+      body: {
+        code: "worker_internal_auth_forbidden",
+        detail: "The internal worker authorization token is not trusted for this worker.",
+      },
+      statusCode: 403,
+    };
+  }
+
+  if (verifiedToken.email === null || verifiedToken.emailVerified === false) {
+    return {
+      authorized: false,
+      body: {
+        code: "worker_internal_auth_forbidden",
+        detail: "The internal worker authorization token is missing a verified service account.",
+      },
+      statusCode: 403,
+    };
+  }
+
+  const allowedEmails = new Set(
+    options.internalAuth.allowedServiceAccountEmails.map((email) => normalizeEmail(email)),
+  );
+
+  if (!allowedEmails.has(normalizeEmail(verifiedToken.email))) {
+    return {
+      authorized: false,
+      body: {
+        code: "worker_internal_auth_forbidden",
+        detail:
+          "The internal worker authorization token was issued for an unauthorized service account.",
+      },
+      statusCode: 403,
+    };
+  }
+
+  return {
+    authorized: true,
+  };
+};
+
 const isProblemDetails = (value: unknown): value is ProblemDetails => {
   return (
     typeof value === "object" &&
@@ -248,12 +443,23 @@ const listenServer = (server: Server, host: string, port: number) => {
 export const startWorkerHttpRuntime = async (
   options: WorkerHttpRuntimeOptions,
 ): Promise<WorkerHttpRuntimeHandle> => {
+  if (options.asyncTransportMode !== "local" && options.internalAuth === undefined) {
+    throw new Error("Internal worker authentication is required outside local mode.");
+  }
+
   const handleRequest = async (request: IncomingMessage, response: ServerResponse) => {
     if (request.method === "GET" && request.url === "/health") {
       sendJson(response, 200, {
         status: "ok",
         transportMode: options.asyncTransportMode,
       });
+      return;
+    }
+
+    const authResult = await authorizeInternalRequest(request, options);
+
+    if (!authResult.authorized) {
+      sendJson(response, authResult.statusCode, authResult.body);
       return;
     }
 

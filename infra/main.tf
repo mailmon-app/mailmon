@@ -597,6 +597,11 @@ resource "google_cloud_run_v2_service" "worker" {
       }
 
       env {
+        name  = "MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL"
+        value = google_service_account.scheduler.email
+      }
+
+      env {
         name  = "MAILMON_GCP_TASKS_AUDIENCE"
         value = local.worker_base_url
       }

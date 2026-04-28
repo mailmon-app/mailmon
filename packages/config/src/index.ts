@@ -64,6 +64,9 @@ const loadGcpTasksServiceAccountEmail = Config.option(
   nonEmptyString("MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL"),
 );
 const loadGcpTasksAudience = Config.option(nonEmptyString("MAILMON_GCP_TASKS_AUDIENCE"));
+const loadGcpSchedulerServiceAccountEmail = Config.option(
+  nonEmptyString("MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL"),
+);
 
 const normalizeOptional = <T>(value: Option.Option<T>) => {
   return Option.getOrNull(value);
@@ -159,6 +162,7 @@ export interface WorkerEnv extends CommonEnv {
   readonly syncDispatchPubSubTopicName: string | null;
   readonly gcpProjectId: string | null;
   readonly gcpRegion: string | null;
+  readonly gcpSchedulerServiceAccountEmail: string | null;
   readonly gcpTasksAudience: string | null;
   readonly gcpTasksServiceAccountEmail: string | null;
   readonly gcpWebhookDeliveryQueueId: string;
@@ -287,6 +291,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
       syncDispatchPubSubTopicName: loadSyncDispatchPubSubTopicName,
       gcpProjectId: loadGcpProjectId,
       gcpRegion: loadGcpRegion,
+      gcpSchedulerServiceAccountEmail: loadGcpSchedulerServiceAccountEmail,
       gcpTasksAudience: loadGcpTasksAudience,
       gcpTasksServiceAccountEmail: loadGcpTasksServiceAccountEmail,
       gcpWebhookDeliveryQueueId: loadGcpWebhookDeliveryQueueId,
@@ -312,6 +317,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
         syncDispatchPubSubTopicName: normalizeOptional(config.syncDispatchPubSubTopicName),
         gcpProjectId: normalizeOptional(config.gcpProjectId),
         gcpRegion: normalizeOptional(config.gcpRegion),
+        gcpSchedulerServiceAccountEmail: normalizeOptional(config.gcpSchedulerServiceAccountEmail),
         gcpTasksAudience: normalizeOptional(config.gcpTasksAudience),
         gcpTasksServiceAccountEmail: normalizeOptional(config.gcpTasksServiceAccountEmail),
         gcpWebhookDeliveryQueueId: config.gcpWebhookDeliveryQueueId,
@@ -334,6 +340,20 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
           config.asyncTransportMode === "gcp"
             ? requireGcpValue(config.gcpRegion, "GCP_REGION")
             : config.gcpRegion,
+        gcpSchedulerServiceAccountEmail:
+          config.asyncTransportMode === "gcp"
+            ? requireGcpValue(
+                config.gcpSchedulerServiceAccountEmail,
+                "MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL",
+              )
+            : config.gcpSchedulerServiceAccountEmail,
+        gcpTasksServiceAccountEmail:
+          config.asyncTransportMode === "gcp"
+            ? requireGcpValue(
+                config.gcpTasksServiceAccountEmail,
+                "MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL",
+              )
+            : config.gcpTasksServiceAccountEmail,
         gmailPubSubTopicName:
           config.asyncTransportMode === "gcp"
             ? requireGcpValue(config.gmailPubSubTopicName, "MAILMON_GMAIL_PUBSUB_TOPIC_NAME")
@@ -363,6 +383,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
     syncDispatchPubSubTopicName: null,
     gcpProjectId: null,
     gcpRegion: null,
+    gcpSchedulerServiceAccountEmail: null,
     gcpTasksAudience: null,
     gcpTasksServiceAccountEmail: null,
     gcpWebhookDeliveryQueueId: DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,

@@ -24,6 +24,7 @@ const workerEnvFixture: WorkerEnv = {
   syncDispatchPubSubTopicName: null,
   gcpProjectId: null,
   gcpRegion: null,
+  gcpSchedulerServiceAccountEmail: null,
   gcpTasksAudience: null,
   gcpTasksServiceAccountEmail: null,
   gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
@@ -74,6 +75,42 @@ const defaultProcessGmailPushNotification = async (notification: GmailPushNotifi
     kind: "gmail_push" as const,
     status: "accepted" as const,
   };
+};
+
+const gcpInternalAuth = {
+  allowedServiceAccountEmails: [
+    "scheduler@mailmon-staging.iam.gserviceaccount.com",
+    "tasks@mailmon-staging.iam.gserviceaccount.com",
+  ],
+  audience: "https://worker.example.com",
+  verifier: {
+    verify: async (idToken: string, audience: string) => {
+      if (idToken === "valid-scheduler-token" && audience === "https://worker.example.com") {
+        return {
+          audience,
+          email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
+          emailVerified: true,
+          issuer: "https://accounts.google.com",
+        };
+      }
+
+      if (idToken === "valid-unauthorized-token" && audience === "https://worker.example.com") {
+        return {
+          audience,
+          email: "other@mailmon-staging.iam.gserviceaccount.com",
+          emailVerified: true,
+          issuer: "https://accounts.google.com",
+        };
+      }
+
+      throw new Error("invalid token");
+    },
+  },
+};
+
+const gcpAuthorizationHeaders = {
+  authorization: "Bearer valid-scheduler-token",
+  "content-type": "application/json",
 };
 
 describe("startWorkerHttpRuntime", () => {
@@ -200,6 +237,7 @@ describe("startWorkerHttpRuntime", () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: "gcp",
       host: workerEnvFixture.host,
+      internalAuth: gcpInternalAuth,
       port: workerEnvFixture.port,
       processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
@@ -227,9 +265,7 @@ describe("startWorkerHttpRuntime", () => {
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
+      headers: gcpAuthorizationHeaders,
       body: JSON.stringify({
         message: {
           data: Buffer.from(
@@ -249,6 +285,118 @@ describe("startWorkerHttpRuntime", () => {
       status: "completed",
     });
     expect(syncJobs).toEqual(["mbx_pubsub"]);
+  });
+
+  it("requires internal authentication outside local mode", async () => {
+    await expect(
+      startWorkerHttpRuntime({
+        asyncTransportMode: "gcp",
+        host: workerEnvFixture.host,
+        port: workerEnvFixture.port,
+        processGmailPushNotification: defaultProcessGmailPushNotification,
+        processControlJob: defaultProcessControlJob,
+        processSyncJob: async ({ mailboxId }) => ({
+          mailboxId,
+          syncRunId: "sr_sync",
+          startedAt: "2026-03-25T00:00:00.000Z",
+          status: "completed",
+          completedAt: "2026-03-25T00:00:01.000Z",
+          eventsEmitted: 2,
+          nextCursor: "hist_456",
+        }),
+        processWebhookDelivery: async ({ deliveryId }) => ({
+          deliveryId,
+          status: "delivered",
+          attemptCount: 1,
+          nextAttemptAt: null,
+        }),
+      }),
+    ).rejects.toThrow("Internal worker authentication is required outside local mode.");
+  });
+
+  it("rejects unauthenticated internal requests in gcp mode", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: "gcp",
+      host: workerEnvFixture.host,
+      internalAuth: gcpInternalAuth,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: defaultProcessControlJob,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxId: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "worker_internal_auth_required",
+    });
+  });
+
+  it("rejects internal requests from unauthorized service accounts in gcp mode", async () => {
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: "gcp",
+      host: workerEnvFixture.host,
+      internalAuth: gcpInternalAuth,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: defaultProcessControlJob,
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid-unauthorized-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxId: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "worker_internal_auth_forbidden",
+    });
   });
 
   it("preserves retryable sync failures across the internal http boundary", async () => {
@@ -329,6 +477,7 @@ describe("startWorkerHttpRuntime", () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: "gcp",
       host: workerEnvFixture.host,
+      internalAuth: gcpInternalAuth,
       port: workerEnvFixture.port,
       processGmailPushNotification: async (notification) => {
         notifications.push(notification);
@@ -362,9 +511,7 @@ describe("startWorkerHttpRuntime", () => {
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/gmail-push`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
+      headers: gcpAuthorizationHeaders,
       body: JSON.stringify({
         message: {
           data: Buffer.from(
@@ -401,6 +548,7 @@ describe("startWorkerHttpRuntime", () => {
     const runtime = await startWorkerHttpRuntime({
       asyncTransportMode: "gcp",
       host: workerEnvFixture.host,
+      internalAuth: gcpInternalAuth,
       port: workerEnvFixture.port,
       processGmailPushNotification: defaultProcessGmailPushNotification,
       processControlJob: defaultProcessControlJob,
@@ -424,9 +572,7 @@ describe("startWorkerHttpRuntime", () => {
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/gmail-push`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
+      headers: gcpAuthorizationHeaders,
       body: JSON.stringify({
         message: {
           data: Buffer.from(JSON.stringify({ emailAddress: "demo@mailmon.dev" })).toString(

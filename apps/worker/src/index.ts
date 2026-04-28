@@ -51,6 +51,7 @@ const createWorkerProcessorRuntime = (
     | "gmailPubSubTopicName"
     | "gcpProjectId"
     | "gcpRegion"
+    | "gcpSchedulerServiceAccountEmail"
     | "gcpTasksAudience"
     | "gcpTasksServiceAccountEmail"
     | "gcpWebhookDeliveryQueueId"
@@ -183,6 +184,23 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
   const httpRuntime = await startWorkerHttpRuntime({
     asyncTransportMode: env.asyncTransportMode,
     host: env.host,
+    ...(env.asyncTransportMode === "local"
+      ? {}
+      : {
+          internalAuth: {
+            allowedServiceAccountEmails: [
+              requireGcpWorkerValue(
+                env.gcpSchedulerServiceAccountEmail,
+                "MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL",
+              ),
+              requireGcpWorkerValue(
+                env.gcpTasksServiceAccountEmail,
+                "MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL",
+              ),
+            ],
+            audience: env.gcpTasksAudience ?? env.workerBaseUrl,
+          },
+        }),
     port: env.port,
     processControlJob: effectRuntime.processControlJob,
     processGmailPushNotification: effectRuntime.processGmailPushNotification,
@@ -202,6 +220,8 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
           `recovered ${recoveredWebhookDeliveries.length} durable webhook deliveries for retry scheduling`,
         );
       }
+
+      return undefined;
     })
     .catch((error: unknown) => {
       console.error("failed to recover durable webhook deliveries after worker startup", error);

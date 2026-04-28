@@ -23,6 +23,7 @@
     "@varlock/google-secret-manager-plugin": "catalog:",
     "bullmq": "^5.76.2",
     "effect": "catalog:",
+    "google-auth-library": "catalog:",
     "varlock": "catalog:"
   }
 }

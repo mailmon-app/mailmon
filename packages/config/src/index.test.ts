@@ -64,6 +64,7 @@ describe("WorkerConfig", () => {
         syncDispatchPubSubTopicName: null,
         gcpProjectId: null,
         gcpRegion: null,
+        gcpSchedulerServiceAccountEmail: null,
         gcpTasksAudience: null,
         gcpTasksServiceAccountEmail: null,
         gcpWebhookDeliveryQueueId: DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
@@ -179,6 +180,12 @@ describe("WorkerConfig", () => {
       expect(config.asyncTransportMode).toBe("gcp");
       expect(config.gcpProjectId).toBe("mailmon-staging");
       expect(config.gcpRegion).toBe("us-central1");
+      expect(config.gcpSchedulerServiceAccountEmail).toBe(
+        "scheduler@mailmon-staging.iam.gserviceaccount.com",
+      );
+      expect(config.gcpTasksServiceAccountEmail).toBe(
+        "tasks@mailmon-staging.iam.gserviceaccount.com",
+      );
       expect(config.gcpWebhookDeliveryQueueId).toBe(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID);
       expect(config.gmailPubSubTopicName).toBe("projects/mailmon-staging/topics/gmail-push");
       expect(config.syncDispatchPubSubTopicName).toBe(
@@ -197,6 +204,9 @@ describe("WorkerConfig", () => {
           MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           MAILMON_GMAIL_PUBSUB_TOPIC_NAME: "projects/mailmon-staging/topics/gmail-push",
+          MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL:
+            "scheduler@mailmon-staging.iam.gserviceaccount.com",
+          MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL: "tasks@mailmon-staging.iam.gserviceaccount.com",
           MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME:
             "projects/mailmon-staging/topics/mailbox-sync-dispatch",
           MAILMON_WORKER_BASE_URL: "https://worker.example.com",
