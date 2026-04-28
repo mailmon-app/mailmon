@@ -11,6 +11,7 @@ Mailmon uses:
 - Cloud SQL for PostgreSQL
 - Cloud Tasks for webhook delivery scheduling
 - Pub/Sub for Gmail Push Notifications
+- Pub/Sub for durable mailbox sync dispatch
 - Cloud Scheduler for watch renewal
 - Secret Manager for runtime secrets
 - Cloud KMS for Secret Manager customer-managed encryption
@@ -84,6 +85,9 @@ The infrastructure layer creates:
 - `google_cloud_tasks_queue.webhook_delivery`
 - `google_pubsub_topic.gmail_push`
 - `google_pubsub_subscription.gmail_push_worker`
+- `google_pubsub_topic.mailbox_sync_dispatch`
+- `google_pubsub_subscription.mailbox_sync_dispatch_worker`
+- `google_pubsub_topic.mailbox_sync_dispatch_dead_letter`
 
 Relevant outputs include:
 
@@ -91,6 +95,7 @@ Relevant outputs include:
 - Cloud SQL connection name
 - Artifact Registry repository
 - Cloud Tasks queue name
+- mailbox sync dispatch Pub/Sub topic and subscription names
 - Secret IDs for runtime configuration
 
 ## Environment variables
@@ -103,6 +108,7 @@ The API service runs with:
 
 - `MAILMON_ASYNC_TRANSPORT_MODE=gcp`
 - `MAILMON_WORKER_BASE_URL`
+- `MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME`
 - `DATABASE_URL`
 - `MAILMON_GMAIL_OAUTH_CLIENT_ID`
 - `MAILMON_GMAIL_OAUTH_CLIENT_SECRET`
@@ -115,6 +121,7 @@ The worker service runs with:
 - `MAILMON_ASYNC_TRANSPORT_MODE=gcp`
 - `MAILMON_WORKER_BASE_URL`
 - `MAILMON_GMAIL_PUBSUB_TOPIC_NAME`
+- `MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME`
 - `GCP_PROJECT_ID`
 - `GCP_REGION`
 - `MAILMON_GCP_WEBHOOK_DELIVERY_QUEUE_ID`
@@ -187,9 +194,11 @@ After deployment, confirm:
 - the worker responds on `/health`
 - the API can create or read a mailbox
 - the worker can accept `/internal/gmail-push`
+- the mailbox sync dispatch subscription can push to `/internal/sync`
 - Cloud Tasks can reach `/internal/webhook-deliveries`
 - Cloud Scheduler can reach `/internal/control-jobs`
 - the Gmail Push Notification subscription is active
+- the mailbox sync dispatch subscription and dead-letter topic are active
 - the Cloud SQL connection is working
 - webhook deliveries are being persisted from durable mailbox events
 

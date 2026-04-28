@@ -36,7 +36,7 @@ The repo is organized as:
 - `packages/queue`: async/runtime adapter package. It now contains local async transport layers, a Cloud Tasks-backed webhook delivery scheduler for `gcp`, and still retains Redis/BullMQ compatibility helpers as transitional scaffolding.
 - `packages/config`: shared environment/config layers. It now models async transport mode explicitly (`local`, `gcp`, `legacy_bullmq`) for both API and worker runtimes instead of treating Redis as part of common runtime config.
 - `apps/api`: thin Hono HTTP adapter. It should decode requests, call core use cases, and map failures to HTTP.
-- `apps/worker`: thin async execution adapter. It now uses an internal HTTP runtime for `local` and `gcp`, installs the Cloud Tasks-backed delivery scheduler in `gcp`, and only uses BullMQ in the explicit `legacy_bullmq` fallback mode.
+- `apps/worker`: thin async execution adapter. It uses an internal HTTP runtime for `local` and `gcp`, accepts Pub/Sub push delivery for GCP mailbox sync dispatch, installs the Cloud Tasks-backed delivery scheduler in `gcp`, and only uses BullMQ in the explicit `legacy_bullmq` fallback mode.
 - `apps/cli`: Effect CLI for local development and operator flows.
 
 ## Architecture Rules
@@ -50,7 +50,7 @@ The repo is organized as:
 - Structured API problems live in core and should remain problem-details style.
 - Production async execution is GCP-first: Pub/Sub for wake-ups and mailbox dispatch, Cloud Tasks for directed webhook delivery, Cloud Run Jobs for scheduled control work.
 - Local development should use lightweight local adapters instead of requiring Pub/Sub, Cloud Tasks, or Cloud Scheduler emulation.
-- Worker runtime mode is chosen through `MAILMON_ASYNC_TRANSPORT_MODE`; use `local` for local development, `gcp` for Cloud Tasks-backed delivery scheduling and shared HTTP dispatch in staging/production, and keep `legacy_bullmq` only as fallback scaffolding.
+- Worker runtime mode is chosen through `MAILMON_ASYNC_TRANSPORT_MODE`; use `local` for local development, `gcp` for Pub/Sub-backed mailbox sync dispatch plus Cloud Tasks-backed delivery scheduling in staging/production, and keep `legacy_bullmq` only as fallback scaffolding.
 - Internal worker HTTP routes (`/health`, `/internal/sync`, `/internal/gmail-push`, `/internal/webhook-deliveries`) are transport/runtime interfaces, not domain logic boundaries.
 
 ## Terminology Rules
@@ -88,7 +88,7 @@ Current bootstrap note:
 - Local webhook delivery is now real: durable `webhook_deliveries` are scheduled from mailbox events, retries and endpoint health transitions run through the shared core workflow, and worker startup re-arms pending or stale in-flight deliveries from Postgres.
 - GCP webhook delivery scheduling is now real: `packages/queue` maps the transport-neutral delivery scheduler onto Cloud Tasks with deterministic task IDs, scheduled `notBefore` dispatch, optional OIDC targeting, and idempotent `ALREADY_EXISTS` handling.
 - Local verification for the connect flow still uses a mock Gmail OAuth/API server rather than live Google credentials.
-- `apps/api` now makes async transport mode explicit too: it uses shared HTTP mailbox dispatch for `local` and `gcp`, and fails fast for `legacy_bullmq` instead of pretending that mode works there.
+- `apps/api` now makes async transport mode explicit too: it uses local worker HTTP mailbox dispatch for `local`, Pub/Sub-backed mailbox sync dispatch for `gcp`, and fails fast for `legacy_bullmq` instead of pretending that mode works there.
 - `packages/queue` now contains usable local adapters and the Cloud Tasks-backed `gcp` delivery adapter, but BullMQ/Redis helpers are still present for compatibility.
 - `apps/worker` now runs the local HTTP runtime with in-process retry scheduling and startup recovery for `local`, uses the Cloud Tasks-backed scheduler in `gcp`, and still retains the BullMQ path as `legacy_bullmq` scaffolding.
 - Treat all of those as scaffolding to replace, not as the final production design.

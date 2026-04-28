@@ -14,7 +14,7 @@ The following layers are already implemented and should be treated as the requir
 - **Core workflow tests:** `packages/core/src/use-cases.test.ts` covers mailbox lease acquisition/skip behavior, reconnect-required transitions, lease heartbeat/loss, webhook retry scheduling, and stale completion handling.
 - **Gmail provider contract tests:** `packages/gmail/src/index.test.ts` covers token refresh failures, rate-limit classification, incremental history handling, and snapshot shaping.
 - **DB-backed integration tests:** `packages/db/src/read-model.test.ts`, `packages/db/src/mailbox-event-emission.test.ts`, `packages/db/src/webhook-delivery-runtime.test.ts`, `packages/db/src/gmail-credentials.test.ts`, and related suites exercise real PostgreSQL migrations, pagination/index behavior, transactional sync finalization, event durability, webhook recovery, and reconnect-required persistence.
-- **Queue/runtime adapter tests:** `packages/queue/src/index.test.ts` covers local async dispatch, delayed local webhook scheduling, worker HTTP adapters, and Cloud Tasks task creation/idempotency.
+- **Queue/runtime adapter tests:** `packages/queue/src/index.test.ts` covers local async dispatch, GCP Pub/Sub mailbox sync publishing, delayed local webhook scheduling, worker HTTP adapters, and Cloud Tasks task creation/idempotency.
 
 ## 2. Contract And Resilience Coverage
 
@@ -64,7 +64,7 @@ The following areas are still missing and are the real testing roadmap from here
 
 - Kill a worker during `runMailboxSync` and assert lease expiry plus successful takeover by another worker.
 - Inject PostgreSQL latency and dropped connections with a proxy such as Toxiproxy.
-- Verify that transport-level retries eventually re-dispatch failed worker HTTP requests in deployed environments.
+- Verify that Pub/Sub retries eventually re-dispatch failed mailbox sync push requests in deployed environments.
 
 ### 4.3 Load And Performance Testing
 

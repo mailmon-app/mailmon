@@ -54,6 +54,7 @@ Durable decisions that apply across all phases:
   - duplicate wake-ups are acceptable; only the current mailbox lease holder may execute sync
 - **Messaging model**:
   - Gmail watch notifications arrive through Pub/Sub and only wake the system up
+  - mailbox sync dispatch uses local HTTP adapters in local development and Pub/Sub push delivery to `/internal/sync` in staging/production
   - mailbox sync execution is mailbox-scoped and transport-neutral at the core boundary
   - webhook delivery uses Cloud Tasks semantics in staging/production and local scheduler adapters in local development
 - **Core coordination interfaces**:
@@ -123,6 +124,7 @@ Implement the first narrow but real sync path: one connected mailbox can be sche
 - [x] Canonical message/thread baseline data is written durably
 - [x] Mailbox state transitions to `healthy` after a successful initial sync
 - [x] The initial sync path works with local dispatch adapters in local development and Pub/Sub-backed dispatch in staging/production without changing core workflow code
+- [x] Staging and production mailbox sync dispatches are durably accepted by Pub/Sub before worker execution and dead-lettered after retry exhaustion
 - [x] Duplicate initial-sync dispatches are safe and become normal skipped attempts when another lease holder is active
 
 ---
@@ -280,4 +282,4 @@ Harden the system for production behavior under failure and scale. This slice fo
 - [x] Sync runs, cursor movement, mailbox lag, and webhook delivery degradation are observable
 - [ ] Stuck mailbox execution recovers through lease expiry and takeover
 - [ ] Repeated lease contention or lease loss is observable and alertable
-- [ ] Staging and production have explicit dead-letter and retry-exhaustion handling for sync dispatch and webhook delivery
+- [ ] Staging and production have explicit dead-letter and retry-exhaustion handling for webhook delivery
