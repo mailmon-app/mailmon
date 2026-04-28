@@ -14,10 +14,24 @@ import {
   createHttpGmailSyncProviderLayer,
   createHttpGmailWatchProviderLayer,
 } from "@mailmon/gmail";
-import { createWorkerHttpMailboxSyncDispatcherLayer } from "@mailmon/queue";
-import { Effect, Layer } from "effect";
+import {
+  createGcpMailboxSyncDispatcherLayer,
+  createWorkerHttpMailboxSyncDispatcherLayer,
+} from "@mailmon/queue";
+import { Effect, Layer, Schema } from "effect";
 
 const DEFAULT_WEBHOOK_DELIVERY_TIMEOUT_MS = 5_000;
+const encodeJsonString = (value: unknown) => {
+  return Schema.encodeUnknownSync(Schema.parseJson())(value);
+};
+
+const requireGcpWorkerValue = (value: string | null, name: string) => {
+  if (value === null) {
+    throw new Error(`${name} is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp`);
+  }
+
+  return value;
+};
 
 const createWebhookDeliverySignature = (
   signingSecret: string,
@@ -67,7 +81,7 @@ export const createWebhookDeliverySenderLayer = (
           }, timeoutMs);
 
           try {
-            const body = JSON.stringify(delivery.event);
+            const body = encodeJsonString(delivery.event);
             const timestampSeconds = String(Math.floor(Date.parse(attemptedAt) / 1000));
             const response = await fetchImpl(delivery.url, {
               method: "POST",
@@ -164,6 +178,7 @@ export const createInProcessWebhookDeliverySchedulerLayer = (
 export const createWorkerRuntimeLayer = (
   env: Pick<
     WorkerEnv,
+    | "asyncTransportMode"
     | "databaseUrl"
     | "gmailApiBaseUrl"
     | "gmailOauthClientId"
@@ -174,6 +189,7 @@ export const createWorkerRuntimeLayer = (
     | "gmailOauthTokenUrl"
     | "gmailPubSubTopicName"
     | "nodeEnv"
+    | "syncDispatchPubSubTopicName"
     | "workerBaseUrl"
   >,
 ) => {
@@ -200,9 +216,17 @@ export const createWorkerRuntimeLayer = (
     oauthTokenUrl: env.gmailOauthTokenUrl,
   }).pipe(Layer.provide(persistenceLayer));
   const webhookDeliverySenderLayer = createWebhookDeliverySenderLayer();
-  const mailboxSyncDispatcherLayer = createWorkerHttpMailboxSyncDispatcherLayer({
-    workerBaseUrl: env.workerBaseUrl,
-  });
+  const mailboxSyncDispatcherLayer =
+    env.asyncTransportMode === "gcp"
+      ? createGcpMailboxSyncDispatcherLayer({
+          topicName: requireGcpWorkerValue(
+            env.syncDispatchPubSubTopicName,
+            "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+          ),
+        })
+      : createWorkerHttpMailboxSyncDispatcherLayer({
+          workerBaseUrl: env.workerBaseUrl,
+        });
 
   return Layer.mergeAll(
     persistenceLayer,

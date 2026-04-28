@@ -21,6 +21,7 @@ const workerEnvFixture: WorkerEnv = {
   gmailRefreshTokenPreviousEncryptionKeys: [],
   gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
   gmailPubSubTopicName: null,
+  syncDispatchPubSubTopicName: null,
   gcpProjectId: null,
   gcpRegion: null,
   gcpTasksAudience: null,
@@ -192,6 +193,62 @@ describe("startWorkerHttpRuntime", () => {
     await expect(response.json()).resolves.toMatchObject({
       code: "invalid_mailbox_sync_request",
     });
+  });
+
+  it("decodes GCP Pub/Sub mailbox sync dispatches", async () => {
+    const syncJobs: string[] = [];
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: "gcp",
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: defaultProcessControlJob,
+      processSyncJob: async ({ mailboxId }) => {
+        syncJobs.push(mailboxId);
+
+        return {
+          mailboxId,
+          syncRunId: "sr_sync",
+          startedAt: "2026-03-25T00:00:00.000Z",
+          status: "completed",
+          completedAt: "2026-03-25T00:00:01.000Z",
+          eventsEmitted: 2,
+          nextCursor: "hist_456",
+        };
+      },
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          data: Buffer.from(
+            JSON.stringify({
+              mailboxId: "mbx_pubsub",
+            }),
+          ).toString("base64"),
+          messageId: "pubsub_msg_sync_123",
+        },
+        subscription: "projects/mailmon-staging/subscriptions/mailbox-sync-dispatch-worker",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      mailboxId: "mbx_pubsub",
+      status: "completed",
+    });
+    expect(syncJobs).toEqual(["mbx_pubsub"]);
   });
 
   it("preserves retryable sync failures across the internal http boundary", async () => {

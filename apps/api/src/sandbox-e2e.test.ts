@@ -629,6 +629,7 @@ const startSandboxE2eHarness = async (
       gmailRefreshTokenPreviousEncryptionKeys: [],
       gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
       gmailPubSubTopicName: null,
+      syncDispatchPubSubTopicName: null,
       gcpProjectId: null,
       gcpRegion: null,
       gcpTasksAudience: null,
@@ -656,6 +657,7 @@ const startSandboxE2eHarness = async (
       | "gmailRefreshTokenPreviousEncryptionKeys"
       | "gmailOauthTokenUrl"
       | "nodeEnv"
+      | "syncDispatchPubSubTopicName"
       | "workerBaseUrl"
     > = {
       asyncTransportMode: "local",
@@ -669,6 +671,7 @@ const startSandboxE2eHarness = async (
       gmailRefreshTokenPreviousEncryptionKeys: [],
       gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
       nodeEnv: "test",
+      syncDispatchPubSubTopicName: null,
       workerBaseUrl,
     };
 
@@ -835,6 +838,7 @@ describe("sandbox end-to-end happy path", () => {
           gmailRefreshTokenPreviousEncryptionKeys: [],
           gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
           gmailPubSubTopicName: null,
+          syncDispatchPubSubTopicName: null,
           gcpProjectId: null,
           gcpRegion: null,
           gcpTasksAudience: null,
@@ -862,6 +866,7 @@ describe("sandbox end-to-end happy path", () => {
           | "gmailRefreshTokenPreviousEncryptionKeys"
           | "gmailOauthTokenUrl"
           | "nodeEnv"
+          | "syncDispatchPubSubTopicName"
           | "workerBaseUrl"
         > = {
           asyncTransportMode: "local",
@@ -875,6 +880,7 @@ describe("sandbox end-to-end happy path", () => {
           gmailRefreshTokenPreviousEncryptionKeys: [],
           gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
           nodeEnv: "test",
+          syncDispatchPubSubTopicName: null,
           workerBaseUrl,
         };
 

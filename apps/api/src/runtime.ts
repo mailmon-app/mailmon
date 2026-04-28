@@ -4,8 +4,19 @@ import {
   createAesGcmGmailRefreshTokenCipherLayer,
   createHttpGmailConnectProviderLayer,
 } from "@mailmon/gmail";
-import { createWorkerHttpMailboxSyncDispatcherLayer } from "@mailmon/queue";
+import {
+  createGcpMailboxSyncDispatcherLayer,
+  createWorkerHttpMailboxSyncDispatcherLayer,
+} from "@mailmon/queue";
 import { Layer, ManagedRuntime } from "effect";
+
+const requireGcpApiValue = (value: string | null, name: string) => {
+  if (value === null) {
+    throw new Error(`${name} is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp`);
+  }
+
+  return value;
+};
 
 const createApiRuntimeLayer = (
   env: Pick<
@@ -21,6 +32,7 @@ const createApiRuntimeLayer = (
     | "gmailRefreshTokenPreviousEncryptionKeys"
     | "gmailOauthTokenUrl"
     | "nodeEnv"
+    | "syncDispatchPubSubTopicName"
     | "workerBaseUrl"
   >,
 ) => {
@@ -46,9 +58,17 @@ const createApiRuntimeLayer = (
     );
   }
 
-  const mailboxSyncDispatcherLayer = createWorkerHttpMailboxSyncDispatcherLayer({
-    workerBaseUrl: env.workerBaseUrl,
-  });
+  const mailboxSyncDispatcherLayer =
+    env.asyncTransportMode === "gcp"
+      ? createGcpMailboxSyncDispatcherLayer({
+          topicName: requireGcpApiValue(
+            env.syncDispatchPubSubTopicName,
+            "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+          ),
+        })
+      : createWorkerHttpMailboxSyncDispatcherLayer({
+          workerBaseUrl: env.workerBaseUrl,
+        });
 
   return Layer.mergeAll(persistenceLayer, mailboxConnectProviderLayer, mailboxSyncDispatcherLayer);
 };
@@ -67,6 +87,7 @@ export const createApiRuntime = (
     | "gmailRefreshTokenPreviousEncryptionKeys"
     | "gmailOauthTokenUrl"
     | "nodeEnv"
+    | "syncDispatchPubSubTopicName"
     | "workerBaseUrl"
   >,
 ) => {

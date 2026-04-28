@@ -55,6 +55,7 @@ const createWorkerProcessorRuntime = (
     | "gcpTasksServiceAccountEmail"
     | "gcpWebhookDeliveryQueueId"
     | "nodeEnv"
+    | "syncDispatchPubSubTopicName"
     | "workerBaseUrl"
   >,
 ) => {

@@ -147,6 +147,48 @@ const parseGmailPushNotification = (
   }
 };
 
+const parseMailboxSyncRequest = (
+  payload: unknown,
+): { readonly job: MailboxSyncJobData } | { readonly error: string } => {
+  if (isMailboxSyncJobData(payload)) {
+    return {
+      job: payload,
+    };
+  }
+
+  if (!isRecord(payload) || !isRecord(payload.message)) {
+    return {
+      error: "Expected a mailbox-scoped sync payload or a Pub/Sub push envelope.",
+    };
+  }
+
+  const message = payload.message;
+
+  if (typeof message.data !== "string" || message.data.length === 0) {
+    return {
+      error: "Expected Pub/Sub message.data to contain a base64-encoded mailbox sync payload.",
+    };
+  }
+
+  try {
+    const decoded = decodeBase64Json(message.data);
+
+    if (!isMailboxSyncJobData(decoded)) {
+      return {
+        error: "Expected mailbox sync data to include a non-empty mailboxId field.",
+      };
+    }
+
+    return {
+      job: decoded,
+    };
+  } catch {
+    return {
+      error: "Pub/Sub message.data was not valid base64-encoded JSON.",
+    };
+  }
+};
+
 const sendJson = (response: ServerResponse, statusCode: number, body: unknown) => {
   response.writeHead(statusCode, {
     "content-type": "application/json",
@@ -218,16 +260,17 @@ export const startWorkerHttpRuntime = async (
     if (request.method === "POST" && request.url === "/internal/sync") {
       try {
         const payload = await readJsonBody(request);
+        const parsed = parseMailboxSyncRequest(payload);
 
-        if (!isMailboxSyncJobData(payload)) {
+        if ("error" in parsed) {
           sendJson(response, 400, {
             code: "invalid_mailbox_sync_request",
-            detail: "Expected a mailbox-scoped sync payload with a non-empty mailboxId.",
+            detail: parsed.error,
           });
           return;
         }
 
-        const result = await options.processSyncJob(payload);
+        const result = await options.processSyncJob(parsed.job);
         sendJson(response, 200, result);
       } catch (error) {
         if (isProblemDetails(error)) {
