@@ -162,6 +162,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@hono/node-server':
+        specifier: ^2.0.0
+        version: 2.0.0(hono@4.12.15)
       '@mailmon/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -189,6 +192,9 @@ importers:
       google-auth-library:
         specifier: 'catalog:'
         version: 10.6.2
+      hono:
+        specifier: ^4.12.15
+        version: 4.12.15
       varlock:
         specifier: 'catalog:'
         version: 0.9.1

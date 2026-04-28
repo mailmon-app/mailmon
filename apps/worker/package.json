@@ -15,6 +15,7 @@
     "format:check": "oxfmt --config ../../.oxfmtrc.json --check ."
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.0",
     "@mailmon/config": "workspace:*",
     "@mailmon/core": "workspace:*",
     "@mailmon/db": "workspace:*",
@@ -24,6 +25,7 @@
     "bullmq": "^5.76.2",
     "effect": "catalog:",
     "google-auth-library": "catalog:",
+    "hono": "^4.12.15",
     "varlock": "catalog:"
   }
 }

@@ -1,5 +1,5 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-
+import { serve } from "@hono/node-server";
+import type { ServerType } from "@hono/node-server";
 import type { AsyncTransportMode } from "@mailmon/config";
 import type {
   ControlJobDispatchRequest,
@@ -12,7 +12,9 @@ import type {
   SyncMailboxResult,
   WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
+import { Context, Layer, ManagedRuntime } from "effect";
 import { OAuth2Client } from "google-auth-library";
+import { Hono } from "hono";
 
 interface VerifiedGoogleOidcToken {
   readonly audience: string | ReadonlyArray<string>;
@@ -53,6 +55,17 @@ interface WorkerHttpRuntimeHandle {
   readonly transport: "http";
 }
 
+class WorkerHttpProcessors extends Context.Tag("@mailmon/worker/WorkerHttpProcessors")<
+  WorkerHttpProcessors,
+  Pick<
+    WorkerHttpRuntimeOptions,
+    | "processControlJob"
+    | "processGmailPushNotification"
+    | "processSyncJob"
+    | "processWebhookDelivery"
+  >
+>() {}
+
 type InternalAuthResult =
   | {
       readonly authorized: true;
@@ -92,18 +105,14 @@ const createGoogleOidcVerifier = (): GoogleOidcVerifier => {
   };
 };
 
-const readJsonBody = async (request: IncomingMessage) => {
-  const chunks: Array<Buffer> = [];
+const readJsonRequest = async (request: { readonly text: () => Promise<string> }) => {
+  const body = await request.text();
 
-  for await (const chunk of request) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-  }
-
-  if (chunks.length === 0) {
+  if (body.length === 0) {
     return null;
   }
 
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  return JSON.parse(body) as unknown;
 };
 
 const isMailboxSyncJobData = (value: unknown): value is MailboxSyncJobData => {
@@ -247,17 +256,6 @@ const parseMailboxSyncRequest = (
   }
 };
 
-const sendJson = (response: ServerResponse, statusCode: number, body: unknown) => {
-  response.writeHead(statusCode, {
-    "content-type": "application/json",
-  });
-  response.end(JSON.stringify(body));
-};
-
-const isInternalRoute = (request: IncomingMessage) => {
-  return typeof request.url === "string" && request.url.startsWith("/internal/");
-};
-
 const extractBearerToken = (authorizationHeader: string | undefined) => {
   if (authorizationHeader === undefined) {
     return null;
@@ -284,10 +282,10 @@ const tokenAudienceMatches = (
 const normalizeEmail = (email: string) => email.toLowerCase();
 
 const authorizeInternalRequest = async (
-  request: IncomingMessage,
-  options: WorkerHttpRuntimeOptions,
+  authorizationHeader: string | undefined,
+  options: Pick<WorkerHttpRuntimeOptions, "asyncTransportMode" | "internalAuth">,
 ): Promise<InternalAuthResult> => {
-  if (!isInternalRoute(request) || options.asyncTransportMode === "local") {
+  if (options.asyncTransportMode === "local") {
     return {
       authorized: true,
     };
@@ -304,7 +302,7 @@ const authorizeInternalRequest = async (
     };
   }
 
-  const token = extractBearerToken(request.headers.authorization);
+  const token = extractBearerToken(authorizationHeader);
 
   if (token === null) {
     return {
@@ -404,7 +402,26 @@ const isProblemDetails = (value: unknown): value is ProblemDetails => {
   );
 };
 
-const closeServer = (server: Server) => {
+const createJsonResponse = (body: unknown, status: number) => {
+  return new Response(JSON.stringify(body), {
+    headers: {
+      "content-type": "application/json",
+    },
+    status,
+  });
+};
+
+const createWorkerInternalErrorResponse = (detail: string) => {
+  return createJsonResponse(
+    {
+      code: "worker_internal_error",
+      detail,
+    },
+    500,
+  );
+};
+
+const closeServer = (server: ServerType) => {
   return new Promise<void>((resolve, reject) => {
     server.close((error) => {
       if (error) {
@@ -422,22 +439,179 @@ const closeServer = (server: Server) => {
   });
 };
 
-const listenServer = (server: Server, host: string, port: number) => {
-  return new Promise<number>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, host, () => {
-      const address = server.address();
+type WorkerHttpServerRuntime = Pick<
+  ManagedRuntime.ManagedRuntime<WorkerHttpProcessors, never>,
+  "runPromise"
+>;
 
-      server.removeListener("error", reject);
+const getWorkerHttpProcessors = (runtime: WorkerHttpServerRuntime) => {
+  return runtime.runPromise(WorkerHttpProcessors);
+};
 
-      if (address === null || typeof address === "string") {
-        resolve(port);
-        return;
-      }
+export const createWorkerApp = (
+  options: Pick<WorkerHttpRuntimeOptions, "asyncTransportMode" | "internalAuth">,
+  runtime: WorkerHttpServerRuntime,
+) => {
+  const app = new Hono();
 
-      resolve(address.port);
+  app.get("/health", (context) => {
+    return context.json({
+      status: "ok",
+      transportMode: options.asyncTransportMode,
     });
   });
+
+  app.use("/internal/*", async (context, next) => {
+    const authResult = await authorizeInternalRequest(context.req.header("authorization"), options);
+
+    if (!authResult.authorized) {
+      return createJsonResponse(authResult.body, authResult.statusCode);
+    }
+
+    return next();
+  });
+
+  app.post("/internal/sync", async (context) => {
+    try {
+      const payload = await readJsonRequest(context.req);
+      const parsed = parseMailboxSyncRequest(payload);
+
+      if ("error" in parsed) {
+        return createJsonResponse(
+          {
+            code: "invalid_mailbox_sync_request",
+            detail: parsed.error,
+          },
+          400,
+        );
+      }
+
+      const processors = await getWorkerHttpProcessors(runtime);
+      const result = await processors.processSyncJob(parsed.job);
+
+      return context.json(result);
+    } catch (error) {
+      if (isProblemDetails(error)) {
+        return createJsonResponse(error, error.status);
+      }
+
+      return createWorkerInternalErrorResponse(
+        "The worker failed while processing the sync request.",
+      );
+    }
+  });
+
+  app.post("/internal/gmail-push", async (context) => {
+    if (options.asyncTransportMode === "local") {
+      return context.json(
+        {
+          status: "accepted",
+          detail:
+            "Local mode accepts Gmail push wake-ups, but direct sync dispatch should use /internal/sync.",
+        },
+        202,
+      );
+    }
+
+    try {
+      const payload = await readJsonRequest(context.req);
+      const parsed = parseGmailPushNotification(payload);
+
+      if ("error" in parsed) {
+        return createJsonResponse(
+          {
+            code: "invalid_gmail_push_request",
+            detail: parsed.error,
+          },
+          400,
+        );
+      }
+
+      const processors = await getWorkerHttpProcessors(runtime);
+      const result = await processors.processGmailPushNotification(parsed.notification);
+
+      return context.json(result, 202);
+    } catch (error) {
+      if (isProblemDetails(error)) {
+        return createJsonResponse(error, error.status);
+      }
+
+      return createWorkerInternalErrorResponse(
+        "The worker failed while processing the Gmail push request.",
+      );
+    }
+  });
+
+  app.post("/internal/webhook-deliveries", async (context) => {
+    try {
+      const payload = await readJsonRequest(context.req);
+
+      if (!isWebhookDeliveryScheduleRequest(payload)) {
+        return createJsonResponse(
+          {
+            code: "invalid_webhook_delivery_request",
+            detail:
+              "Expected a webhook delivery payload with non-empty deliveryId and notBefore fields.",
+          },
+          400,
+        );
+      }
+
+      const processors = await getWorkerHttpProcessors(runtime);
+      const result = await processors.processWebhookDelivery(payload);
+
+      return context.json(result);
+    } catch (error) {
+      if (isProblemDetails(error)) {
+        return createJsonResponse(error, error.status);
+      }
+
+      return createWorkerInternalErrorResponse(
+        "The worker failed while processing the webhook delivery request.",
+      );
+    }
+  });
+
+  app.post("/internal/control-jobs", async (context) => {
+    try {
+      const payload = await readJsonRequest(context.req);
+
+      if (!isControlJobDispatchRequest(payload)) {
+        return createJsonResponse(
+          {
+            code: "invalid_control_job_request",
+            detail: "Expected a control job payload with a supported kind.",
+          },
+          400,
+        );
+      }
+
+      const processors = await getWorkerHttpProcessors(runtime);
+      const result = await processors.processControlJob(payload);
+
+      return context.json(result);
+    } catch (error) {
+      if (isProblemDetails(error)) {
+        return createJsonResponse(error, error.status);
+      }
+
+      return createWorkerInternalErrorResponse(
+        "The worker failed while processing the control job request.",
+      );
+    }
+  });
+
+  app.notFound(() => {
+    return createJsonResponse(
+      {
+        code: "worker_route_not_found",
+        detail: "The worker route does not exist.",
+      },
+      404,
+    );
+  });
+
+  return app;
 };
 
 export const startWorkerHttpRuntime = async (
@@ -447,162 +621,45 @@ export const startWorkerHttpRuntime = async (
     throw new Error("Internal worker authentication is required outside local mode.");
   }
 
-  const handleRequest = async (request: IncomingMessage, response: ServerResponse) => {
-    if (request.method === "GET" && request.url === "/health") {
-      sendJson(response, 200, {
-        status: "ok",
-        transportMode: options.asyncTransportMode,
-      });
-      return;
-    }
+  const runtime = ManagedRuntime.make(
+    Layer.succeed(WorkerHttpProcessors, {
+      processControlJob: options.processControlJob,
+      processGmailPushNotification: options.processGmailPushNotification,
+      processSyncJob: options.processSyncJob,
+      processWebhookDelivery: options.processWebhookDelivery,
+    }),
+  );
+  const app = createWorkerApp(options, runtime);
 
-    const authResult = await authorizeInternalRequest(request, options);
-
-    if (!authResult.authorized) {
-      sendJson(response, authResult.statusCode, authResult.body);
-      return;
-    }
-
-    if (request.method === "POST" && request.url === "/internal/sync") {
-      try {
-        const payload = await readJsonBody(request);
-        const parsed = parseMailboxSyncRequest(payload);
-
-        if ("error" in parsed) {
-          sendJson(response, 400, {
-            code: "invalid_mailbox_sync_request",
-            detail: parsed.error,
-          });
-          return;
-        }
-
-        const result = await options.processSyncJob(parsed.job);
-        sendJson(response, 200, result);
-      } catch (error) {
-        if (isProblemDetails(error)) {
-          sendJson(response, error.status, error);
-          return;
-        }
-
-        sendJson(response, 500, {
-          code: "worker_internal_error",
-          detail: "The worker failed while processing the sync request.",
+  const { port, server } = await new Promise<{
+    readonly port: number;
+    readonly server: ServerType;
+  }>((resolve, reject) => {
+    const serverHandle = serve(
+      {
+        fetch: app.fetch,
+        hostname: options.host,
+        port: options.port,
+      },
+      (info) => {
+        serverHandle.removeListener("error", reject);
+        resolve({
+          port: info.port,
+          server: serverHandle,
         });
-      }
-      return;
-    }
+      },
+    );
 
-    if (request.method === "POST" && request.url === "/internal/gmail-push") {
-      if (options.asyncTransportMode === "local") {
-        sendJson(response, 202, {
-          status: "accepted",
-          detail:
-            "Local mode accepts Gmail push wake-ups, but direct sync dispatch should use /internal/sync.",
-        });
-        return;
-      }
-
-      try {
-        const payload = await readJsonBody(request);
-        const parsed = parseGmailPushNotification(payload);
-
-        if ("error" in parsed) {
-          sendJson(response, 400, {
-            code: "invalid_gmail_push_request",
-            detail: parsed.error,
-          });
-          return;
-        }
-
-        const result = await options.processGmailPushNotification(parsed.notification);
-        sendJson(response, 202, result);
-      } catch (error) {
-        if (isProblemDetails(error)) {
-          sendJson(response, error.status, error);
-          return;
-        }
-
-        sendJson(response, 500, {
-          code: "worker_internal_error",
-          detail: "The worker failed while processing the Gmail push request.",
-        });
-      }
-      return;
-    }
-
-    if (request.method === "POST" && request.url === "/internal/webhook-deliveries") {
-      try {
-        const payload = await readJsonBody(request);
-
-        if (!isWebhookDeliveryScheduleRequest(payload)) {
-          sendJson(response, 400, {
-            code: "invalid_webhook_delivery_request",
-            detail:
-              "Expected a webhook delivery payload with non-empty deliveryId and notBefore fields.",
-          });
-          return;
-        }
-
-        const result = await options.processWebhookDelivery(payload);
-        sendJson(response, 200, result);
-      } catch (error) {
-        if (isProblemDetails(error)) {
-          sendJson(response, error.status, error);
-          return;
-        }
-
-        sendJson(response, 500, {
-          code: "worker_internal_error",
-          detail: "The worker failed while processing the webhook delivery request.",
-        });
-      }
-      return;
-    }
-
-    if (request.method === "POST" && request.url === "/internal/control-jobs") {
-      try {
-        const payload = await readJsonBody(request);
-
-        if (!isControlJobDispatchRequest(payload)) {
-          sendJson(response, 400, {
-            code: "invalid_control_job_request",
-            detail: "Expected a control job payload with a supported kind.",
-          });
-          return;
-        }
-
-        const result = await options.processControlJob(payload);
-        sendJson(response, 200, result);
-      } catch (error) {
-        if (isProblemDetails(error)) {
-          sendJson(response, error.status, error);
-          return;
-        }
-
-        sendJson(response, 500, {
-          code: "worker_internal_error",
-          detail: "The worker failed while processing the control job request.",
-        });
-      }
-      return;
-    }
-
-    sendJson(response, 404, {
-      code: "worker_route_not_found",
-      detail: "The worker route does not exist.",
-    });
-  };
-
-  const server = createServer((request, response) => {
-    void handleRequest(request, response);
+    serverHandle.once("error", reject);
   });
 
-  const actualPort = await listenServer(server, options.host, options.port);
-
   return {
-    close: () => closeServer(server),
+    close: async () => {
+      await closeServer(server);
+      await runtime.dispose();
+    },
     host: options.host,
-    port: actualPort,
+    port,
     transport: "http",
   };
 };
