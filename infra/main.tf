@@ -873,3 +873,27 @@ resource "google_cloud_scheduler_job" "renew_gmail_watches" {
     }
   }
 }
+
+resource "google_cloud_scheduler_job" "recover_stuck_syncs" {
+  depends_on = [google_project_service.required_api]
+
+  name        = "${var.name_prefix}-recover-stuck-syncs"
+  description = "Recovers expired active mailbox sync leases and dispatches fresh syncs."
+  schedule    = var.stuck_sync_recovery_schedule
+  time_zone   = var.stuck_sync_recovery_time_zone
+
+  http_target {
+    uri         = "${local.worker_base_url}/internal/control-jobs"
+    http_method = "POST"
+    body        = base64encode(jsonencode({ kind = "recover_stuck_syncs" }))
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    oidc_token {
+      audience              = local.worker_base_url
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+}

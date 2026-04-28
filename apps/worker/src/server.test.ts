@@ -47,6 +47,18 @@ const defaultProcessControlJob = async (request: ControlJobDispatchRequest) => {
     };
   }
 
+  if (request.kind === "recover_stuck_syncs") {
+    return {
+      completedAt: "2026-03-25T00:00:00.000Z",
+      dispatched: 0,
+      kind: request.kind,
+      recovered: 0,
+      scanned: 0,
+      skippedReconnectRequired: 0,
+      status: "completed" as const,
+    };
+  }
+
   if (request.kind !== "renew_watches") {
     return {
       completedAt: "2026-03-25T00:00:00.000Z",
@@ -715,11 +727,21 @@ describe("startWorkerHttpRuntime", () => {
                 scanned: 2,
                 status: "completed" as const,
               }
-            : {
-                completedAt: "2026-03-25T00:00:00.000Z",
-                kind: request.kind,
-                status: "noop" as const,
-              },
+            : request.kind === "recover_stuck_syncs"
+              ? {
+                  completedAt: "2026-03-25T00:00:00.000Z",
+                  dispatched: 1,
+                  kind: request.kind,
+                  recovered: 1,
+                  scanned: 1,
+                  skippedReconnectRequired: 0,
+                  status: "completed" as const,
+                }
+              : {
+                  completedAt: "2026-03-25T00:00:00.000Z",
+                  kind: request.kind,
+                  status: "noop" as const,
+                },
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",
@@ -754,6 +776,65 @@ describe("startWorkerHttpRuntime", () => {
       renewed: 3,
       status: "completed",
     });
+  });
+
+  it("accepts stuck mailbox sync recovery control jobs", async () => {
+    const controlJobs: ControlJobDispatchRequest[] = [];
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: async (request) => {
+        controlJobs.push(request);
+
+        return {
+          completedAt: "2026-03-25T00:00:00.000Z",
+          dispatched: 1,
+          kind: "recover_stuck_syncs",
+          recovered: 1,
+          scanned: 1,
+          skippedReconnectRequired: 0,
+          status: "completed",
+        };
+      },
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/control-jobs`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        kind: "recover_stuck_syncs",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      dispatched: 1,
+      kind: "recover_stuck_syncs",
+      recovered: 1,
+      scanned: 1,
+      status: "completed",
+    });
+    expect(controlJobs).toEqual([{ kind: "recover_stuck_syncs" }]);
   });
 
   it("rejects invalid webhook delivery payloads", async () => {

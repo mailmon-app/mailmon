@@ -16,6 +16,7 @@ import type {
   MailboxConnectAuthorization,
   ControlJobDispatchRequest,
   MailboxRepairTarget,
+  StuckMailboxSyncExecution,
   MailboxWatchRenewalRequest,
   MailboxWatchRenewalResult,
   MailboxWatchRenewalTarget,
@@ -287,6 +288,24 @@ export class MailboxRepairStore extends Context.Tag("@mailmon/core/MailboxRepair
       readonly mailboxId: string;
       readonly observedAt: string;
       readonly resetCursor: boolean;
+    }) => Effect.Effect<boolean>;
+  }
+>() {}
+
+export class MailboxExecutionRecoveryStore extends Context.Tag(
+  "@mailmon/core/MailboxExecutionRecoveryStore",
+)<
+  MailboxExecutionRecoveryStore,
+  {
+    readonly listStuckMailboxSyncExecutions: (params: {
+      readonly limit: number;
+      readonly observedAt: string;
+      readonly staleThresholdMs: number;
+    }) => Effect.Effect<ReadonlyArray<StuckMailboxSyncExecution>>;
+    readonly recoverStuckMailboxSyncExecution: (params: {
+      readonly mailboxId: string;
+      readonly observedAt: string;
+      readonly syncRunId: string | null;
     }) => Effect.Effect<boolean>;
   }
 >() {}

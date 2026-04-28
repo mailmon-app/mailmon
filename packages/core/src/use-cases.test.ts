@@ -11,6 +11,7 @@ import type {
 import { makeProblem } from "./problems.js";
 import {
   MailboxCatalog,
+  MailboxExecutionRecoveryStore,
   MailboxObservabilityCatalog,
   MailboxPushNotificationStore,
   MailboxQueryCatalog,
@@ -42,6 +43,7 @@ import {
   listMailboxSyncRuns,
   listMailboxThreads,
   repairMailboxes,
+  recoverStuckMailboxSyncExecutions,
   recoverWebhookDeliveryScheduling,
   renewExpiringMailboxWatches,
   runControlJob,
@@ -1231,6 +1233,146 @@ describe("repairMailboxes", () => {
         },
       ]);
       expect(repairedMailboxDispatches).toEqual([mailboxFixture.id, "mbx_watch_expired"]);
+    }),
+  );
+});
+
+describe("recoverStuckMailboxSyncExecutions", () => {
+  it.effect("recovers stale leases and dispatches fresh mailbox syncs", () =>
+    Effect.gen(function* () {
+      const recovered: Array<{
+        mailboxId: string;
+        observedAt: string;
+        syncRunId: string | null;
+      }> = [];
+      const dispatches: string[] = [];
+      const observedAt = "2026-04-22T00:00:00.000Z";
+
+      const result = yield* recoverStuckMailboxSyncExecutions({ limit: 10, observedAt }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(MailboxExecutionRecoveryStore, {
+              listStuckMailboxSyncExecutions: () =>
+                Effect.succeed([
+                  {
+                    mailbox: mailboxFixture,
+                    syncRunId: "sr_stuck",
+                  },
+                ]),
+              recoverStuckMailboxSyncExecution: (params) =>
+                Effect.sync(() => {
+                  recovered.push(params);
+                  return true;
+                }),
+            }),
+            Layer.succeed(MailboxSyncDispatcher, {
+              dispatchMailboxSync: (mailboxId: string) =>
+                Effect.sync(() => {
+                  dispatches.push(mailboxId);
+                }),
+            }),
+          ),
+        ),
+      );
+
+      expect(result).toEqual({
+        completedAt: observedAt,
+        dispatched: 1,
+        kind: "recover_stuck_syncs",
+        recovered: 1,
+        scanned: 1,
+        skippedReconnectRequired: 0,
+        status: "completed",
+      });
+      expect(recovered).toEqual([
+        {
+          mailboxId: mailboxFixture.id,
+          observedAt,
+          syncRunId: "sr_stuck",
+        },
+      ]);
+      expect(dispatches).toEqual([mailboxFixture.id]);
+    }),
+  );
+
+  it.effect("ignores active leases that are not returned as stuck", () =>
+    Effect.gen(function* () {
+      const dispatches: string[] = [];
+
+      const result = yield* recoverStuckMailboxSyncExecutions({
+        limit: 10,
+        observedAt: "2026-04-22T00:00:00.000Z",
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(MailboxExecutionRecoveryStore, {
+              listStuckMailboxSyncExecutions: () => Effect.succeed([]),
+              recoverStuckMailboxSyncExecution: () => Effect.succeed(false),
+            }),
+            Layer.succeed(MailboxSyncDispatcher, {
+              dispatchMailboxSync: (mailboxId: string) =>
+                Effect.sync(() => {
+                  dispatches.push(mailboxId);
+                }),
+            }),
+          ),
+        ),
+      );
+
+      expect(result).toMatchObject({
+        dispatched: 0,
+        kind: "recover_stuck_syncs",
+        recovered: 0,
+        scanned: 0,
+        skippedReconnectRequired: 0,
+        status: "completed",
+      });
+      expect(dispatches).toEqual([]);
+    }),
+  );
+
+  it.effect("recovers reconnect-required mailboxes without dispatching fresh syncs", () =>
+    Effect.gen(function* () {
+      const dispatches: string[] = [];
+      const reconnectMailbox: MailboxResource = {
+        ...mailboxFixture,
+        id: "mbx_reconnect",
+        status: "reconnect_required",
+        syncState: "failed",
+      };
+
+      const result = yield* runControlJob({ kind: "recover_stuck_syncs" }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(MailboxExecutionRecoveryStore, {
+              listStuckMailboxSyncExecutions: () =>
+                Effect.succeed([
+                  {
+                    mailbox: reconnectMailbox,
+                    syncRunId: "sr_reconnect_stuck",
+                  },
+                ]),
+              recoverStuckMailboxSyncExecution: () => Effect.succeed(true),
+            }),
+            Layer.succeed(MailboxSyncDispatcher, {
+              dispatchMailboxSync: (mailboxId: string) =>
+                Effect.sync(() => {
+                  dispatches.push(mailboxId);
+                }),
+            }),
+          ),
+        ),
+      );
+
+      expect(result).toMatchObject({
+        dispatched: 0,
+        kind: "recover_stuck_syncs",
+        recovered: 1,
+        scanned: 1,
+        skippedReconnectRequired: 1,
+        status: "completed",
+      });
+      expect(dispatches).toEqual([]);
     }),
   );
 });

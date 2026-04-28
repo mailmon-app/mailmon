@@ -148,6 +148,7 @@ const isControlJobDispatchRequest = (value: unknown): value is ControlJobDispatc
     (value.kind === "renew_watches" ||
       value.kind === "dispatch_replays" ||
       value.kind === "repair_mailboxes" ||
+      value.kind === "recover_stuck_syncs" ||
       value.kind === "cleanup")
   );
 };

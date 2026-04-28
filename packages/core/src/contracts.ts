@@ -45,6 +45,7 @@ export const ControlJobKindSchema = Schema.Literal(
   "renew_watches",
   "dispatch_replays",
   "repair_mailboxes",
+  "recover_stuck_syncs",
   "cleanup",
 );
 export const MailboxSyncJobDataSchema = Schema.Struct({
@@ -469,6 +470,11 @@ export interface MailboxRepairTarget {
   readonly requiresCursorReset: boolean;
 }
 
+export interface StuckMailboxSyncExecution {
+  readonly mailbox: MailboxResource;
+  readonly syncRunId: string | null;
+}
+
 export interface MailboxWatchRenewalRequest {
   readonly mailbox: MailboxResource;
 }
@@ -576,13 +582,27 @@ export interface RepairMailboxesResult {
   readonly status: "completed";
 }
 
+export interface RecoverStuckMailboxSyncExecutionsResult {
+  readonly completedAt: string;
+  readonly dispatched: number;
+  readonly kind: "recover_stuck_syncs";
+  readonly recovered: number;
+  readonly scanned: number;
+  readonly skippedReconnectRequired: number;
+  readonly status: "completed";
+}
+
 export interface NoopControlJobResult {
   readonly completedAt: string;
-  readonly kind: Exclude<ControlJobKind, "renew_watches" | "repair_mailboxes">;
+  readonly kind: Exclude<
+    ControlJobKind,
+    "renew_watches" | "repair_mailboxes" | "recover_stuck_syncs"
+  >;
   readonly status: "noop";
 }
 
 export type ControlJobRunResult =
   | RenewMailboxWatchesResult
   | RepairMailboxesResult
+  | RecoverStuckMailboxSyncExecutionsResult
   | NoopControlJobResult;

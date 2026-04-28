@@ -14,6 +14,7 @@ import type {
   MailboxResource,
   NoopControlJobResult,
   ProcessWebhookDeliveryResult,
+  RecoverStuckMailboxSyncExecutionsResult,
   RepairMailboxesResult,
   RenewMailboxWatchesResult,
   StoredConnectSession,
@@ -38,6 +39,7 @@ import {
   MailboxCatalog,
   MailboxConnectProvider,
   MailboxConnectSessionStore,
+  MailboxExecutionRecoveryStore,
   MailboxPushNotificationStore,
   MailboxRepairStore,
   MailboxSyncCoordinator,
@@ -62,6 +64,7 @@ const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DEFAULT_GMAIL_WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60_000;
 const DEFAULT_GMAIL_WATCH_RENEWAL_BATCH_SIZE = 100;
 const DEFAULT_MAILBOX_REPAIR_BATCH_SIZE = 100;
+const DEFAULT_STUCK_MAILBOX_SYNC_RECOVERY_BATCH_SIZE = 100;
 const DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS = 5;
 const DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 5_000;
 const MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 15 * 60_000;
@@ -908,12 +911,88 @@ export const repairMailboxes = (
     } satisfies RepairMailboxesResult;
   });
 
+export const recoverStuckMailboxSyncExecutions = (
+  options: Readonly<{
+    limit?: number;
+    observedAt?: string;
+    staleThresholdMs?: number;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const observedAt = options.observedAt ?? new Date().toISOString();
+    const limit = options.limit ?? DEFAULT_STUCK_MAILBOX_SYNC_RECOVERY_BATCH_SIZE;
+    const staleThresholdMs = options.staleThresholdMs ?? 0;
+    const recoveryStore = yield* MailboxExecutionRecoveryStore;
+    const dispatcher = yield* MailboxSyncDispatcher;
+    const targets = yield* recoveryStore.listStuckMailboxSyncExecutions({
+      limit,
+      observedAt,
+      staleThresholdMs,
+    });
+
+    const outcomes = yield* Effect.forEach(
+      targets,
+      (target) =>
+        recoveryStore
+          .recoverStuckMailboxSyncExecution({
+            mailboxId: target.mailbox.id,
+            observedAt,
+            syncRunId: target.syncRunId,
+          })
+          .pipe(
+            Effect.flatMap((recovered) => {
+              if (!recovered) {
+                return Effect.succeed({
+                  dispatched: false,
+                  recovered: false,
+                  skippedReconnectRequired: false,
+                });
+              }
+
+              if (target.mailbox.status === "reconnect_required") {
+                return Effect.succeed({
+                  dispatched: false,
+                  recovered: true,
+                  skippedReconnectRequired: true,
+                });
+              }
+
+              return dispatcher.dispatchMailboxSync(target.mailbox.id).pipe(
+                Effect.as({
+                  dispatched: true,
+                  recovered: true,
+                  skippedReconnectRequired: false,
+                }),
+              );
+            }),
+          ),
+      { concurrency: 10 },
+    );
+
+    return {
+      completedAt: observedAt,
+      dispatched: outcomes.filter((item) => item.dispatched).length,
+      kind: "recover_stuck_syncs",
+      recovered: outcomes.filter((item) => item.recovered).length,
+      scanned: targets.length,
+      skippedReconnectRequired: outcomes.filter((item) => item.skippedReconnectRequired).length,
+      status: "completed",
+    } satisfies RecoverStuckMailboxSyncExecutionsResult;
+  });
+
 export function runControlJob(
   request: Readonly<{ kind: "renew_watches" }>,
 ): Effect.Effect<RenewMailboxWatchesResult, never, MailboxWatchProvider | MailboxWatchStore>;
 export function runControlJob(
   request: Readonly<{ kind: "repair_mailboxes" }>,
 ): Effect.Effect<RepairMailboxesResult, never, MailboxRepairStore | MailboxSyncDispatcher>;
+export function runControlJob(
+  request: Readonly<{ kind: "recover_stuck_syncs" }>,
+): Effect.Effect<
+  RecoverStuckMailboxSyncExecutionsResult,
+  never,
+  MailboxExecutionRecoveryStore | MailboxSyncDispatcher
+>;
 export function runControlJob(
   request: Readonly<{ kind: "cleanup" | "dispatch_replays" }>,
 ): Effect.Effect<NoopControlJobResult>;
@@ -922,14 +1001,22 @@ export function runControlJob(
 ): Effect.Effect<
   ControlJobRunResult,
   never,
-  MailboxRepairStore | MailboxSyncDispatcher | MailboxWatchProvider | MailboxWatchStore
+  | MailboxExecutionRecoveryStore
+  | MailboxRepairStore
+  | MailboxSyncDispatcher
+  | MailboxWatchProvider
+  | MailboxWatchStore
 >;
 export function runControlJob(
   request: ControlJobDispatchRequest,
 ): Effect.Effect<
   ControlJobRunResult,
   never,
-  MailboxRepairStore | MailboxSyncDispatcher | MailboxWatchProvider | MailboxWatchStore
+  | MailboxExecutionRecoveryStore
+  | MailboxRepairStore
+  | MailboxSyncDispatcher
+  | MailboxWatchProvider
+  | MailboxWatchStore
 > {
   switch (request.kind) {
     case "renew_watches":
@@ -943,6 +1030,8 @@ export function runControlJob(
       });
     case "repair_mailboxes":
       return repairMailboxes();
+    case "recover_stuck_syncs":
+      return recoverStuckMailboxSyncExecutions();
   }
 
   return Effect.succeed({

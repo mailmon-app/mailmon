@@ -325,6 +325,18 @@ variable "watch_renewal_time_zone" {
   default     = "Etc/UTC"
 }
 
+variable "stuck_sync_recovery_schedule" {
+  description = "Cloud Scheduler cron expression for stuck mailbox sync execution recovery control jobs."
+  type        = string
+  default     = "*/5 * * * *"
+}
+
+variable "stuck_sync_recovery_time_zone" {
+  description = "Cloud Scheduler time zone used for stuck mailbox sync execution recovery scheduling."
+  type        = string
+  default     = "Etc/UTC"
+}
+
 variable "webhook_delivery_max_attempts" {
   description = "Maximum Cloud Tasks dispatch attempts for webhook deliveries."
   type        = number
