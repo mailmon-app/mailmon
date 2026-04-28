@@ -14,6 +14,7 @@ import type {
   MailboxResource,
   NoopControlJobResult,
   ProcessWebhookDeliveryResult,
+  RecoveredStuckMailboxSyncExecution,
   RecoverStuckMailboxSyncExecutionsResult,
   RepairMailboxesResult,
   RenewMailboxWatchesResult,
@@ -68,6 +69,13 @@ const DEFAULT_STUCK_MAILBOX_SYNC_RECOVERY_BATCH_SIZE = 100;
 const DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS = 5;
 const DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 5_000;
 const MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 15 * 60_000;
+
+interface StuckMailboxSyncRecoveryOutcome {
+  readonly dispatched: boolean;
+  readonly recovered: boolean;
+  readonly recoveredExecution: RecoveredStuckMailboxSyncExecution | null;
+  readonly skippedReconnectRequired: boolean;
+}
 const TERMINAL_MAILBOX_SYNC_PROBLEM_CODES = new Set([
   "gmail_mailbox_credentials_missing",
   "gmail_mailbox_credential_unreadable",
@@ -932,7 +940,7 @@ export const recoverStuckMailboxSyncExecutions = (
 
     const outcomes = yield* Effect.forEach(
       targets,
-      (target) =>
+      (target): Effect.Effect<StuckMailboxSyncRecoveryOutcome> =>
         recoveryStore
           .recoverStuckMailboxSyncExecution({
             mailboxId: target.mailbox.id,
@@ -940,29 +948,38 @@ export const recoverStuckMailboxSyncExecutions = (
             syncRunId: target.syncRunId,
           })
           .pipe(
-            Effect.flatMap((recovered) => {
+            Effect.flatMap((recovered): Effect.Effect<StuckMailboxSyncRecoveryOutcome> => {
               if (!recovered) {
                 return Effect.succeed({
                   dispatched: false,
                   recovered: false,
+                  recoveredExecution: null,
                   skippedReconnectRequired: false,
-                });
+                } satisfies StuckMailboxSyncRecoveryOutcome);
               }
+
+              const recoveredExecution = {
+                mailboxId: target.mailbox.id,
+                leaseOwnerId: target.leaseOwnerId,
+                syncRunId: target.syncRunId,
+              };
 
               if (target.mailbox.status === "reconnect_required") {
                 return Effect.succeed({
                   dispatched: false,
                   recovered: true,
+                  recoveredExecution,
                   skippedReconnectRequired: true,
-                });
+                } satisfies StuckMailboxSyncRecoveryOutcome);
               }
 
               return dispatcher.dispatchMailboxSync(target.mailbox.id).pipe(
                 Effect.as({
                   dispatched: true,
                   recovered: true,
+                  recoveredExecution,
                   skippedReconnectRequired: false,
-                }),
+                } satisfies StuckMailboxSyncRecoveryOutcome),
               );
             }),
           ),
@@ -974,6 +991,9 @@ export const recoverStuckMailboxSyncExecutions = (
       dispatched: outcomes.filter((item) => item.dispatched).length,
       kind: "recover_stuck_syncs",
       recovered: outcomes.filter((item) => item.recovered).length,
+      recoveredExecutions: outcomes
+        .map((item) => item.recoveredExecution)
+        .filter((item): item is RecoveredStuckMailboxSyncExecution => item !== null),
       scanned: targets.length,
       skippedReconnectRequired: outcomes.filter((item) => item.skippedReconnectRequired).length,
       status: "completed",
@@ -1105,6 +1125,7 @@ export const runMailboxSync = (mailboxId: string) =>
         status: "skipped_due_to_active_lease",
         completedAt,
         eventsEmitted: 0,
+        leaseOwnerId: acquisition.leaseOwnerId,
         nextCursor: null,
       };
 
@@ -1125,7 +1146,14 @@ export const runMailboxSync = (mailboxId: string) =>
           }),
         ),
         Effect.flatMap((renewal) =>
-          renewal.renewed ? Effect.void : Effect.fail(mailboxSyncLeaseLost(mailbox.id)),
+          renewal.renewed
+            ? Effect.void
+            : Effect.fail(
+                mailboxSyncLeaseLost(mailbox.id, {
+                  leaseOwnerId,
+                  syncRunId: syncRun.syncRunId,
+                }),
+              ),
         ),
       ),
     );
@@ -1155,7 +1183,12 @@ export const runMailboxSync = (mailboxId: string) =>
                       nextCursor: providerResult.nextCursor,
                     } satisfies SyncMailboxResult),
                   )
-                : Effect.fail(mailboxSyncLeaseLost(mailbox.id)),
+                : Effect.fail(
+                    mailboxSyncLeaseLost(mailbox.id, {
+                      leaseOwnerId,
+                      syncRunId: syncRun.syncRunId,
+                    }),
+                  ),
             ),
           );
       }),

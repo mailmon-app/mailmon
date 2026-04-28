@@ -391,6 +391,7 @@ const toMailboxRepairTarget = (row: MailboxRow): MailboxRepairTarget => {
 
 const toStuckMailboxSyncExecution = (row: MailboxRow): StuckMailboxSyncExecution => {
   return {
+    leaseOwnerId: row.activeSyncLeaseOwner,
     mailbox: toMailboxResource(row),
     syncRunId: row.activeSyncRunId,
   };
@@ -3072,6 +3073,7 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
               const [currentMailbox] = await transaction
                 .select({
                   expiresAt: mailboxes.activeSyncLeaseExpiresAt,
+                  leaseOwnerId: mailboxes.activeSyncLeaseOwner,
                 })
                 .from(mailboxes)
                 .where(eq(mailboxes.id, lease.mailboxId))
@@ -3080,6 +3082,7 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
               const result: MailboxSyncLeaseAcquisition = {
                 acquired: false,
                 expiresAt: toIsoString(currentMailbox?.expiresAt ?? null),
+                leaseOwnerId: currentMailbox?.leaseOwnerId ?? null,
               };
 
               return result;
@@ -3095,6 +3098,7 @@ export const createMailboxSyncCoordinatorLayer = Layer.effect(
             const result: MailboxSyncLeaseAcquisition = {
               acquired: true,
               expiresAt: toIsoString(updatedMailbox.expiresAt) ?? lease.expiresAt,
+              leaseOwnerId: lease.leaseOwnerId,
             };
 
             return result;

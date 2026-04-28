@@ -4,6 +4,12 @@ variable "allow_unauthenticated_api" {
   default     = true
 }
 
+variable "alert_notification_channel_ids" {
+  description = "Monitoring notification channel IDs used by operational alert policies."
+  type        = list(string)
+  default     = []
+}
+
 variable "api_cpu" {
   description = "CPU limit for the API Cloud Run container."
   type        = string
@@ -149,6 +155,12 @@ variable "environment" {
   default     = "staging"
 }
 
+variable "enable_operational_alerts" {
+  description = "Whether to create operational alert policies from Mailmon log-based metrics."
+  type        = bool
+  default     = false
+}
+
 variable "gmail_push_message_retention_duration" {
   description = "How long Gmail Push Notification Pub/Sub messages are retained."
   type        = string
@@ -200,6 +212,28 @@ variable "mailbox_sync_dispatch_topic_name" {
   description = "Pub/Sub topic name used for durable mailbox sync dispatch."
   type        = string
   default     = "mailbox-sync-dispatch"
+}
+
+variable "lease_contention_alert_threshold" {
+  description = "Number of mailbox sync lease contention log events in five minutes required to fire the contention alert."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.lease_contention_alert_threshold >= 1
+    error_message = "lease_contention_alert_threshold must be at least 1."
+  }
+}
+
+variable "lease_loss_alert_threshold" {
+  description = "Number of mailbox sync lease loss log events in five minutes required to fire the lease loss alert."
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.lease_loss_alert_threshold >= 1
+    error_message = "lease_loss_alert_threshold must be at least 1."
+  }
 }
 
 variable "gmail_oauth_client_id" {
@@ -335,6 +369,17 @@ variable "stuck_sync_recovery_time_zone" {
   description = "Cloud Scheduler time zone used for stuck mailbox sync execution recovery scheduling."
   type        = string
   default     = "Etc/UTC"
+}
+
+variable "stuck_sync_recovery_alert_threshold" {
+  description = "Number of stuck mailbox sync recovery log events in five minutes required to fire the stuck recovery alert."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.stuck_sync_recovery_alert_threshold >= 1
+    error_message = "stuck_sync_recovery_alert_threshold must be at least 1."
+  }
 }
 
 variable "webhook_delivery_max_attempts" {

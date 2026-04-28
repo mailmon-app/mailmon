@@ -87,7 +87,13 @@ export const invalidPaginationCursor = (
   });
 };
 
-export const mailboxSyncLeaseLost = (mailboxId: string): ProblemDetails => {
+export const mailboxSyncLeaseLost = (
+  mailboxId: string,
+  metadata: Readonly<{
+    leaseOwnerId?: string;
+    syncRunId?: string;
+  }> = {},
+): ProblemDetails => {
   return makeProblem({
     type: "https://api.mailmon.dev/problems/mailbox-sync-lease-lost",
     title: "Mailbox sync lease lost",
@@ -95,7 +101,9 @@ export const mailboxSyncLeaseLost = (mailboxId: string): ProblemDetails => {
     code: "mailbox_sync_lease_lost",
     detail: `Mailbox ${mailboxId} lost its active sync lease while processing.`,
     resource: {
+      ...(metadata.leaseOwnerId === undefined ? {} : { lease_owner_id: metadata.leaseOwnerId }),
       mailbox_id: mailboxId,
+      ...(metadata.syncRunId === undefined ? {} : { sync_run_id: metadata.syncRunId }),
     },
     retryable: true,
   });

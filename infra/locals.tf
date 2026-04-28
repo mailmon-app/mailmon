@@ -27,6 +27,8 @@ locals {
     "cloudtasks.googleapis.com",
     "cloudscheduler.googleapis.com",
     "iam.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
   ])
 
   worker_base_url = trimsuffix(var.worker_base_url, "/")

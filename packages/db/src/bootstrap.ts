@@ -121,6 +121,7 @@ export const createBootstrapMailboxSyncCoordinatorLayer = Layer.effect(
                 {
                   acquired: false,
                   expiresAt: existing.expiresAt,
+                  leaseOwnerId: existing.leaseOwnerId,
                 },
                 currentLeases,
               ] as const;
@@ -135,6 +136,7 @@ export const createBootstrapMailboxSyncCoordinatorLayer = Layer.effect(
               {
                 acquired: true,
                 expiresAt,
+                leaseOwnerId,
               },
               nextLeases,
             ] as const;

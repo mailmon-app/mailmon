@@ -213,6 +213,7 @@ const createWebhookEndpointSubscriptionStoreTestLayer = (
 const createSyncCoordinatorTestLayer = (
   params: Readonly<{
     acquisitionSucceeds?: boolean;
+    activeLeaseOwnerId?: string;
     acquisitionCalls?: Array<{
       acquiredAt: string;
       expiresAt: string;
@@ -241,6 +242,10 @@ const createSyncCoordinatorTestLayer = (
         return {
           acquired: params.acquisitionSucceeds ?? true,
           expiresAt: "2026-03-24T00:01:30.000Z",
+          leaseOwnerId:
+            (params.acquisitionSucceeds ?? true)
+              ? lease.leaseOwnerId
+              : (params.activeLeaseOwnerId ?? null),
         };
       }),
     renewMailboxSyncLease: (lease) =>
@@ -1255,6 +1260,7 @@ describe("recoverStuckMailboxSyncExecutions", () => {
               listStuckMailboxSyncExecutions: () =>
                 Effect.succeed([
                   {
+                    leaseOwnerId: "lease_stuck",
                     mailbox: mailboxFixture,
                     syncRunId: "sr_stuck",
                   },
@@ -1280,6 +1286,13 @@ describe("recoverStuckMailboxSyncExecutions", () => {
         dispatched: 1,
         kind: "recover_stuck_syncs",
         recovered: 1,
+        recoveredExecutions: [
+          {
+            mailboxId: mailboxFixture.id,
+            leaseOwnerId: "lease_stuck",
+            syncRunId: "sr_stuck",
+          },
+        ],
         scanned: 1,
         skippedReconnectRequired: 0,
         status: "completed",
@@ -1348,6 +1361,7 @@ describe("recoverStuckMailboxSyncExecutions", () => {
               listStuckMailboxSyncExecutions: () =>
                 Effect.succeed([
                   {
+                    leaseOwnerId: "lease_reconnect_stuck",
                     mailbox: reconnectMailbox,
                     syncRunId: "sr_reconnect_stuck",
                   },
@@ -1368,6 +1382,13 @@ describe("recoverStuckMailboxSyncExecutions", () => {
         dispatched: 0,
         kind: "recover_stuck_syncs",
         recovered: 1,
+        recoveredExecutions: [
+          {
+            mailboxId: "mbx_reconnect",
+            leaseOwnerId: "lease_reconnect_stuck",
+            syncRunId: "sr_reconnect_stuck",
+          },
+        ],
         scanned: 1,
         skippedReconnectRequired: 1,
         status: "completed",

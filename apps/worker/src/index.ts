@@ -2,17 +2,13 @@ import { pathToFileURL } from "node:url";
 
 import type { WorkerEnv } from "@mailmon/config";
 import { loadWorkerEnv } from "@mailmon/config";
-import type {
-  ControlJobDispatchRequest,
-  ControlJobRunResult,
-  ProcessWebhookDeliveryResult,
-  WebhookDeliveryScheduleRequest,
-} from "@mailmon/core";
-import { recoverWebhookDeliveryScheduling, runControlJob } from "@mailmon/core";
+import type { ProcessWebhookDeliveryResult, WebhookDeliveryScheduleRequest } from "@mailmon/core";
+import { recoverWebhookDeliveryScheduling } from "@mailmon/core";
 import { createGcpWebhookDeliverySchedulerLayer } from "@mailmon/queue";
 import { Layer, ManagedRuntime } from "effect";
 
 import {
+  createProcessControlJob,
   createProcessGmailPushNotification,
   createProcessSyncJob,
   createProcessWebhookDelivery,
@@ -104,19 +100,18 @@ const createWorkerProcessorRuntime = (
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(createWorkerRuntimeLayer(env), schedulerLayer),
   );
-  const processControlJob = (request: ControlJobDispatchRequest): Promise<ControlJobRunResult> => {
-    const controlJob = runControlJob(request);
-
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the worker runtime layer provides MailboxWatchStore and MailboxWatchProvider; ManagedRuntime's R type is the full service union.
-    return runtime.runPromise(
-      controlJob as Parameters<typeof runtime.runPromise>[0],
-    ) as Promise<ControlJobRunResult>;
-  };
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the worker runtime layer provides all control-job services; ManagedRuntime's R type is the full service union.
+  const processControlJob = createProcessControlJob(
+    runtime as Parameters<typeof createProcessControlJob>[0],
+    { transportMode: env.asyncTransportMode },
+  );
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the worker runtime layer provides MailboxPushNotificationStore and MailboxSyncDispatcher; ManagedRuntime's R type is the full service union.
   const processGmailPushNotification = createProcessGmailPushNotification(
     runtime as Parameters<typeof createProcessGmailPushNotification>[0],
   );
-  const processSyncJob = createProcessSyncJob(runtime);
+  const processSyncJob = createProcessSyncJob(runtime, {
+    transportMode: env.asyncTransportMode,
+  });
   const processWebhookDelivery = createProcessWebhookDelivery(runtime);
 
   if (setDispatch !== null) {

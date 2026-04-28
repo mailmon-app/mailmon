@@ -88,6 +88,8 @@ The infrastructure layer creates:
 - `google_pubsub_topic.mailbox_sync_dispatch`
 - `google_pubsub_subscription.mailbox_sync_dispatch_worker`
 - `google_pubsub_topic.mailbox_sync_dispatch_dead_letter`
+- log-based metrics for mailbox sync lease contention, lease loss, and stuck sync recovery
+- optional Monitoring alert policies for those lease-health metrics
 
 Relevant outputs include:
 
@@ -97,6 +99,35 @@ Relevant outputs include:
 - Cloud Tasks queue name
 - mailbox sync dispatch Pub/Sub topic and subscription names
 - Secret IDs for runtime configuration
+
+## Operational alerting
+
+The worker emits structured JSON logs for mailbox sync lease-health events:
+
+- `event="mailbox_sync_lease_contention"` when a sync run returns `skipped_due_to_active_lease`
+- `event="mailbox_sync_lease_lost"` when sync processing fails with `mailbox_sync_lease_lost`
+- `event="mailbox_sync_stuck_recovery"` when stuck sync recovery clears an expired active lease
+
+Each event includes `mailboxId`, `syncRunId`, `leaseOwnerId`, `transportMode`, and `occurredAt`.
+The existing `GET /v1/mailboxes/{mailbox_id}/observability` API remains the mailbox-level inspection surface for `contentionCount24h`, `latestContentionAt`, `leaseLossCount24h`, and `latestLeaseLossAt`.
+
+Terraform always creates these log-based metrics:
+
+- `mailmon_lease_contention_count`
+- `mailmon_lease_loss_count`
+- `mailmon_stuck_sync_recovery_count`
+
+Set `enable_operational_alerts=true` to create alert policies.
+Alert policies use five-minute aligned counts and send notifications to `alert_notification_channel_ids`.
+The default thresholds are:
+
+- lease contention: 5 events in five minutes
+- lease loss: 2 events in five minutes
+- stuck sync recovery: 1 event in five minutes
+
+For production, keep stuck sync recovery at `1` initially.
+Any recovery means a lease expired while a worker still appeared to own the sync critical section.
+Investigate the structured log event first, then use the observability API for mailbox history.
 
 ## Environment variables
 

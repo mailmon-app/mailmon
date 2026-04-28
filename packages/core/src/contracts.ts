@@ -472,6 +472,7 @@ export interface MailboxRepairTarget {
 
 export interface StuckMailboxSyncExecution {
   readonly mailbox: MailboxResource;
+  readonly leaseOwnerId: string | null;
   readonly syncRunId: string | null;
 }
 
@@ -502,6 +503,7 @@ export interface GmailPushNotificationResult {
 export interface MailboxSyncLeaseAcquisition {
   readonly acquired: boolean;
   readonly expiresAt: string | null;
+  readonly leaseOwnerId: string | null;
 }
 
 export interface MailboxSyncLeaseRenewal {
@@ -547,7 +549,14 @@ export interface SkippedSyncMailboxResult extends StartedSyncRun {
   readonly status: "skipped_due_to_active_lease";
   readonly completedAt: string;
   readonly eventsEmitted: 0;
+  readonly leaseOwnerId: string | null;
   readonly nextCursor: null;
+}
+
+export interface RecoveredStuckMailboxSyncExecution {
+  readonly mailboxId: string;
+  readonly leaseOwnerId: string | null;
+  readonly syncRunId: string | null;
 }
 
 export interface ReconnectRequiredSyncMailboxResult extends StartedSyncRun {
@@ -587,6 +596,7 @@ export interface RecoverStuckMailboxSyncExecutionsResult {
   readonly dispatched: number;
   readonly kind: "recover_stuck_syncs";
   readonly recovered: number;
+  readonly recoveredExecutions: ReadonlyArray<RecoveredStuckMailboxSyncExecution>;
   readonly scanned: number;
   readonly skippedReconnectRequired: number;
   readonly status: "completed";

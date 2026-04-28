@@ -53,6 +53,7 @@ const defaultProcessControlJob = async (request: ControlJobDispatchRequest) => {
       dispatched: 0,
       kind: request.kind,
       recovered: 0,
+      recoveredExecutions: [],
       scanned: 0,
       skippedReconnectRequired: 0,
       status: "completed" as const,
@@ -733,6 +734,13 @@ describe("startWorkerHttpRuntime", () => {
                   dispatched: 1,
                   kind: request.kind,
                   recovered: 1,
+                  recoveredExecutions: [
+                    {
+                      mailboxId: "mbx_demo",
+                      leaseOwnerId: "lease_owner",
+                      syncRunId: "sr_stuck",
+                    },
+                  ],
                   scanned: 1,
                   skippedReconnectRequired: 0,
                   status: "completed" as const,
@@ -793,6 +801,13 @@ describe("startWorkerHttpRuntime", () => {
           dispatched: 1,
           kind: "recover_stuck_syncs",
           recovered: 1,
+          recoveredExecutions: [
+            {
+              mailboxId: "mbx_demo",
+              leaseOwnerId: "lease_owner",
+              syncRunId: "sr_stuck",
+            },
+          ],
           scanned: 1,
           skippedReconnectRequired: 0,
           status: "completed",

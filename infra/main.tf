@@ -897,3 +897,153 @@ resource "google_cloud_scheduler_job" "recover_stuck_syncs" {
     }
   }
 }
+
+resource "google_logging_metric" "mailmon_lease_contention_count" {
+  depends_on = [google_project_service.required_api]
+
+  name   = "mailmon_lease_contention_count"
+  filter = "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"mailbox_sync_lease_contention\""
+
+  metric_descriptor {
+    display_name = "Mailmon lease contention count"
+    metric_kind  = "DELTA"
+    unit         = "1"
+    value_type   = "INT64"
+  }
+}
+
+resource "google_logging_metric" "mailmon_lease_loss_count" {
+  depends_on = [google_project_service.required_api]
+
+  name   = "mailmon_lease_loss_count"
+  filter = "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"mailbox_sync_lease_lost\""
+
+  metric_descriptor {
+    display_name = "Mailmon lease loss count"
+    metric_kind  = "DELTA"
+    unit         = "1"
+    value_type   = "INT64"
+  }
+}
+
+resource "google_logging_metric" "mailmon_stuck_sync_recovery_count" {
+  depends_on = [google_project_service.required_api]
+
+  name   = "mailmon_stuck_sync_recovery_count"
+  filter = "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"mailbox_sync_stuck_recovery\""
+
+  metric_descriptor {
+    display_name = "Mailmon stuck sync recovery count"
+    metric_kind  = "DELTA"
+    unit         = "1"
+    value_type   = "INT64"
+  }
+}
+
+resource "google_monitoring_alert_policy" "repeated_lease_contention" {
+  count = var.enable_operational_alerts ? 1 : 0
+
+  display_name          = "Mailmon repeated mailbox sync lease contention"
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.alert_notification_channel_ids
+  user_labels           = local.labels
+
+  conditions {
+    display_name = "Lease contention events exceed threshold"
+
+    condition_threshold {
+      comparison      = "COMPARISON_GE"
+      duration        = "0s"
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailmon_lease_contention_count.name}\" AND resource.type=\"cloud_run_revision\""
+      threshold_value = var.lease_contention_alert_threshold
+
+      aggregations {
+        alignment_period     = "300s"
+        cross_series_reducer = "REDUCE_SUM"
+        per_series_aligner   = "ALIGN_DELTA"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  documentation {
+    content   = "Mailbox sync lease contention exceeded the configured five-minute threshold. Check worker concurrency, duplicate dispatches, and `/v1/mailboxes/{mailbox_id}/observability` for mailbox-level contention history."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "lease_loss" {
+  count = var.enable_operational_alerts ? 1 : 0
+
+  display_name          = "Mailmon mailbox sync lease loss"
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.alert_notification_channel_ids
+  user_labels           = local.labels
+
+  conditions {
+    display_name = "Lease loss events exceed threshold"
+
+    condition_threshold {
+      comparison      = "COMPARISON_GE"
+      duration        = "0s"
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailmon_lease_loss_count.name}\" AND resource.type=\"cloud_run_revision\""
+      threshold_value = var.lease_loss_alert_threshold
+
+      aggregations {
+        alignment_period     = "300s"
+        cross_series_reducer = "REDUCE_SUM"
+        per_series_aligner   = "ALIGN_DELTA"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  documentation {
+    content   = "A mailbox sync lost its active lease while processing. Treat this as a worker critical-section interruption or stale lease takeover signal; inspect the structured log event for mailboxId, syncRunId, and leaseOwnerId."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "stuck_sync_recovery" {
+  count = var.enable_operational_alerts ? 1 : 0
+
+  display_name          = "Mailmon stuck mailbox sync recovery"
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.alert_notification_channel_ids
+  user_labels           = local.labels
+
+  conditions {
+    display_name = "Stuck sync recovery events exceed threshold"
+
+    condition_threshold {
+      comparison      = "COMPARISON_GE"
+      duration        = "0s"
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailmon_stuck_sync_recovery_count.name}\" AND resource.type=\"cloud_run_revision\""
+      threshold_value = var.stuck_sync_recovery_alert_threshold
+
+      aggregations {
+        alignment_period     = "300s"
+        cross_series_reducer = "REDUCE_SUM"
+        per_series_aligner   = "ALIGN_DELTA"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  documentation {
+    content   = "The stuck sync recovery control job cleared an expired mailbox sync lease. In production, any nonzero count may indicate worker crashes, request timeouts, or long syncs exceeding lease heartbeat expectations."
+    mime_type = "text/markdown"
+  }
+}

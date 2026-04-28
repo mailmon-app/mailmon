@@ -360,6 +360,7 @@ describe("mailbox execution recovery store", () => {
         }).pipe(Effect.provide(persistenceLayer));
 
         expect(targets.map((target) => target.mailbox.id)).toEqual(["mbx_stuck"]);
+        expect(targets.map((target) => target.leaseOwnerId)).toEqual(["worker_dead"]);
         expect(targets.map((target) => target.syncRunId)).toEqual(["sr_stuck"]);
 
         const recoverOnce = Effect.gen(function* () {
