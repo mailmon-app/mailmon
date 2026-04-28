@@ -167,6 +167,41 @@ variable "gmail_push_topic_name" {
   default     = "gmail-push"
 }
 
+variable "mailbox_sync_dispatch_dead_letter_topic_name" {
+  description = "Pub/Sub dead-letter topic name for mailbox sync dispatch messages that exhaust retries."
+  type        = string
+  default     = "mailbox-sync-dispatch-dead-letter"
+}
+
+variable "mailbox_sync_dispatch_max_delivery_attempts" {
+  description = "Maximum Pub/Sub delivery attempts before mailbox sync dispatch messages are dead-lettered."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.mailbox_sync_dispatch_max_delivery_attempts >= 5 && var.mailbox_sync_dispatch_max_delivery_attempts <= 100
+    error_message = "mailbox_sync_dispatch_max_delivery_attempts must be between 5 and 100."
+  }
+}
+
+variable "mailbox_sync_dispatch_message_retention_duration" {
+  description = "How long mailbox sync dispatch Pub/Sub messages are retained."
+  type        = string
+  default     = "86400s"
+}
+
+variable "mailbox_sync_dispatch_subscription_name" {
+  description = "Pub/Sub push subscription name for worker mailbox sync dispatch intake."
+  type        = string
+  default     = "mailbox-sync-dispatch-worker"
+}
+
+variable "mailbox_sync_dispatch_topic_name" {
+  description = "Pub/Sub topic name used for durable mailbox sync dispatch."
+  type        = string
+  default     = "mailbox-sync-dispatch"
+}
+
 variable "gmail_oauth_client_id" {
   description = "Optional Gmail OAuth client ID secret value to bootstrap into Secret Manager. Leave null to populate the secret out of band."
   type        = string

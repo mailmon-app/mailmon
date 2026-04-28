@@ -58,6 +58,21 @@ output "gmail_refresh_token_encryption_key_secret_id" {
   value       = google_secret_manager_secret.gmail_refresh_token_encryption_key.secret_id
 }
 
+output "mailbox_sync_dispatch_dead_letter_topic_name" {
+  description = "Full mailbox sync dispatch dead-letter Pub/Sub topic resource name."
+  value       = google_pubsub_topic.mailbox_sync_dispatch_dead_letter.id
+}
+
+output "mailbox_sync_dispatch_subscription_name" {
+  description = "Pub/Sub subscription name that pushes mailbox sync dispatches to the worker."
+  value       = google_pubsub_subscription.mailbox_sync_dispatch_worker.name
+}
+
+output "mailbox_sync_dispatch_topic_name" {
+  description = "Full mailbox sync dispatch Pub/Sub topic resource name for MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME."
+  value       = google_pubsub_topic.mailbox_sync_dispatch.id
+}
+
 output "migrations_job_name" {
   description = "Cloud Run Job name used to run database migrations."
   value       = google_cloud_run_v2_job.migrations.name

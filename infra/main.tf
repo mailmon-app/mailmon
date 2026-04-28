@@ -322,6 +322,38 @@ resource "google_pubsub_topic_iam_member" "gmail_api_publisher" {
   member = "serviceAccount:gmail-api-push@system.gserviceaccount.com"
 }
 
+resource "google_pubsub_topic" "mailbox_sync_dispatch" {
+  depends_on = [google_project_service.required_api]
+
+  name   = var.mailbox_sync_dispatch_topic_name
+  labels = local.labels
+}
+
+resource "google_pubsub_topic" "mailbox_sync_dispatch_dead_letter" {
+  depends_on = [google_project_service.required_api]
+
+  name   = var.mailbox_sync_dispatch_dead_letter_topic_name
+  labels = local.labels
+}
+
+resource "google_pubsub_topic_iam_member" "api_mailbox_sync_dispatch_publisher" {
+  topic  = google_pubsub_topic.mailbox_sync_dispatch.name
+  role   = "roles/pubsub.publisher"
+  member = google_service_account.api.member
+}
+
+resource "google_pubsub_topic_iam_member" "worker_mailbox_sync_dispatch_publisher" {
+  topic  = google_pubsub_topic.mailbox_sync_dispatch.name
+  role   = "roles/pubsub.publisher"
+  member = google_service_account.worker.member
+}
+
+resource "google_pubsub_topic_iam_member" "mailbox_sync_dispatch_dead_letter_publisher" {
+  topic  = google_pubsub_topic.mailbox_sync_dispatch_dead_letter.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
 resource "google_cloud_tasks_queue" "webhook_delivery" {
   depends_on = [google_project_service.required_api]
 
@@ -400,6 +432,11 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "MAILMON_WORKER_BASE_URL"
         value = local.worker_base_url
+      }
+
+      env {
+        name  = "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME"
+        value = google_pubsub_topic.mailbox_sync_dispatch.id
       }
 
       env {
@@ -532,6 +569,11 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "MAILMON_GMAIL_PUBSUB_TOPIC_NAME"
         value = google_pubsub_topic.gmail_push.id
+      }
+
+      env {
+        name  = "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME"
+        value = google_pubsub_topic.mailbox_sync_dispatch.id
       }
 
       env {
@@ -739,6 +781,44 @@ resource "google_kms_crypto_key_iam_member" "secret_manager_encrypter_decrypter"
   crypto_key_id = google_kms_crypto_key.secret_manager.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:${google_project_service_identity.secret_manager.email}"
+}
+
+resource "google_pubsub_subscription" "mailbox_sync_dispatch_worker" {
+  depends_on = [
+    google_project_service.required_api,
+    google_pubsub_topic_iam_member.mailbox_sync_dispatch_dead_letter_publisher,
+  ]
+
+  name  = var.mailbox_sync_dispatch_subscription_name
+  topic = google_pubsub_topic.mailbox_sync_dispatch.id
+
+  ack_deadline_seconds       = 30
+  message_retention_duration = var.mailbox_sync_dispatch_message_retention_duration
+
+  dead_letter_policy {
+    dead_letter_topic     = google_pubsub_topic.mailbox_sync_dispatch_dead_letter.id
+    max_delivery_attempts = var.mailbox_sync_dispatch_max_delivery_attempts
+  }
+
+  push_config {
+    push_endpoint = "${local.worker_base_url}/internal/sync"
+
+    oidc_token {
+      audience              = local.worker_base_url
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  retry_policy {
+    maximum_backoff = "60s"
+    minimum_backoff = "10s"
+  }
+}
+
+resource "google_pubsub_subscription_iam_member" "mailbox_sync_dispatch_dead_letter_subscriber" {
+  subscription = google_pubsub_subscription.mailbox_sync_dispatch_worker.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
 resource "google_pubsub_subscription" "gmail_push_worker" {
