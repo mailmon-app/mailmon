@@ -13,6 +13,7 @@ import {
   createMailboxSyncJobData,
   createWorkerHttpControlJobDispatcherLayer,
   createWorkerHttpMailboxSyncDispatcherLayer,
+  createRedisConnectionOptions,
   DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
   DEFAULT_LOCAL_WORKER_BASE_URL,
   LocalAsyncTransportProbe,
@@ -464,5 +465,27 @@ describe("createGcpWebhookDeliverySchedulerLayer", () => {
         ),
       ),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("createRedisConnectionOptions", () => {
+  it("parses a standard redis url", () => {
+    expect(createRedisConnectionOptions("redis://localhost:6379/1")).toEqual({
+      db: 1,
+      host: "localhost",
+      maxRetriesPerRequest: null,
+      password: undefined,
+      port: 6379,
+    });
+  });
+
+  it("parses a redis url with password and no port or database", () => {
+    expect(createRedisConnectionOptions("redis://:secret@localhost")).toEqual({
+      db: undefined,
+      host: "localhost",
+      maxRetriesPerRequest: null,
+      password: "secret",
+      port: 6379,
+    });
   });
 });
