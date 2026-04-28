@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createGcpMailboxSyncDispatcherLayer,
   createLocalAsyncTransportLayer,
   createGcpWebhookDeliverySchedulerLayer,
   createMailboxSyncJobData,
@@ -264,6 +265,56 @@ describe("createWorkerHttpMailboxSyncDispatcherLayer", () => {
         ),
       ),
     ).rejects.toThrow("Mailbox sync dispatch failed with 503: retry later");
+  });
+});
+
+describe("createGcpMailboxSyncDispatcherLayer", () => {
+  it("publishes mailbox sync requests to Pub/Sub instead of calling the worker directly", async () => {
+    const published: Array<{
+      readonly attributes?: Readonly<Record<string, string>>;
+      readonly data: Buffer;
+      readonly topicName: string;
+    }> = [];
+    const program = Effect.gen(function* () {
+      const mailboxSyncDispatcher = yield* MailboxSyncDispatcher;
+
+      yield* mailboxSyncDispatcher.dispatchMailboxSync("mbx_pubsub");
+    });
+
+    await expect(
+      Effect.runPromise(
+        program.pipe(
+          Effect.provide(
+            createGcpMailboxSyncDispatcherLayer({
+              pubSubClient: {
+                topic: (topicName) => ({
+                  publishMessage: (message) => {
+                    published.push({
+                      attributes: message.attributes,
+                      data: message.data,
+                      topicName,
+                    });
+
+                    return Promise.resolve("pubsub-message-id");
+                  },
+                }),
+              },
+              topicName: "projects/mailmon-staging/topics/mailbox-sync-dispatch",
+            }),
+          ),
+        ),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(published).toHaveLength(1);
+    expect(published[0]?.topicName).toBe("projects/mailmon-staging/topics/mailbox-sync-dispatch");
+    expect(published[0]?.attributes).toEqual({
+      kind: "mailbox_sync",
+      mailboxId: "mbx_pubsub",
+    });
+    expect(JSON.parse(published[0]?.data.toString("utf8") ?? "")).toEqual({
+      mailboxId: "mbx_pubsub",
+    });
   });
 });
 

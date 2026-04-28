@@ -26,6 +26,7 @@ describe("ApiConfig", () => {
         gmailRefreshTokenEncryptionKeyId: "primary",
         gmailRefreshTokenPreviousEncryptionKeys: [],
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
+        syncDispatchPubSubTopicName: null,
         host: "127.0.0.1",
         nodeEnv: "test",
         port: 3000,
@@ -60,6 +61,7 @@ describe("WorkerConfig", () => {
         gmailRefreshTokenPreviousEncryptionKeys: [],
         gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
         gmailPubSubTopicName: null,
+        syncDispatchPubSubTopicName: null,
         gcpProjectId: null,
         gcpRegion: null,
         gcpTasksAudience: null,
@@ -128,6 +130,9 @@ describe("WorkerConfig", () => {
       const config = yield* ApiConfig;
 
       expect(config.host).toBe("0.0.0.0");
+      expect(config.syncDispatchPubSubTopicName).toBe(
+        "projects/mailmon-staging/topics/mailbox-sync-dispatch",
+      );
       expect(config.workerBaseUrl).toBe("https://worker.example.com");
     }).pipe(
       Effect.provide(ApiConfig.layer),
@@ -136,6 +141,8 @@ describe("WorkerConfig", () => {
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+          MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME:
+            "projects/mailmon-staging/topics/mailbox-sync-dispatch",
           MAILMON_WORKER_BASE_URL: "https://worker.example.com",
           NODE_ENV: "test",
         }),
@@ -154,6 +161,8 @@ describe("WorkerConfig", () => {
               MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
               MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
               MAILMON_GMAIL_PUBSUB_TOPIC_NAME: "projects/mailmon-staging/topics/gmail-push",
+              MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME:
+                "projects/mailmon-staging/topics/mailbox-sync-dispatch",
               MAILMON_WORKER_BASE_URL: "https://worker.example.com",
               NODE_ENV: "test",
             }),
@@ -172,6 +181,9 @@ describe("WorkerConfig", () => {
       expect(config.gcpRegion).toBe("us-central1");
       expect(config.gcpWebhookDeliveryQueueId).toBe(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID);
       expect(config.gmailPubSubTopicName).toBe("projects/mailmon-staging/topics/gmail-push");
+      expect(config.syncDispatchPubSubTopicName).toBe(
+        "projects/mailmon-staging/topics/mailbox-sync-dispatch",
+      );
       expect(config.workerBaseUrl).toBe("https://worker.example.com");
       expect(config.host).toBe("0.0.0.0");
       expect(config.gmailRefreshTokenEncryptionKey).toBe(TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY);
@@ -185,6 +197,8 @@ describe("WorkerConfig", () => {
           MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           MAILMON_GMAIL_PUBSUB_TOPIC_NAME: "projects/mailmon-staging/topics/gmail-push",
+          MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME:
+            "projects/mailmon-staging/topics/mailbox-sync-dispatch",
           MAILMON_WORKER_BASE_URL: "https://worker.example.com",
           NODE_ENV: "test",
         }),

@@ -47,6 +47,9 @@ const loadGmailOauthTokenUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_TOKEN_URL").p
   Config.orElse(() => Config.succeed("https://oauth2.googleapis.com/token")),
 );
 const loadGmailPubSubTopicName = Config.option(nonEmptyString("MAILMON_GMAIL_PUBSUB_TOPIC_NAME"));
+const loadSyncDispatchPubSubTopicName = Config.option(
+  nonEmptyString("MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME"),
+);
 const loadMailboxWorkerBaseUrl = Config.option(nonEmptyString("MAILMON_WORKER_BASE_URL"));
 const loadRedisUrl = Config.option(nonEmptyString("REDIS_URL"));
 const loadAsyncTransportMode: Config.Config<AsyncTransportMode> = Config.literal(
@@ -136,6 +139,7 @@ export interface ApiEnv extends CommonEnv {
   readonly gmailRefreshTokenEncryptionKeyId: string;
   readonly gmailRefreshTokenPreviousEncryptionKeys: ReadonlyArray<GmailRefreshTokenPreviousEncryptionKey>;
   readonly gmailOauthTokenUrl: string;
+  readonly syncDispatchPubSubTopicName: string | null;
   readonly host: string;
   readonly port: number;
   readonly workerBaseUrl: string;
@@ -152,6 +156,7 @@ export interface WorkerEnv extends CommonEnv {
   readonly gmailRefreshTokenPreviousEncryptionKeys: ReadonlyArray<GmailRefreshTokenPreviousEncryptionKey>;
   readonly gmailOauthTokenUrl: string;
   readonly gmailPubSubTopicName: string | null;
+  readonly syncDispatchPubSubTopicName: string | null;
   readonly gcpProjectId: string | null;
   readonly gcpRegion: string | null;
   readonly gcpTasksAudience: string | null;
@@ -205,6 +210,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
       host: loadHost,
       nodeEnv: loadNodeEnv,
       port: loadPort(3000),
+      syncDispatchPubSubTopicName: loadSyncDispatchPubSubTopicName,
       workerBaseUrl: loadMailboxWorkerBaseUrl,
     }).pipe(
       Effect.map((config) => ({
@@ -220,6 +226,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
           config.gmailRefreshTokenPreviousEncryptionKeys,
         ),
         gmailOauthTokenUrl: config.gmailOauthTokenUrl,
+        syncDispatchPubSubTopicName: normalizeOptional(config.syncDispatchPubSubTopicName),
         host: Option.match(config.host, {
           onNone: () => (config.asyncTransportMode === "gcp" ? "0.0.0.0" : "127.0.0.1"),
           onSome: (value) => value,
@@ -227,6 +234,16 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
         nodeEnv: config.nodeEnv,
         port: config.port,
         workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
+      })),
+      Effect.map((config) => ({
+        ...config,
+        syncDispatchPubSubTopicName:
+          config.asyncTransportMode === "gcp"
+            ? requireGcpValue(
+                config.syncDispatchPubSubTopicName,
+                "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+              )
+            : config.syncDispatchPubSubTopicName,
       })),
     ),
   );
@@ -242,6 +259,7 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
     gmailRefreshTokenEncryptionKeyId: "primary",
     gmailRefreshTokenPreviousEncryptionKeys: [],
     gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
+    syncDispatchPubSubTopicName: null,
     host: "127.0.0.1",
     nodeEnv: "test",
     port: 3000,
@@ -266,6 +284,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
       gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
       gmailOauthTokenUrl: loadGmailOauthTokenUrl,
       gmailPubSubTopicName: loadGmailPubSubTopicName,
+      syncDispatchPubSubTopicName: loadSyncDispatchPubSubTopicName,
       gcpProjectId: loadGcpProjectId,
       gcpRegion: loadGcpRegion,
       gcpTasksAudience: loadGcpTasksAudience,
@@ -290,6 +309,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
         ),
         gmailOauthTokenUrl: config.gmailOauthTokenUrl,
         gmailPubSubTopicName: normalizeOptional(config.gmailPubSubTopicName),
+        syncDispatchPubSubTopicName: normalizeOptional(config.syncDispatchPubSubTopicName),
         gcpProjectId: normalizeOptional(config.gcpProjectId),
         gcpRegion: normalizeOptional(config.gcpRegion),
         gcpTasksAudience: normalizeOptional(config.gcpTasksAudience),
@@ -318,6 +338,13 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
           config.asyncTransportMode === "gcp"
             ? requireGcpValue(config.gmailPubSubTopicName, "MAILMON_GMAIL_PUBSUB_TOPIC_NAME")
             : config.gmailPubSubTopicName,
+        syncDispatchPubSubTopicName:
+          config.asyncTransportMode === "gcp"
+            ? requireGcpValue(
+                config.syncDispatchPubSubTopicName,
+                "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+              )
+            : config.syncDispatchPubSubTopicName,
       })),
     ),
   );
@@ -333,6 +360,7 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
     gmailRefreshTokenPreviousEncryptionKeys: [],
     gmailOauthTokenUrl: "https://oauth2.googleapis.com/token",
     gmailPubSubTopicName: null,
+    syncDispatchPubSubTopicName: null,
     gcpProjectId: null,
     gcpRegion: null,
     gcpTasksAudience: null,

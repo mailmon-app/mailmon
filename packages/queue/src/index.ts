@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { PubSub } from "@google-cloud/pubsub";
 import { CloudTasksClient } from "@google-cloud/tasks";
 import {
   ControlJobDispatcher,
@@ -8,7 +9,7 @@ import {
   type ControlJobDispatchRequest,
   type WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
-import { Context, Effect, Layer, Ref, Runtime } from "effect";
+import { Context, Effect, Layer, Ref, Runtime, Schema } from "effect";
 
 export { MailboxSyncJobDataSchema, type MailboxSyncJobData } from "@mailmon/core";
 
@@ -19,6 +20,9 @@ export const DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID = "mailmon-webhook-deliveries
 const WEBHOOK_DELIVERY_TASK_PATH = "/internal/webhook-deliveries";
 const MAILBOX_SYNC_TASK_PATH = "/internal/sync";
 const CONTROL_JOB_TASK_PATH = "/internal/control-jobs";
+const encodeJsonString = (value: unknown) => {
+  return Schema.encodeUnknownSync(Schema.parseJson())(value);
+};
 
 export const createMailboxSyncJobData = (mailboxId: string) => {
   return {
@@ -100,7 +104,7 @@ const dispatchWorkerJson = (
       headers: {
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: encodeJsonString(body),
     });
 
     if (!response.ok) {
@@ -164,6 +168,42 @@ export const createWorkerHttpMailboxSyncDispatcherLayer = (
   return Layer.succeed(MailboxSyncDispatcher, {
     dispatchMailboxSync: (mailboxId: string) =>
       dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId),
+  });
+};
+
+export interface PubSubTopicLike {
+  readonly publishMessage: (message: {
+    readonly attributes?: Readonly<Record<string, string>>;
+    readonly data: Buffer;
+  }) => Promise<unknown>;
+}
+
+export interface PubSubClientLike {
+  readonly topic: (name: string) => PubSubTopicLike;
+}
+
+export interface GcpMailboxSyncDispatcherOptions {
+  readonly pubSubClient?: PubSubClientLike;
+  readonly topicName: string;
+}
+
+export const createGcpMailboxSyncDispatcherLayer = (options: GcpMailboxSyncDispatcherOptions) => {
+  const pubSubClient = options.pubSubClient ?? new PubSub();
+  const topic = pubSubClient.topic(options.topicName);
+
+  return Layer.succeed(MailboxSyncDispatcher, {
+    dispatchMailboxSync: (mailboxId: string) =>
+      Effect.promise(async () => {
+        const payload = encodeJsonString(createMailboxSyncJobData(mailboxId));
+
+        await topic.publishMessage({
+          attributes: {
+            kind: "mailbox_sync",
+            mailboxId,
+          },
+          data: Buffer.from(payload, "utf8"),
+        });
+      }),
   });
 };
 
@@ -270,7 +310,7 @@ export const createGcpWebhookDeliverySchedulerLayer = (
   return Layer.succeed(WebhookDeliveryScheduler, {
     scheduleWebhookDelivery: (request: WebhookDeliveryScheduleRequest) =>
       Effect.promise(async () => {
-        const payload = JSON.stringify(request);
+        const payload = encodeJsonString(request);
         const scheduleTime = createWebhookDeliveryTaskScheduleTime(request.notBefore);
 
         try {
