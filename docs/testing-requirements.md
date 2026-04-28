@@ -9,7 +9,7 @@ The repo is no longer at the "mostly unit tests" stage. It already has meaningfu
 The following layers are already implemented and should be treated as the required foundation for future work:
 
 - **API contract tests:** `apps/api/src/server.test.ts` exercises authenticated workspace-scoped HTTP behavior and request/response shaping.
-- **Worker runtime contract tests:** `apps/worker/src/server.test.ts` exercises `/health`, `/internal/sync`, `/internal/gmail-push`, `/internal/webhook-deliveries`, and `/internal/control-jobs`.
+- **Worker runtime contract tests:** `apps/worker/src/server.test.ts` exercises `/health`, `/internal/sync`, `/internal/gmail-push`, `/internal/webhook-deliveries`, and `/internal/control-jobs`, including local-mode bypass and GCP-mode internal auth rejection/verification.
 - **Sandbox E2E matrix:** `apps/api/src/sandbox-e2e.test.ts` runs the hosted connect flow, a real worker runtime, DB-backed sync, durable event emission, webhook delivery, reconnect-required handling, webhook retry behavior, duplicate incremental dispatch idempotency, and newest-first readback against a stateful Gmail sandbox server plus a local webhook receiver.
 - **Core workflow tests:** `packages/core/src/use-cases.test.ts` covers mailbox lease acquisition/skip behavior, reconnect-required transitions, lease heartbeat/loss, webhook retry scheduling, and stale completion handling.
 - **Gmail provider contract tests:** `packages/gmail/src/index.test.ts` covers token refresh failures, rate-limit classification, incremental history handling, and snapshot shaping.
@@ -27,6 +27,7 @@ The following contract-level scenarios are now part of the expected baseline and
 - Lease heartbeat failures record `lease_lost` and stop sync finalization.
 - Webhook deliveries retry on timeout and `5xx`, and stop retrying after `DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS`.
 - Internal worker HTTP routes preserve retry signals by returning non-`2xx` responses when sync or delivery processing fails.
+- Internal worker HTTP routes reject unauthenticated `gcp` requests before request validation or execution.
 
 These scenarios are covered today by the existing test suites and should stay in the normal PR-time test path.
 

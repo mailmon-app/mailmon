@@ -125,6 +125,7 @@ The worker service runs with:
 - `GCP_PROJECT_ID`
 - `GCP_REGION`
 - `MAILMON_GCP_WEBHOOK_DELIVERY_QUEUE_ID`
+- `MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL`
 - `MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL`
 - `MAILMON_GCP_TASKS_AUDIENCE`
 - `DATABASE_URL`
@@ -133,6 +134,7 @@ The worker service runs with:
 - `MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY`
 
 The worker base URL must be the externally reachable URL that Cloud Tasks, Pub/Sub, and Cloud Scheduler can call.
+The worker verifies Google OIDC tokens on all `/internal/*` routes in `gcp` mode and rejects unauthenticated requests.
 
 ## Migration workflow
 
@@ -197,6 +199,7 @@ After deployment, confirm:
 - the mailbox sync dispatch subscription can push to `/internal/sync`
 - Cloud Tasks can reach `/internal/webhook-deliveries`
 - Cloud Scheduler can reach `/internal/control-jobs`
+- unauthenticated `/internal/*` requests are rejected in `gcp` mode
 - the Gmail Push Notification subscription is active
 - the mailbox sync dispatch subscription and dead-letter topic are active
 - the Cloud SQL connection is working

@@ -57,6 +57,7 @@ Durable decisions that apply across all phases:
   - mailbox sync dispatch uses local HTTP adapters in local development and Pub/Sub push delivery to `/internal/sync` in staging/production
   - mailbox sync execution is mailbox-scoped and transport-neutral at the core boundary
   - webhook delivery uses Cloud Tasks semantics in staging/production and local scheduler adapters in local development
+  - worker internal HTTP routes verify Google OIDC tokens in staging/production and allow unauthenticated access only in local development
 - **Core coordination interfaces**:
   - mailbox sync acquisition, heartbeat, and release are transport-neutral services in `@mailmon/core`
   - sync run outcomes distinguish executed, skipped-due-to-active-lease, failed-after-acquisition, and lease-lost paths
@@ -216,6 +217,7 @@ Break this phase into four implementation slices so event semantics and delivery
 - [x] Webhook deliveries retry on timeout and `5xx`
 - [x] Endpoint health reflects repeated delivery failures without breaking unrelated API reads
 - [x] Delivery scheduling is transport-neutral in core and can run through local adapters in development and Cloud Tasks in staging/production
+- [x] Worker internal `/internal/*` routes reject unauthenticated requests in staging/production and verify the expected Google OIDC audience and service accounts
 
 ---
 
