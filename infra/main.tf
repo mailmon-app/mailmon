@@ -826,6 +826,30 @@ resource "google_pubsub_subscription_iam_member" "mailbox_sync_dispatch_dead_let
   member       = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
+resource "google_pubsub_subscription" "mailbox_sync_dispatch_dead_letter_worker" {
+  depends_on = [google_project_service.required_api]
+
+  name  = var.mailbox_sync_dispatch_dead_letter_subscription_name
+  topic = google_pubsub_topic.mailbox_sync_dispatch_dead_letter.id
+
+  ack_deadline_seconds       = 30
+  message_retention_duration = var.mailbox_sync_dispatch_message_retention_duration
+
+  push_config {
+    push_endpoint = "${local.worker_base_url}/internal/sync-dead-letter"
+
+    oidc_token {
+      audience              = local.worker_base_url
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  retry_policy {
+    maximum_backoff = "60s"
+    minimum_backoff = "10s"
+  }
+}
+
 resource "google_pubsub_subscription" "gmail_push_worker" {
   depends_on = [google_project_service.required_api]
 
@@ -940,6 +964,48 @@ resource "google_logging_metric" "mailmon_stuck_sync_recovery_count" {
   }
 }
 
+resource "google_logging_metric" "mailmon_sync_dispatch_exhaustion_count" {
+  depends_on = [google_project_service.required_api]
+
+  name   = "mailmon_sync_dispatch_exhaustion_count"
+  filter = "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"mailbox_sync_dispatch_retry_exhausted\""
+
+  metric_descriptor {
+    display_name = "Mailmon sync dispatch exhaustion count"
+    metric_kind  = "DELTA"
+    unit         = "1"
+    value_type   = "INT64"
+  }
+}
+
+resource "google_logging_metric" "mailmon_webhook_retry_exhaustion_count" {
+  depends_on = [google_project_service.required_api]
+
+  name   = "mailmon_webhook_retry_exhaustion_count"
+  filter = "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"webhook_delivery_retry_exhausted\""
+
+  metric_descriptor {
+    display_name = "Mailmon webhook retry exhaustion count"
+    metric_kind  = "DELTA"
+    unit         = "1"
+    value_type   = "INT64"
+  }
+}
+
+resource "google_logging_metric" "mailmon_webhook_delivery_worker_5xx_count" {
+  depends_on = [google_project_service.required_api]
+
+  name   = "mailmon_webhook_delivery_worker_5xx_count"
+  filter = "resource.type=\"cloud_run_revision\" AND httpRequest.requestUrl=~\"/internal/webhook-deliveries\" AND httpRequest.status>=500"
+
+  metric_descriptor {
+    display_name = "Mailmon webhook delivery worker 5xx count"
+    metric_kind  = "DELTA"
+    unit         = "1"
+    value_type   = "INT64"
+  }
+}
+
 resource "google_monitoring_alert_policy" "repeated_lease_contention" {
   count = var.enable_operational_alerts ? 1 : 0
 
@@ -1044,6 +1110,114 @@ resource "google_monitoring_alert_policy" "stuck_sync_recovery" {
 
   documentation {
     content   = "The stuck sync recovery control job cleared an expired mailbox sync lease. In production, any nonzero count may indicate worker crashes, request timeouts, or long syncs exceeding lease heartbeat expectations."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "sync_dispatch_exhaustion" {
+  count = var.enable_operational_alerts ? 1 : 0
+
+  display_name          = "Mailmon mailbox sync dispatch retry exhaustion"
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.alert_notification_channel_ids
+  user_labels           = local.labels
+
+  conditions {
+    display_name = "Sync dispatch exhaustion events exceed threshold"
+
+    condition_threshold {
+      comparison      = "COMPARISON_GE"
+      duration        = "0s"
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailmon_sync_dispatch_exhaustion_count.name}\" AND resource.type=\"cloud_run_revision\""
+      threshold_value = var.mailbox_sync_dispatch_exhaustion_alert_threshold
+
+      aggregations {
+        alignment_period     = "300s"
+        cross_series_reducer = "REDUCE_SUM"
+        per_series_aligner   = "ALIGN_DELTA"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  documentation {
+    content   = "A mailbox sync dispatch exhausted Pub/Sub delivery retries and was recorded as a mailbox Last Error. Inspect the structured log event for mailboxId and syncRunId before redispatching through a repair/control path."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "webhook_retry_exhaustion" {
+  count = var.enable_operational_alerts ? 1 : 0
+
+  display_name          = "Mailmon webhook delivery retry exhaustion"
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.alert_notification_channel_ids
+  user_labels           = local.labels
+
+  conditions {
+    display_name = "Webhook retry exhaustion events exceed threshold"
+
+    condition_threshold {
+      comparison      = "COMPARISON_GE"
+      duration        = "0s"
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailmon_webhook_retry_exhaustion_count.name}\" AND resource.type=\"cloud_run_revision\""
+      threshold_value = var.webhook_delivery_retry_exhaustion_alert_threshold
+
+      aggregations {
+        alignment_period     = "300s"
+        cross_series_reducer = "REDUCE_SUM"
+        per_series_aligner   = "ALIGN_DELTA"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  documentation {
+    content   = "A webhook delivery exhausted Mailmon-owned application retries and was persisted as webhook_delivery_retry_exhausted. Inspect endpoint delivery state and customer endpoint availability."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "webhook_delivery_worker_5xx" {
+  count = var.enable_operational_alerts ? 1 : 0
+
+  display_name          = "Mailmon webhook delivery worker 5xx"
+  combiner              = "OR"
+  enabled               = true
+  notification_channels = var.alert_notification_channel_ids
+  user_labels           = local.labels
+
+  conditions {
+    display_name = "Webhook delivery worker 5xx responses exceed threshold"
+
+    condition_threshold {
+      comparison      = "COMPARISON_GE"
+      duration        = "0s"
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.mailmon_webhook_delivery_worker_5xx_count.name}\" AND resource.type=\"cloud_run_revision\""
+      threshold_value = var.webhook_delivery_worker_5xx_alert_threshold
+
+      aggregations {
+        alignment_period     = "300s"
+        cross_series_reducer = "REDUCE_SUM"
+        per_series_aligner   = "ALIGN_DELTA"
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  documentation {
+    content   = "The worker returned 5xx from /internal/webhook-deliveries. Cloud Tasks may retry these platform failures; inspect worker errors before increasing application retry settings."
     mime_type = "text/markdown"
   }
 }

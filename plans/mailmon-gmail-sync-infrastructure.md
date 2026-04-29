@@ -282,6 +282,6 @@ Harden the system for production behavior under failure and scale. This slice fo
 - [x] Invalid or expired Gmail history cursors trigger a repair or full-resync path instead of leaving the mailbox permanently failed
 - [x] Repair or catch-up sync paths exist for missed changes and unhealthy watches
 - [x] Sync runs, cursor movement, mailbox lag, and webhook delivery degradation are observable
-- [ ] Stuck mailbox execution recovers through lease expiry and takeover
-- [ ] Repeated lease contention or lease loss is observable and alertable
-- [ ] Staging and production have explicit dead-letter and retry-exhaustion handling for webhook delivery
+- [x] Stuck mailbox execution recovers through lease expiry and takeover
+- [x] Repeated lease contention or lease loss is observable and alertable
+- [x] Staging and production have explicit dead-letter and retry-exhaustion handling for webhook delivery

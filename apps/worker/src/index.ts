@@ -10,6 +10,7 @@ import { Layer, ManagedRuntime } from "effect";
 import {
   createProcessControlJob,
   createProcessGmailPushNotification,
+  createProcessMailboxSyncDeadLetter,
   createProcessSyncJob,
   createProcessWebhookDelivery,
 } from "./processor.js";
@@ -112,7 +113,12 @@ const createWorkerProcessorRuntime = (
   const processSyncJob = createProcessSyncJob(runtime, {
     transportMode: env.asyncTransportMode,
   });
-  const processWebhookDelivery = createProcessWebhookDelivery(runtime);
+  const processMailboxSyncDeadLetter = createProcessMailboxSyncDeadLetter(runtime, {
+    transportMode: env.asyncTransportMode,
+  });
+  const processWebhookDelivery = createProcessWebhookDelivery(runtime, {
+    transportMode: env.asyncTransportMode,
+  });
 
   if (setDispatch !== null) {
     setDispatch(processWebhookDelivery);
@@ -123,6 +129,7 @@ const createWorkerProcessorRuntime = (
     runtime,
     processControlJob,
     processGmailPushNotification,
+    processMailboxSyncDeadLetter,
     processSyncJob,
     processWebhookDelivery,
   };
@@ -199,6 +206,7 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
     port: env.port,
     processControlJob: effectRuntime.processControlJob,
     processGmailPushNotification: effectRuntime.processGmailPushNotification,
+    processMailboxSyncDeadLetter: effectRuntime.processMailboxSyncDeadLetter,
     processSyncJob: effectRuntime.processSyncJob,
     processWebhookDelivery: effectRuntime.processWebhookDelivery,
   });

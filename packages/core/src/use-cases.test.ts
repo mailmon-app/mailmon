@@ -4,6 +4,7 @@ import * as TestClock from "effect/TestClock";
 
 import type {
   CompletedSyncRun,
+  MailboxSyncDispatchExhaustedResult,
   MailboxResource,
   PreparedWebhookDelivery,
   WebhookEndpointResource,
@@ -17,6 +18,7 @@ import {
   MailboxQueryCatalog,
   MailboxRepairStore,
   MailboxSyncCoordinator,
+  MailboxSyncDispatchExhaustionStore,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
   MailboxStateStore,
@@ -45,6 +47,7 @@ import {
   repairMailboxes,
   recoverStuckMailboxSyncExecutions,
   recoverWebhookDeliveryScheduling,
+  recordMailboxSyncDispatchExhausted,
   renewExpiringMailboxWatches,
   runControlJob,
   runMailboxSync,
@@ -149,6 +152,28 @@ const createSyncRunStoreTestLayer = (completedSyncRuns: Array<CompletedSyncRun>)
     completeSyncRun: (result) =>
       Effect.sync(() => {
         completedSyncRuns.push(result);
+      }),
+  });
+
+const createMailboxSyncDispatchExhaustionStoreTestLayer = (
+  records: Array<{
+    mailboxId: string;
+    recordedAt: string;
+    syncRunId: string;
+  }>,
+) =>
+  Layer.succeed(MailboxSyncDispatchExhaustionStore, {
+    recordMailboxSyncDispatchExhausted: (params) =>
+      Effect.sync(() => {
+        records.push(params);
+
+        return {
+          mailboxId: params.mailboxId,
+          status: "recorded",
+          syncRunId: params.syncRunId,
+          recordedAt: params.recordedAt,
+          detail: "mailbox_sync_dispatch_retry_exhausted",
+        } satisfies MailboxSyncDispatchExhaustedResult;
       }),
   });
 
@@ -697,6 +722,35 @@ describe("dispatchMailboxSync", () => {
         Effect.tap(() => Effect.sync(() => dispatchedMailboxIds.splice(0))),
         Effect.provide(Layer.mergeAll(catalogLayer, syncDispatcherLayer)),
       ),
+  );
+});
+
+describe("recordMailboxSyncDispatchExhausted", () => {
+  it.effect("records dispatch exhaustion without redispatching mailbox sync", () =>
+    Effect.gen(function* () {
+      const records: Array<{
+        mailboxId: string;
+        recordedAt: string;
+        syncRunId: string;
+      }> = [];
+
+      const result = yield* recordMailboxSyncDispatchExhausted(mailboxFixture.id).pipe(
+        Effect.provide(createMailboxSyncDispatchExhaustionStoreTestLayer(records)),
+      );
+
+      expect(result.status).toBe("recorded");
+      expect(result.mailboxId).toBe(mailboxFixture.id);
+      expect(result.detail).toBe("mailbox_sync_dispatch_retry_exhausted");
+      expect(result.syncRunId).toEqual(expect.stringMatching(/^sr_/));
+      expect(records).toEqual([
+        {
+          mailboxId: mailboxFixture.id,
+          recordedAt: expect.any(String),
+          syncRunId: result.syncRunId,
+        },
+      ]);
+      expect(dispatchedMailboxIds).toEqual([]);
+    }),
   );
 });
 
@@ -2283,7 +2337,7 @@ describe("runWebhookDelivery", () => {
     }),
   );
 
-  it.effect("fails retryable timeout failures after the fifth attempt without rescheduling", () =>
+  it.effect("returns retry_exhausted for retryable timeout failures at max attempts", () =>
     Effect.gen(function* () {
       const completedAttempts: Array<{
         deliveryId: string;
@@ -2325,7 +2379,7 @@ describe("runWebhookDelivery", () => {
 
       expect(result).toEqual({
         deliveryId: deliveryFixture.deliveryId,
-        status: "failed",
+        status: "retry_exhausted",
         attemptCount: 5,
         nextAttemptAt: null,
       });
@@ -2337,76 +2391,76 @@ describe("runWebhookDelivery", () => {
           state: "failed",
           nextAttemptAt: null,
           responseStatusCode: null,
-          errorCode: "webhook_delivery_timeout",
-          errorMessage: "Webhook delivery timed out after 5 seconds.",
-          retryable: true,
+          errorCode: "webhook_delivery_retry_exhausted",
+          errorMessage:
+            "Webhook delivery exhausted application retries after 5 attempts. Last failure: Webhook delivery timed out after 5 seconds.",
+          retryable: false,
         },
       ]);
       expect(scheduledDeliveryRequests).toEqual([]);
     }),
   );
 
-  it.effect(
-    "fails retryable 5xx endpoint responses after the fifth attempt without rescheduling",
-    () =>
-      Effect.gen(function* () {
-        const completedAttempts: Array<{
-          deliveryId: string;
-          attemptCount: number;
-          processingStartedAt: string;
-          state: "pending" | "delivered" | "failed";
-          nextAttemptAt: string | null;
-          responseStatusCode: number | null;
-          errorCode: string | null;
-          errorMessage: string | null;
-          retryable: boolean | null;
-        }> = [];
-        const scheduledDeliveryRequests: Array<{
-          deliveryId: string;
-          notBefore: string;
-        }> = [];
+  it.effect("returns retry_exhausted for retryable 5xx endpoint responses at max attempts", () =>
+    Effect.gen(function* () {
+      const completedAttempts: Array<{
+        deliveryId: string;
+        attemptCount: number;
+        processingStartedAt: string;
+        state: "pending" | "delivered" | "failed";
+        nextAttemptAt: string | null;
+        responseStatusCode: number | null;
+        errorCode: string | null;
+        errorMessage: string | null;
+        retryable: boolean | null;
+      }> = [];
+      const scheduledDeliveryRequests: Array<{
+        deliveryId: string;
+        notBefore: string;
+      }> = [];
 
-        const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              createWebhookDeliveryStoreTestLayer({
-                preparedDelivery: {
-                  ...deliveryFixture,
-                  attemptCount: 5,
-                },
-                completedAttempts,
+      const result = yield* runWebhookDelivery(deliveryFixture.deliveryId).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            createWebhookDeliveryStoreTestLayer({
+              preparedDelivery: {
+                ...deliveryFixture,
+                attemptCount: 5,
+              },
+              completedAttempts,
+            }),
+            createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
+            createWebhookDeliverySenderTestLayer(() =>
+              Effect.succeed({
+                statusCode: 503,
               }),
-              createWebhookDeliverySchedulerTestLayer(scheduledDeliveryRequests),
-              createWebhookDeliverySenderTestLayer(() =>
-                Effect.succeed({
-                  statusCode: 503,
-                }),
-              ),
             ),
           ),
-        );
+        ),
+      );
 
-        expect(result).toEqual({
+      expect(result).toEqual({
+        deliveryId: deliveryFixture.deliveryId,
+        status: "retry_exhausted",
+        attemptCount: 5,
+        nextAttemptAt: null,
+      });
+      expect(completedAttempts).toEqual([
+        {
           deliveryId: deliveryFixture.deliveryId,
-          status: "failed",
           attemptCount: 5,
+          processingStartedAt: deliveryFixture.processingStartedAt,
+          state: "failed",
           nextAttemptAt: null,
-        });
-        expect(completedAttempts).toEqual([
-          {
-            deliveryId: deliveryFixture.deliveryId,
-            attemptCount: 5,
-            processingStartedAt: deliveryFixture.processingStartedAt,
-            state: "failed",
-            nextAttemptAt: null,
-            responseStatusCode: 503,
-            errorCode: "webhook_endpoint_http_503",
-            errorMessage: "Webhook endpoint responded with HTTP 503.",
-            retryable: true,
-          },
-        ]);
-        expect(scheduledDeliveryRequests).toEqual([]);
-      }),
+          responseStatusCode: 503,
+          errorCode: "webhook_delivery_retry_exhausted",
+          errorMessage:
+            "Webhook delivery exhausted application retries after 5 attempts. Last response: HTTP 503.",
+          retryable: false,
+        },
+      ]);
+      expect(scheduledDeliveryRequests).toEqual([]);
+    }),
   );
 
   it.effect("fails non-retryable endpoint responses without rescheduling", () =>

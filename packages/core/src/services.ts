@@ -24,6 +24,7 @@ import type {
   MailboxProviderSyncResult,
   MailboxResource,
   MailboxSyncCommitResult,
+  MailboxSyncDispatchExhaustedResult,
   MailboxSyncLeaseRenewal,
   MailboxSyncRequest,
   MailboxSyncSnapshot,
@@ -248,6 +249,19 @@ export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateSt
         syncedAt: string;
       }>,
     ) => Effect.Effect<MailboxSyncCommitResult>;
+  }
+>() {}
+
+export class MailboxSyncDispatchExhaustionStore extends Context.Tag(
+  "@mailmon/core/MailboxSyncDispatchExhaustionStore",
+)<
+  MailboxSyncDispatchExhaustionStore,
+  {
+    readonly recordMailboxSyncDispatchExhausted: (params: {
+      readonly mailboxId: string;
+      readonly recordedAt: string;
+      readonly syncRunId: string;
+    }) => Effect.Effect<MailboxSyncDispatchExhaustedResult>;
   }
 >() {}
 

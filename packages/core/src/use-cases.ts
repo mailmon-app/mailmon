@@ -11,6 +11,7 @@ import type {
   CreateWebhookEndpointSubscriptionRequest,
   GmailPushNotification,
   GmailPushNotificationResult,
+  MailboxSyncDispatchExhaustedResult,
   MailboxResource,
   NoopControlJobResult,
   ProcessWebhookDeliveryResult,
@@ -44,6 +45,7 @@ import {
   MailboxPushNotificationStore,
   MailboxRepairStore,
   MailboxSyncCoordinator,
+  MailboxSyncDispatchExhaustionStore,
   MailboxSyncDispatcher,
   MailboxSyncProvider,
   MailboxStateStore,
@@ -112,6 +114,10 @@ const createWebhookEndpointId = () => {
 
 const createWebhookEndpointSecret = () => {
   return `whsec_${globalThis.crypto.randomUUID()}${globalThis.crypto.randomUUID()}`;
+};
+
+const createSyncRunId = () => {
+  return `sr_${globalThis.crypto.randomUUID()}`;
 };
 
 const WEBHOOK_EVENT_TYPE_ORDER: ReadonlyArray<WebhookEventType> = [
@@ -591,8 +597,10 @@ const classifyWebhookDeliveryFailure = (
   completedAt: string,
   failure: WebhookDeliverySendFailure,
 ) => {
+  const retryExhausted =
+    failure.retryable && delivery.attemptCount >= DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS;
   const nextAttemptAt =
-    failure.retryable && delivery.attemptCount < DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS
+    failure.retryable && !retryExhausted
       ? addMillisecondsToIsoTimestamp(
           completedAt,
           calculateWebhookDeliveryRetryDelayMs(delivery.attemptCount),
@@ -628,13 +636,15 @@ const classifyWebhookDeliveryFailure = (
       processingStartedAt: delivery.processingStartedAt,
       state: "failed",
       completedAt,
-      errorCode: failure.code,
-      errorMessage: failure.message,
-      retryable: failure.retryable,
+      errorCode: retryExhausted ? "webhook_delivery_retry_exhausted" : failure.code,
+      errorMessage: retryExhausted
+        ? `Webhook delivery exhausted application retries after ${delivery.attemptCount} attempts. Last failure: ${failure.message}`
+        : failure.message,
+      retryable: retryExhausted ? false : failure.retryable,
     }),
     result: {
       deliveryId: delivery.deliveryId,
-      status: "failed",
+      status: retryExhausted ? "retry_exhausted" : "failed",
       attemptCount: delivery.attemptCount,
       nextAttemptAt: null,
     } satisfies ProcessWebhookDeliveryResult,
@@ -669,8 +679,10 @@ const classifyWebhookDeliveryResponse = (
     } as const;
   }
 
+  const retryExhausted =
+    statusCode >= 500 && delivery.attemptCount >= DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS;
   const nextAttemptAt =
-    statusCode >= 500 && delivery.attemptCount < DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS
+    statusCode >= 500 && !retryExhausted
       ? addMillisecondsToIsoTimestamp(
           completedAt,
           calculateWebhookDeliveryRetryDelayMs(delivery.attemptCount),
@@ -708,13 +720,17 @@ const classifyWebhookDeliveryResponse = (
       state: "failed",
       completedAt,
       responseStatusCode: statusCode,
-      errorCode: `webhook_endpoint_http_${statusCode}`,
-      errorMessage: `Webhook endpoint responded with HTTP ${statusCode}.`,
-      retryable: statusCode >= 500,
+      errorCode: retryExhausted
+        ? "webhook_delivery_retry_exhausted"
+        : `webhook_endpoint_http_${statusCode}`,
+      errorMessage: retryExhausted
+        ? `Webhook delivery exhausted application retries after ${delivery.attemptCount} attempts. Last response: HTTP ${statusCode}.`
+        : `Webhook endpoint responded with HTTP ${statusCode}.`,
+      retryable: retryExhausted ? false : statusCode >= 500,
     }),
     result: {
       deliveryId: delivery.deliveryId,
-      status: "failed",
+      status: retryExhausted ? "retry_exhausted" : "failed",
       attemptCount: delivery.attemptCount,
       nextAttemptAt: null,
     } satisfies ProcessWebhookDeliveryResult,
@@ -1243,6 +1259,21 @@ export const dispatchMailboxSync = (mailboxId: string) =>
 
     return mailbox;
   });
+
+export const recordMailboxSyncDispatchExhausted = (mailboxId: string) =>
+  Effect.gen(function* () {
+    const store = yield* MailboxSyncDispatchExhaustionStore;
+
+    return yield* store.recordMailboxSyncDispatchExhausted({
+      mailboxId,
+      recordedAt: new Date().toISOString(),
+      syncRunId: createSyncRunId(),
+    });
+  }) satisfies Effect.Effect<
+    MailboxSyncDispatchExhaustedResult,
+    never,
+    MailboxSyncDispatchExhaustionStore
+  >;
 
 export const ingestGmailPushNotification = (notification: GmailPushNotification) =>
   Effect.gen(function* () {

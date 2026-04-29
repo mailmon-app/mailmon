@@ -4,12 +4,14 @@ import {
   type GmailPushNotification,
   type GmailPushNotificationResult,
   type MailboxSyncJobData,
+  type MailboxSyncDispatchExhaustedResult,
   type ProblemDetails,
   type ProcessWebhookDeliveryResult,
   type RecoverStuckMailboxSyncExecutionsResult,
   type SyncMailboxResult,
   type WebhookDeliveryScheduleRequest,
   ingestGmailPushNotification,
+  recordMailboxSyncDispatchExhausted,
   runControlJob,
   runWebhookDelivery,
   runMailboxSync,
@@ -48,6 +50,21 @@ type MailboxSyncOperationalLogEvent =
       readonly mailboxId: string;
       readonly syncRunId: string | null;
       readonly leaseOwnerId: string | null;
+      readonly transportMode: WorkerTransportMode;
+      readonly occurredAt: string;
+    }
+  | {
+      readonly event: "mailbox_sync_dispatch_retry_exhausted";
+      readonly mailboxId: string;
+      readonly syncRunId: string | null;
+      readonly transportMode: WorkerTransportMode;
+      readonly occurredAt: string;
+      readonly detail: "mailbox_not_found" | "mailbox_sync_dispatch_retry_exhausted";
+    }
+  | {
+      readonly event: "webhook_delivery_retry_exhausted";
+      readonly deliveryId: string;
+      readonly attemptCount: number | null;
       readonly transportMode: WorkerTransportMode;
       readonly occurredAt: string;
     };
@@ -144,6 +161,10 @@ type GmailPushProcessorRuntime = WorkerProcessorRuntime<
   import("effect").Effect.Effect.Context<ReturnType<typeof ingestGmailPushNotification>>
 >;
 
+type SyncDeadLetterProcessorRuntime = WorkerProcessorRuntime<
+  import("effect").Effect.Effect.Context<ReturnType<typeof recordMailboxSyncDispatchExhausted>>
+>;
+
 export const createProcessSyncJob = (
   runtime: SyncProcessorRuntime,
   options?: OperationalLogOptions,
@@ -166,9 +187,49 @@ export const createProcessSyncJob = (
   };
 };
 
-export const createProcessWebhookDelivery = (runtime: WebhookDeliveryProcessorRuntime) => {
-  return (request: WebhookDeliveryScheduleRequest): Promise<ProcessWebhookDeliveryResult> =>
-    runtime.runPromise(runWebhookDelivery(request.deliveryId));
+export const createProcessMailboxSyncDeadLetter = (
+  runtime: SyncDeadLetterProcessorRuntime,
+  options?: OperationalLogOptions,
+) => {
+  const operationalLogOptions = getOperationalLogOptions(options);
+
+  return async (job: MailboxSyncJobData): Promise<MailboxSyncDispatchExhaustedResult> => {
+    const result = await runtime.runPromise(recordMailboxSyncDispatchExhausted(job.mailboxId));
+
+    operationalLogOptions.log({
+      event: "mailbox_sync_dispatch_retry_exhausted",
+      mailboxId: result.mailboxId,
+      syncRunId: result.syncRunId,
+      transportMode: operationalLogOptions.transportMode,
+      occurredAt: result.recordedAt,
+      detail: result.detail,
+    });
+
+    return result;
+  };
+};
+
+export const createProcessWebhookDelivery = (
+  runtime: WebhookDeliveryProcessorRuntime,
+  options?: OperationalLogOptions,
+) => {
+  const operationalLogOptions = getOperationalLogOptions(options);
+
+  return async (request: WebhookDeliveryScheduleRequest): Promise<ProcessWebhookDeliveryResult> => {
+    const result = await runtime.runPromise(runWebhookDelivery(request.deliveryId));
+
+    if (result.status === "retry_exhausted") {
+      operationalLogOptions.log({
+        event: "webhook_delivery_retry_exhausted",
+        deliveryId: result.deliveryId,
+        attemptCount: result.attemptCount,
+        transportMode: operationalLogOptions.transportMode,
+        occurredAt: new Date().toISOString(),
+      });
+    }
+
+    return result;
+  };
 };
 
 export const createProcessControlJob = (

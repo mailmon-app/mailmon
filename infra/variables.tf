@@ -208,6 +208,12 @@ variable "mailbox_sync_dispatch_subscription_name" {
   default     = "mailbox-sync-dispatch-worker"
 }
 
+variable "mailbox_sync_dispatch_dead_letter_subscription_name" {
+  description = "Pub/Sub push subscription name for worker mailbox sync dispatch dead-letter intake."
+  type        = string
+  default     = "mailbox-sync-dispatch-dead-letter-worker"
+}
+
 variable "mailbox_sync_dispatch_topic_name" {
   description = "Pub/Sub topic name used for durable mailbox sync dispatch."
   type        = string
@@ -233,6 +239,17 @@ variable "lease_loss_alert_threshold" {
   validation {
     condition     = var.lease_loss_alert_threshold >= 1
     error_message = "lease_loss_alert_threshold must be at least 1."
+  }
+}
+
+variable "mailbox_sync_dispatch_exhaustion_alert_threshold" {
+  description = "Number of mailbox sync dispatch retry exhaustion log events in five minutes required to fire the exhaustion alert."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.mailbox_sync_dispatch_exhaustion_alert_threshold >= 1
+    error_message = "mailbox_sync_dispatch_exhaustion_alert_threshold must be at least 1."
   }
 }
 
@@ -385,13 +402,35 @@ variable "stuck_sync_recovery_alert_threshold" {
 variable "webhook_delivery_max_attempts" {
   description = "Maximum Cloud Tasks dispatch attempts for webhook deliveries."
   type        = number
-  default     = 5
+  default     = 3
 }
 
 variable "webhook_delivery_max_backoff" {
   description = "Maximum Cloud Tasks retry backoff for webhook deliveries."
   type        = string
-  default     = "300s"
+  default     = "30s"
+}
+
+variable "webhook_delivery_retry_exhaustion_alert_threshold" {
+  description = "Number of webhook delivery retry exhaustion log events in five minutes required to fire the exhaustion alert."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.webhook_delivery_retry_exhaustion_alert_threshold >= 1
+    error_message = "webhook_delivery_retry_exhaustion_alert_threshold must be at least 1."
+  }
+}
+
+variable "webhook_delivery_worker_5xx_alert_threshold" {
+  description = "Number of /internal/webhook-deliveries worker 5xx responses in five minutes required to fire the dispatch failure alert."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.webhook_delivery_worker_5xx_alert_threshold >= 1
+    error_message = "webhook_delivery_worker_5xx_alert_threshold must be at least 1."
+  }
 }
 
 variable "webhook_delivery_max_concurrent_dispatches" {
@@ -409,13 +448,13 @@ variable "webhook_delivery_max_dispatches_per_second" {
 variable "webhook_delivery_max_retry_duration" {
   description = "Maximum total retry duration for Cloud Tasks webhook deliveries."
   type        = string
-  default     = "3600s"
+  default     = "300s"
 }
 
 variable "webhook_delivery_min_backoff" {
   description = "Minimum Cloud Tasks retry backoff for webhook deliveries."
   type        = string
-  default     = "10s"
+  default     = "5s"
 }
 
 variable "webhook_delivery_queue_id" {

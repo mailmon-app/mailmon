@@ -9,6 +9,7 @@ import {
   MailboxQueryCatalog,
   MailboxRepairStore,
   MailboxSyncCoordinator,
+  MailboxSyncDispatchExhaustionStore,
   MailboxStateStore,
   MailboxWatchStore,
   SyncRunStore,
@@ -44,6 +45,7 @@ import {
   type MailboxEventType,
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncCommitResult,
+  type MailboxSyncDispatchExhaustedResult,
   type MailboxSyncLeaseRenewal,
   type MailboxWatchRenewalTarget,
   type MessageResource,
@@ -438,6 +440,7 @@ const toSyncRunInspectionStatus = (status: string): MailboxSyncRunInspectionStat
     case "completed":
     case "skipped_due_to_active_lease":
     case "reconnect_required":
+    case "dispatch_retry_exhausted":
     case "failed_after_lease_acquired":
     case "lease_lost":
       return status;
@@ -1075,6 +1078,17 @@ const getMailboxSyncFailureState = (
       lastErrorOccurredAt: toDate(result.completedAt),
       lastErrorRetryable: true,
       syncState: "lagging",
+    };
+  }
+
+  if (result.detail === "mailbox_sync_dispatch_retry_exhausted") {
+    return {
+      lastErrorCode: result.detail,
+      lastErrorMessage:
+        "Mailbox sync dispatch exhausted transport retries before a worker could process it.",
+      lastErrorOccurredAt: toDate(result.completedAt),
+      lastErrorRetryable: true,
+      syncState: "failed",
     };
   }
 
@@ -2643,6 +2657,73 @@ export const createMailboxStateStoreLayer = Layer.effect(
   }),
 );
 
+export const createMailboxSyncDispatchExhaustionStoreLayer = Layer.effect(
+  MailboxSyncDispatchExhaustionStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      recordMailboxSyncDispatchExhausted: ({ mailboxId, recordedAt, syncRunId }) =>
+        Effect.promise(async () => {
+          const recordedAtDate = toDate(recordedAt);
+
+          return database.db.transaction(async (transaction) => {
+            const [mailbox] = await transaction
+              .select({
+                cursor: mailboxes.cursor,
+              })
+              .from(mailboxes)
+              .where(eq(mailboxes.id, mailboxId))
+              .limit(1);
+
+            if (mailbox === undefined) {
+              return {
+                mailboxId,
+                status: "mailbox_not_found",
+                syncRunId: null,
+                recordedAt,
+                detail: "mailbox_not_found",
+              } satisfies MailboxSyncDispatchExhaustedResult;
+            }
+
+            await transaction.insert(syncRuns).values({
+              id: syncRunId,
+              mailboxId,
+              status: "dispatch_retry_exhausted",
+              startedAt: recordedAtDate,
+              completedAt: recordedAtDate,
+              eventsEmitted: "0",
+              previousCursor: mailbox.cursor,
+              nextCursor: mailbox.cursor,
+              detail: "mailbox_sync_dispatch_retry_exhausted",
+            });
+
+            await transaction
+              .update(mailboxes)
+              .set({
+                lastErrorCode: "mailbox_sync_dispatch_retry_exhausted",
+                lastErrorMessage:
+                  "Mailbox sync dispatch exhausted transport retries before a worker could process it.",
+                lastErrorOccurredAt: recordedAtDate,
+                lastErrorRetryable: true,
+                syncState: "failed",
+                updatedAt: recordedAtDate,
+              })
+              .where(eq(mailboxes.id, mailboxId));
+
+            return {
+              mailboxId,
+              status: "recorded",
+              syncRunId,
+              recordedAt,
+              detail: "mailbox_sync_dispatch_retry_exhausted",
+            } satisfies MailboxSyncDispatchExhaustedResult;
+          });
+        }),
+    };
+  }),
+);
+
 export const createMailboxWatchStoreLayer = Layer.effect(
   MailboxWatchStore,
   Effect.gen(function* () {
@@ -3184,6 +3265,7 @@ export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxRepairStoreLayer,
   createMailboxStateStoreLayer,
   createMailboxSyncCoordinatorLayer,
+  createMailboxSyncDispatchExhaustionStoreLayer,
   createMailboxWatchStoreLayer,
   createSyncRunStoreLayer,
   createWebhookDeliveryStoreLayer,

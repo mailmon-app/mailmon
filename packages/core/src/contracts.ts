@@ -30,6 +30,7 @@ export const SyncRunOutcomeSchema = Schema.Literal(
   "completed",
   "skipped_due_to_active_lease",
   "reconnect_required",
+  "dispatch_retry_exhausted",
   "failed_after_lease_acquired",
   "lease_lost",
 );
@@ -38,6 +39,7 @@ export const MailboxSyncRunInspectionStatusSchema = Schema.Literal(
   "completed",
   "skipped_due_to_active_lease",
   "reconnect_required",
+  "dispatch_retry_exhausted",
   "failed_after_lease_acquired",
   "lease_lost",
 );
@@ -336,7 +338,7 @@ export interface CompletedWebhookDeliveryAttempt {
 
 export interface ProcessWebhookDeliveryResult {
   readonly deliveryId: string;
-  readonly status: "delivered" | "failed" | "noop" | "scheduled_for_retry";
+  readonly status: "delivered" | "failed" | "noop" | "retry_exhausted" | "scheduled_for_retry";
   readonly attemptCount: number | null;
   readonly nextAttemptAt: string | null;
 }
@@ -355,6 +357,14 @@ export interface CompletedSyncRun {
   readonly eventsEmitted: number;
   readonly nextCursor: string | null;
   readonly detail: string | null;
+}
+
+export interface MailboxSyncDispatchExhaustedResult {
+  readonly mailboxId: string;
+  readonly status: "mailbox_not_found" | "recorded";
+  readonly syncRunId: string | null;
+  readonly recordedAt: string;
+  readonly detail: "mailbox_not_found" | "mailbox_sync_dispatch_retry_exhausted";
 }
 
 export interface MailboxSyncRunInspectionResource {

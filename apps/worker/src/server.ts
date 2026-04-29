@@ -7,6 +7,7 @@ import type {
   GmailPushNotification,
   GmailPushNotificationResult,
   MailboxSyncJobData,
+  MailboxSyncDispatchExhaustedResult,
   ProblemDetails,
   ProcessWebhookDeliveryResult,
   SyncMailboxResult,
@@ -43,6 +44,9 @@ interface WorkerHttpRuntimeOptions {
   ) => Promise<GmailPushNotificationResult>;
   readonly processControlJob: (request: ControlJobDispatchRequest) => Promise<ControlJobRunResult>;
   readonly processSyncJob: (job: MailboxSyncJobData) => Promise<SyncMailboxResult>;
+  readonly processMailboxSyncDeadLetter?: (
+    job: MailboxSyncJobData,
+  ) => Promise<MailboxSyncDispatchExhaustedResult>;
   readonly processWebhookDelivery: (
     request: WebhookDeliveryScheduleRequest,
   ) => Promise<ProcessWebhookDeliveryResult>;
@@ -57,13 +61,15 @@ interface WorkerHttpRuntimeHandle {
 
 class WorkerHttpProcessors extends Context.Tag("@mailmon/worker/WorkerHttpProcessors")<
   WorkerHttpProcessors,
-  Pick<
-    WorkerHttpRuntimeOptions,
-    | "processControlJob"
-    | "processGmailPushNotification"
-    | "processSyncJob"
-    | "processWebhookDelivery"
-  >
+  {
+    readonly processControlJob: WorkerHttpRuntimeOptions["processControlJob"];
+    readonly processGmailPushNotification: WorkerHttpRuntimeOptions["processGmailPushNotification"];
+    readonly processMailboxSyncDeadLetter: NonNullable<
+      WorkerHttpRuntimeOptions["processMailboxSyncDeadLetter"]
+    >;
+    readonly processSyncJob: WorkerHttpRuntimeOptions["processSyncJob"];
+    readonly processWebhookDelivery: WorkerHttpRuntimeOptions["processWebhookDelivery"];
+  }
 >() {}
 
 type InternalAuthResult =
@@ -255,6 +261,53 @@ const parseMailboxSyncRequest = (
       error: "Pub/Sub message.data was not valid base64-encoded JSON.",
     };
   }
+};
+
+const parseMailboxSyncDeadLetterRequest = (
+  payload: unknown,
+): { readonly job: MailboxSyncJobData } | { readonly error: string } => {
+  if (!isRecord(payload) || !isRecord(payload.message)) {
+    return {
+      error: "Expected a Pub/Sub dead-letter push envelope with a message object.",
+    };
+  }
+
+  const message = payload.message;
+
+  if (typeof message.data !== "string" || message.data.length === 0) {
+    return {
+      error:
+        "Expected Pub/Sub dead-letter message.data to contain a base64-encoded mailbox sync payload.",
+    };
+  }
+
+  try {
+    const decoded = decodeBase64Json(message.data);
+
+    if (!isMailboxSyncJobData(decoded)) {
+      return {
+        error: "Expected dead-lettered mailbox sync data to include a non-empty mailboxId field.",
+      };
+    }
+
+    return {
+      job: decoded,
+    };
+  } catch {
+    return {
+      error: "Pub/Sub dead-letter message.data was not valid base64-encoded JSON.",
+    };
+  }
+};
+
+const logInvalidMailboxSyncDeadLetter = (detail: string) => {
+  console.log(
+    JSON.stringify({
+      event: "mailbox_sync_dispatch_dead_letter_invalid",
+      detail,
+      occurredAt: new Date().toISOString(),
+    }),
+  );
 };
 
 const extractBearerToken = (authorizationHeader: string | undefined) => {
@@ -502,6 +555,35 @@ export const createWorkerApp = (
     }
   });
 
+  app.post("/internal/sync-dead-letter", async (context) => {
+    try {
+      const payload = await readJsonRequest(context.req);
+      const parsed = parseMailboxSyncDeadLetterRequest(payload);
+
+      if ("error" in parsed) {
+        logInvalidMailboxSyncDeadLetter(parsed.error);
+
+        return context.json({
+          status: "accepted",
+          detail: parsed.error,
+        });
+      }
+
+      const processors = await getWorkerHttpProcessors(runtime);
+      const result = await processors.processMailboxSyncDeadLetter(parsed.job);
+
+      return context.json(result);
+    } catch (error) {
+      if (isProblemDetails(error)) {
+        return createJsonResponse(error, error.status >= 500 ? error.status : 500);
+      }
+
+      return createWorkerInternalErrorResponse(
+        "The worker failed while processing the sync dead-letter request.",
+      );
+    }
+  });
+
   app.post("/internal/gmail-push", async (context) => {
     if (options.asyncTransportMode === "local") {
       return context.json(
@@ -626,6 +708,15 @@ export const startWorkerHttpRuntime = async (
     Layer.succeed(WorkerHttpProcessors, {
       processControlJob: options.processControlJob,
       processGmailPushNotification: options.processGmailPushNotification,
+      processMailboxSyncDeadLetter:
+        options.processMailboxSyncDeadLetter ??
+        (async ({ mailboxId }) => ({
+          mailboxId,
+          status: "mailbox_not_found" as const,
+          syncRunId: null,
+          recordedAt: new Date().toISOString(),
+          detail: "mailbox_not_found" as const,
+        })),
       processSyncJob: options.processSyncJob,
       processWebhookDelivery: options.processWebhookDelivery,
     }),

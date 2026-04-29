@@ -3,7 +3,12 @@ import { createStubMailboxSyncProviderLayer } from "@mailmon/gmail";
 import { Layer, ManagedRuntime } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { createProcessControlJob, createProcessSyncJob } from "./processor.js";
+import {
+  createProcessControlJob,
+  createProcessMailboxSyncDeadLetter,
+  createProcessSyncJob,
+  createProcessWebhookDelivery,
+} from "./processor.js";
 
 describe("processSyncJob", () => {
   it("runs the mailbox-scoped sync workflow", async () => {
@@ -43,6 +48,8 @@ describe("processSyncJob", () => {
       nextCursor: null,
     };
     // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed sync result.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed exhaustion result.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed exhaustion result.
     const runtime = {
       runPromise: async () => result,
     } as unknown as Parameters<typeof createProcessSyncJob>[0];
@@ -70,6 +77,8 @@ describe("processSyncJob", () => {
   it("emits a structured lease-loss log before rethrowing lease loss failures", async () => {
     const logs: unknown[] = [];
     // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and throws a fixed problem.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed webhook delivery result.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed webhook delivery result.
     const runtime = {
       runPromise: async () => {
         throw {
@@ -102,6 +111,75 @@ describe("processSyncJob", () => {
         mailboxId: "mbx_demo",
         syncRunId: "sr_lost",
         leaseOwnerId: "lease_lost",
+        transportMode: "gcp",
+        occurredAt: expect.any(String),
+      },
+    ]);
+  });
+});
+
+describe("processMailboxSyncDeadLetter", () => {
+  it("records retry exhaustion and emits a structured exhaustion log", async () => {
+    const logs: unknown[] = [];
+    const result = {
+      mailboxId: "mbx_demo",
+      status: "recorded" as const,
+      syncRunId: "sr_exhausted",
+      recordedAt: "2026-04-23T00:00:00.000Z",
+      detail: "mailbox_sync_dispatch_retry_exhausted" as const,
+    };
+    const runtime = {
+      runPromise: async () => result,
+    } as unknown as Parameters<typeof createProcessMailboxSyncDeadLetter>[0];
+
+    const processMailboxSyncDeadLetter = createProcessMailboxSyncDeadLetter(runtime, {
+      log: (event) => logs.push(event),
+      transportMode: "gcp",
+    });
+
+    await expect(processMailboxSyncDeadLetter({ mailboxId: "mbx_demo" })).resolves.toEqual(result);
+    expect(logs).toEqual([
+      {
+        event: "mailbox_sync_dispatch_retry_exhausted",
+        mailboxId: "mbx_demo",
+        syncRunId: "sr_exhausted",
+        transportMode: "gcp",
+        occurredAt: "2026-04-23T00:00:00.000Z",
+        detail: "mailbox_sync_dispatch_retry_exhausted",
+      },
+    ]);
+  });
+});
+
+describe("processWebhookDelivery", () => {
+  it("emits a structured exhaustion log for retry_exhausted results", async () => {
+    const logs: unknown[] = [];
+    const result = {
+      deliveryId: "del_demo",
+      status: "retry_exhausted" as const,
+      attemptCount: 5,
+      nextAttemptAt: null,
+    };
+    const runtime = {
+      runPromise: async () => result,
+    } as unknown as Parameters<typeof createProcessWebhookDelivery>[0];
+
+    const processWebhookDelivery = createProcessWebhookDelivery(runtime, {
+      log: (event) => logs.push(event),
+      transportMode: "gcp",
+    });
+
+    await expect(
+      processWebhookDelivery({
+        deliveryId: "del_demo",
+        notBefore: "2026-04-23T00:00:00.000Z",
+      }),
+    ).resolves.toEqual(result);
+    expect(logs).toEqual([
+      {
+        event: "webhook_delivery_retry_exhausted",
+        deliveryId: "del_demo",
+        attemptCount: 5,
         transportMode: "gcp",
         occurredAt: expect.any(String),
       },
