@@ -18,24 +18,46 @@ const requireGcpApiValue = (value: string | null, name: string) => {
   return value;
 };
 
-const createApiRuntimeLayer = (
-  env: Pick<
-    ApiEnv,
-    | "asyncTransportMode"
-    | "databaseUrl"
-    | "gmailApiBaseUrl"
-    | "gmailOauthAuthorizeUrl"
-    | "gmailOauthClientId"
-    | "gmailOauthClientSecret"
-    | "gmailRefreshTokenEncryptionKey"
-    | "gmailRefreshTokenEncryptionKeyId"
-    | "gmailRefreshTokenPreviousEncryptionKeys"
-    | "gmailOauthTokenUrl"
-    | "nodeEnv"
-    | "syncDispatchPubSubTopicName"
-    | "workerBaseUrl"
-  >,
-) => {
+type ApiRuntimeEnv = Pick<
+  ApiEnv,
+  | "asyncTransportMode"
+  | "databaseUrl"
+  | "gmailApiBaseUrl"
+  | "gmailOauthAuthorizeUrl"
+  | "gmailOauthClientId"
+  | "gmailOauthClientSecret"
+  | "gmailRefreshTokenEncryptionKey"
+  | "gmailRefreshTokenEncryptionKeyId"
+  | "gmailRefreshTokenPreviousEncryptionKeys"
+  | "gmailOauthTokenUrl"
+  | "nodeEnv"
+  | "syncDispatchPubSubTopicName"
+  | "workerBaseUrl"
+>;
+
+const createMailboxSyncDispatcherLayer = (env: ApiRuntimeEnv) => {
+  switch (env.asyncTransportMode) {
+    case "gcp":
+      return createGcpMailboxSyncDispatcherLayer({
+        topicName: requireGcpApiValue(
+          env.syncDispatchPubSubTopicName,
+          "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+        ),
+      });
+    case "local":
+      return createWorkerHttpMailboxSyncDispatcherLayer({
+        workerBaseUrl: env.workerBaseUrl,
+      });
+    case "legacy_bullmq":
+      throw new Error(
+        "apps/api does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq; use local or gcp",
+      );
+  }
+
+  throw new Error("Unsupported MAILMON_ASYNC_TRANSPORT_MODE");
+};
+
+export const createApiRuntimeLayer = (env: ApiRuntimeEnv) => {
   const gmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
     activeKeyId: env.gmailRefreshTokenEncryptionKeyId,
     allowPlaintextFallback: env.nodeEnv !== "production",
@@ -52,44 +74,11 @@ const createApiRuntimeLayer = (
     oauthClientSecret: env.gmailOauthClientSecret,
     oauthTokenUrl: env.gmailOauthTokenUrl,
   });
-  if (env.asyncTransportMode === "legacy_bullmq") {
-    throw new Error(
-      "apps/api does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq; use local or gcp",
-    );
-  }
-
-  const mailboxSyncDispatcherLayer =
-    env.asyncTransportMode === "gcp"
-      ? createGcpMailboxSyncDispatcherLayer({
-          topicName: requireGcpApiValue(
-            env.syncDispatchPubSubTopicName,
-            "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-          ),
-        })
-      : createWorkerHttpMailboxSyncDispatcherLayer({
-          workerBaseUrl: env.workerBaseUrl,
-        });
+  const mailboxSyncDispatcherLayer = createMailboxSyncDispatcherLayer(env);
 
   return Layer.mergeAll(persistenceLayer, mailboxConnectProviderLayer, mailboxSyncDispatcherLayer);
 };
 
-export const createApiRuntime = (
-  env: Pick<
-    ApiEnv,
-    | "asyncTransportMode"
-    | "databaseUrl"
-    | "gmailApiBaseUrl"
-    | "gmailOauthAuthorizeUrl"
-    | "gmailOauthClientId"
-    | "gmailOauthClientSecret"
-    | "gmailRefreshTokenEncryptionKey"
-    | "gmailRefreshTokenEncryptionKeyId"
-    | "gmailRefreshTokenPreviousEncryptionKeys"
-    | "gmailOauthTokenUrl"
-    | "nodeEnv"
-    | "syncDispatchPubSubTopicName"
-    | "workerBaseUrl"
-  >,
-) => {
+export const createApiRuntime = (env: ApiRuntimeEnv) => {
   return ManagedRuntime.make(createApiRuntimeLayer(env));
 };

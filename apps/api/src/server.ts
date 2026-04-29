@@ -1,5 +1,4 @@
 import {
-  authenticateWorkspaceApiKeyOrFail,
   completeGmailMailboxConnectSession,
   createWebhookEndpoint,
   createWebhookEndpointSubscription,
@@ -14,206 +13,37 @@ import {
   listMailboxMessages,
   listMailboxThreads,
   type MailboxSyncRunInspectionResource,
-  type CreateConnectSessionRequest,
-  type CreateWebhookEndpointRequest,
-  type CreateWebhookEndpointSubscriptionRequest,
-  type ProblemDetails,
-  type WebhookEventType,
 } from "@mailmon/core";
-import { Effect, ManagedRuntime } from "effect";
 import { Hono } from "hono";
+import { describeRoute, openAPIRouteHandler } from "hono-openapi";
+import { HTTPException } from "hono/http-exception";
 
-type ApiServerRuntime = Pick<ManagedRuntime.ManagedRuntime<any, any>, "runPromise">;
-
-const createProblemResponse = (problem: ProblemDetails) => {
-  return new Response(JSON.stringify(problem), {
-    status: problem.status,
-    headers: {
-      "content-type": "application/json",
-    },
-  });
-};
-
-const invalidRequest = (detail: string): ProblemDetails => {
-  return {
-    type: "https://api.mailmon.dev/problems/invalid-request",
-    title: "Invalid request",
-    status: 400,
-    code: "invalid_request",
-    detail,
-    retryable: false,
-  };
-};
-
-const DEFAULT_LIST_LIMIT = 50;
-const MAX_LIST_LIMIT = 100;
-const INVALID_OPTIONAL_NULLABLE_STRING = Symbol("invalid_optional_nullable_string");
-
-const isReadonlyRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
-  return typeof value === "object" && value !== null;
-};
-
-const extractBearerApiKey = (authorizationHeader: string | undefined) => {
-  if (authorizationHeader === undefined) {
-    return null;
-  }
-
-  const [scheme, token] = authorizationHeader.split(/\s+/, 2);
-
-  if (scheme?.toLowerCase() !== "bearer" || token === undefined || token.length === 0) {
-    return null;
-  }
-
-  return token;
-};
-
-const isCreateConnectSessionRequest = (value: unknown): value is CreateConnectSessionRequest => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "provider" in value &&
-    value.provider === "gmail" &&
-    "tenantExternalId" in value &&
-    typeof value.tenantExternalId === "string" &&
-    value.tenantExternalId.length > 0 &&
-    "mailboxExternalId" in value &&
-    typeof value.mailboxExternalId === "string" &&
-    value.mailboxExternalId.length > 0 &&
-    "redirectUrl" in value &&
-    typeof value.redirectUrl === "string" &&
-    value.redirectUrl.length > 0
-  );
-};
-
-const isHttpUrl = (value: string) => {
-  try {
-    const url = new URL(value);
-
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
-const getOptionalStringProperty = (
-  value: Readonly<Record<string, unknown>>,
-  keys: ReadonlyArray<string>,
-) => {
-  for (const key of keys) {
-    const property = value[key];
-
-    if (property === undefined) {
-      continue;
-    }
-
-    if (typeof property !== "string" || property.length === 0) {
-      return null;
-    }
-
-    return property;
-  }
-
-  return undefined;
-};
-
-const getOptionalNullableStringProperty = (
-  value: Readonly<Record<string, unknown>>,
-  keys: ReadonlyArray<string>,
-) => {
-  for (const key of keys) {
-    const property = value[key];
-
-    if (property === undefined) {
-      continue;
-    }
-
-    if (property === null) {
-      return null;
-    }
-
-    if (typeof property !== "string" || property.length === 0) {
-      return INVALID_OPTIONAL_NULLABLE_STRING;
-    }
-
-    return property;
-  }
-
-  return undefined;
-};
-
-const getRequiredStringArrayProperty = (
-  value: Readonly<Record<string, unknown>>,
-  keys: ReadonlyArray<string>,
-) => {
-  const property = keys.map((key) => value[key]).find((candidate) => candidate !== undefined);
-
-  if (!Array.isArray(property) || property.length === 0) {
-    return null;
-  }
-
-  const items = property.filter(
-    (item): item is string => typeof item === "string" && item.length > 0,
-  );
-
-  return items.length === property.length ? items : null;
-};
-
-const isWebhookEventType = (value: string): value is WebhookEventType => {
-  return value === "message.created" || value === "message.updated" || value === "thread.updated";
-};
-
-const parseCreateWebhookEndpointRequest = (value: unknown): CreateWebhookEndpointRequest | null => {
-  if (!isReadonlyRecord(value)) {
-    return null;
-  }
-
-  const url = getOptionalStringProperty(value, ["url"]);
-  const description = getOptionalNullableStringProperty(value, ["description"]);
-
-  if (
-    typeof url !== "string" ||
-    !isHttpUrl(url) ||
-    description === INVALID_OPTIONAL_NULLABLE_STRING
-  ) {
-    return null;
-  }
-
-  return {
-    url,
-    description: description ?? null,
-  };
-};
-
-const parseCreateWebhookEndpointSubscriptionRequest = (
-  value: unknown,
-): CreateWebhookEndpointSubscriptionRequest | null => {
-  if (!isReadonlyRecord(value)) {
-    return null;
-  }
-
-  const mailboxIds = getRequiredStringArrayProperty(value, ["mailboxIds", "mailbox_ids"]);
-  const eventTypes = getRequiredStringArrayProperty(value, ["eventTypes", "event_types"]);
-
-  if (mailboxIds === null || eventTypes === null || !eventTypes.every(isWebhookEventType)) {
-    return null;
-  }
-
-  return {
-    mailboxIds,
-    eventTypes,
-  };
-};
+import {
+  authenticateRequest,
+  createProblemResponse,
+  runProblemEffect,
+  type ApiServerRuntime,
+} from "./http/handlers.js";
+import {
+  CreateConnectSessionBodySchema,
+  CreateWebhookEndpointBodySchema,
+  CreateWebhookEndpointSubscriptionBodySchema,
+  CursorLimitQuerySchema,
+  DEFAULT_LIST_LIMIT,
+  INVALID_CONNECT_SESSION_BODY_DETAIL,
+  INVALID_JSON_DETAIL,
+  INVALID_LIMIT_DETAIL,
+  INVALID_WEBHOOK_ENDPOINT_BODY_DETAIL,
+  MailboxListQuerySchema,
+  type CreateWebhookEndpointSubscriptionBody,
+  type CursorLimitQueryParams,
+  type MailboxListQueryParams,
+  invalidRequest,
+} from "./http/parsers.js";
+import { mailboxListQueryDetail, subscriptionBodyDetail, validate } from "./http/validation.js";
 
 const getRequestOrigin = (requestUrl: string) => {
   return new URL(requestUrl).origin;
-};
-
-const getMailboxIdQuery = (request: { readonly query: (key: string) => string | undefined }) => {
-  return request.query("mailboxId") ?? request.query("mailbox_id") ?? null;
-};
-
-const parseListCursor = (request: { readonly query: (key: string) => string | undefined }) => {
-  return request.query("cursor") ?? null;
 };
 
 const toSyncRunsResponse = (response: {
@@ -240,22 +70,6 @@ const toSyncRunsResponse = (response: {
   };
 };
 
-const parseListLimit = (request: { readonly query: (key: string) => string | undefined }) => {
-  const limitValue = request.query("limit");
-
-  if (limitValue === undefined) {
-    return DEFAULT_LIST_LIMIT;
-  }
-
-  const parsed = Number.parseInt(limitValue, 10);
-
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LIST_LIMIT) {
-    return null;
-  }
-
-  return parsed;
-};
-
 const buildConnectRedirectUrl = (
   redirectUrl: string,
   params: Readonly<Record<string, string | null | undefined>>,
@@ -280,330 +94,370 @@ const redirectToConnectResult = (
   return Response.redirect(buildConnectRedirectUrl(redirectUrl, params), 302);
 };
 
-const matchProblemEffect = async <A, E, R>(
-  runtime: ApiServerRuntime,
-  effect: Effect.Effect<A, E, R>,
-) => {
-  return runtime.runPromise(
-    effect.pipe(
-      Effect.match({
-        onFailure: (problem) => ({ _tag: "failure" as const, problem }),
-        onSuccess: (value) => ({ _tag: "success" as const, value }),
-      }),
-    ),
-  );
+const toCursorLimitParams = (query: CursorLimitQueryParams) => {
+  return {
+    cursor: query.cursor ?? null,
+    limit: query.limit ?? DEFAULT_LIST_LIMIT,
+  };
 };
 
-const authenticateRequest = async (
-  runtime: ApiServerRuntime,
-  authorizationHeader: string | undefined,
-) => {
-  const apiKey = extractBearerApiKey(authorizationHeader);
+const toMailboxListParams = (query: MailboxListQueryParams) => {
+  const mailboxId = query.mailboxId ?? query.mailbox_id;
 
-  if (apiKey === null) {
-    return {
-      _tag: "failure" as const,
-      problem: invalidRequest("Authorization must use Bearer <mailmon_api_key>."),
-    };
-  }
-
-  const result = await matchProblemEffect(runtime, authenticateWorkspaceApiKeyOrFail(apiKey));
-
-  if (result._tag === "failure") {
-    return result;
+  if (mailboxId === undefined) {
+    throw new Error("Validated mailbox list query is missing a mailbox id.");
   }
 
   return {
-    _tag: "success" as const,
-    workspace: result.value,
+    ...toCursorLimitParams(query),
+    mailboxId,
   };
+};
+
+const toWebhookEndpointSubscriptionRequest = (request: CreateWebhookEndpointSubscriptionBody) => {
+  return "mailboxIds" in request
+    ? {
+        mailboxIds: request.mailboxIds,
+        eventTypes: request.eventTypes,
+      }
+    : {
+        mailboxIds: request.mailbox_ids,
+        eventTypes: request.event_types,
+      };
 };
 
 export const createApp = (runtime: ApiServerRuntime) => {
   const app = new Hono();
 
+  app.onError((error) => {
+    if (error instanceof HTTPException && error.message === "Malformed JSON in request body") {
+      return createProblemResponse(invalidRequest(INVALID_JSON_DETAIL));
+    }
+
+    throw error;
+  });
+
   app.get("/health", (context) => {
     return context.json({ status: "ok" });
   });
 
-  app.post("/v1/mailboxes/connect-sessions", async (context) => {
-    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+  app.post(
+    "/v1/mailboxes/connect-sessions",
+    describeRoute({
+      summary: "Create a mailbox connect session",
+      responses: {
+        201: {
+          description: "Connect session created",
+        },
+        400: {
+          description: "Invalid request",
+        },
+      },
+    }),
+    validate("json", CreateConnectSessionBodySchema, INVALID_CONNECT_SESSION_BODY_DETAIL),
+    async (context) => {
+      const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
-      return createProblemResponse(auth.problem);
-    }
+      if (auth.tag === "failure") {
+        return createProblemResponse(auth.problem);
+      }
 
-    const payload = await context.req.json().catch(() => null);
-
-    if (!isCreateConnectSessionRequest(payload)) {
-      return createProblemResponse(
-        invalidRequest(
-          "Body must include provider, tenantExternalId, mailboxExternalId, and redirectUrl.",
+      const request = context.req.valid("json");
+      const result = await runProblemEffect(
+        runtime,
+        createMailboxConnectSession(
+          auth.workspace.workspaceId,
+          request,
+          getRequestOrigin(context.req.url),
         ),
       );
-    }
 
-    const result = await matchProblemEffect(
-      runtime,
-      createMailboxConnectSession(
-        auth.workspace.workspaceId,
-        payload,
-        getRequestOrigin(context.req.url),
-      ),
-    );
+      if (result.tag === "failure") {
+        return createProblemResponse(result.problem);
+      }
 
-    if (result._tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
+      return context.json(result.value, 201);
+    },
+  );
 
-    return context.json(result.value, 201);
-  });
+  app.post(
+    "/v1/webhook-endpoints",
+    describeRoute({
+      summary: "Create a webhook endpoint",
+      responses: {
+        201: {
+          description: "Webhook endpoint created",
+        },
+        400: {
+          description: "Invalid request",
+        },
+      },
+    }),
+    validate("json", CreateWebhookEndpointBodySchema, INVALID_WEBHOOK_ENDPOINT_BODY_DETAIL),
+    async (context) => {
+      const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-  app.post("/v1/webhook-endpoints", async (context) => {
-    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+      if (auth.tag === "failure") {
+        return createProblemResponse(auth.problem);
+      }
 
-    if (auth._tag === "failure") {
-      return createProblemResponse(auth.problem);
-    }
-
-    const payload = await context.req.json().catch(() => null);
-    const request = parseCreateWebhookEndpointRequest(payload);
-
-    if (request === null) {
-      return createProblemResponse(
-        invalidRequest("Body must include a valid http(s) url and an optional description."),
+      const request = context.req.valid("json");
+      const result = await runProblemEffect(
+        runtime,
+        createWebhookEndpoint(auth.workspace.workspaceId, {
+          url: request.url,
+          description: request.description ?? null,
+        }),
       );
-    }
 
-    const result = await matchProblemEffect(
-      runtime,
-      createWebhookEndpoint(auth.workspace.workspaceId, request),
-    );
+      if (result.tag === "failure") {
+        return createProblemResponse(result.problem);
+      }
 
-    if (result._tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
+      return context.json(result.value, 201);
+    },
+  );
 
-    return context.json(result.value, 201);
-  });
+  app.post(
+    "/v1/webhook-endpoints/:endpointId/subscriptions",
+    describeRoute({
+      summary: "Create mailbox-scoped webhook subscriptions",
+      responses: {
+        201: {
+          description: "Webhook subscriptions created",
+        },
+        400: {
+          description: "Invalid request",
+        },
+        404: {
+          description: "Mailbox or webhook endpoint not found",
+        },
+      },
+    }),
+    validate("json", CreateWebhookEndpointSubscriptionBodySchema, subscriptionBodyDetail),
+    async (context) => {
+      const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-  app.post("/v1/webhook-endpoints/:endpointId/subscriptions", async (context) => {
-    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+      if (auth.tag === "failure") {
+        return createProblemResponse(auth.problem);
+      }
 
-    if (auth._tag === "failure") {
-      return createProblemResponse(auth.problem);
-    }
-
-    const payload = await context.req.json().catch(() => null);
-    const request = parseCreateWebhookEndpointSubscriptionRequest(payload);
-
-    if (request === null) {
-      return createProblemResponse(
-        invalidRequest(
-          "Body must include mailboxIds/mailbox_ids and eventTypes/event_types arrays.",
+      const request = toWebhookEndpointSubscriptionRequest(context.req.valid("json"));
+      const result = await runProblemEffect(
+        runtime,
+        createWebhookEndpointSubscription(
+          auth.workspace.workspaceId,
+          context.req.param("endpointId"),
+          request,
         ),
       );
-    }
 
-    const result = await matchProblemEffect(
-      runtime,
-      createWebhookEndpointSubscription(
-        auth.workspace.workspaceId,
-        context.req.param("endpointId"),
-        request,
-      ),
-    );
+      if (result.tag === "failure") {
+        return createProblemResponse(result.problem);
+      }
 
-    if (result._tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
-
-    return context.json(result.value, 201);
-  });
+      return context.json(result.value, 201);
+    },
+  );
 
   app.get("/v1/mailboxes/:mailboxId", async (context) => {
     const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
+    if (auth.tag === "failure") {
       return createProblemResponse(auth.problem);
     }
 
-    const result = await matchProblemEffect(
+    const result = await runProblemEffect(
       runtime,
       getMailboxOrFail(context.req.param("mailboxId"), {
         workspaceId: auth.workspace.workspaceId,
       }),
     );
 
-    if (result._tag === "failure") {
+    if (result.tag === "failure") {
       return createProblemResponse(result.problem);
     }
 
     return context.json(result.value);
   });
 
-  app.get("/v1/mailboxes/:mailboxId/sync-runs", async (context) => {
-    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+  app.get(
+    "/v1/mailboxes/:mailboxId/sync-runs",
+    describeRoute({
+      summary: "List mailbox sync runs",
+      responses: {
+        200: {
+          description: "Mailbox sync runs",
+        },
+        400: {
+          description: "Invalid request",
+        },
+      },
+    }),
+    validate("query", CursorLimitQuerySchema, INVALID_LIMIT_DETAIL),
+    async (context) => {
+      const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
-      return createProblemResponse(auth.problem);
-    }
+      if (auth.tag === "failure") {
+        return createProblemResponse(auth.problem);
+      }
 
-    const limit = parseListLimit(context.req);
+      const params = toCursorLimitParams(context.req.valid("query"));
 
-    if (limit === null) {
-      return createProblemResponse(
-        invalidRequest(`Query parameter limit must be an integer between 1 and ${MAX_LIST_LIMIT}.`),
+      const result = await runProblemEffect(
+        runtime,
+        listMailboxSyncRuns(context.req.param("mailboxId"), {
+          cursor: params.cursor,
+          limit: params.limit,
+          workspaceId: auth.workspace.workspaceId,
+        }),
       );
-    }
 
-    const result = await matchProblemEffect(
-      runtime,
-      listMailboxSyncRuns(context.req.param("mailboxId"), {
-        cursor: parseListCursor(context.req),
-        limit,
-        workspaceId: auth.workspace.workspaceId,
-      }),
-    );
+      if (result.tag === "failure") {
+        return createProblemResponse(result.problem);
+      }
 
-    if (result._tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
-
-    return context.json(toSyncRunsResponse(result.value));
-  });
+      return context.json(toSyncRunsResponse(result.value));
+    },
+  );
 
   app.get("/v1/mailboxes/:mailboxId/observability", async (context) => {
     const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
+    if (auth.tag === "failure") {
       return createProblemResponse(auth.problem);
     }
 
-    const result = await matchProblemEffect(
+    const result = await runProblemEffect(
       runtime,
       getMailboxObservability(context.req.param("mailboxId"), {
         workspaceId: auth.workspace.workspaceId,
       }),
     );
 
-    if (result._tag === "failure") {
+    if (result.tag === "failure") {
       return createProblemResponse(result.problem);
     }
 
     return context.json(result.value);
   });
 
-  app.get("/v1/messages", async (context) => {
-    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+  app.get(
+    "/v1/messages",
+    describeRoute({
+      summary: "List mailbox messages",
+      responses: {
+        200: {
+          description: "Mailbox messages",
+        },
+        400: {
+          description: "Invalid request",
+        },
+      },
+    }),
+    validate("query", MailboxListQuerySchema, mailboxListQueryDetail),
+    async (context) => {
+      const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
-      return createProblemResponse(auth.problem);
-    }
+      if (auth.tag === "failure") {
+        return createProblemResponse(auth.problem);
+      }
 
-    const mailboxId = getMailboxIdQuery(context.req);
+      const params = toMailboxListParams(context.req.valid("query"));
 
-    if (mailboxId === null) {
-      return createProblemResponse(invalidRequest("Query must include mailboxId or mailbox_id."));
-    }
-
-    const limit = parseListLimit(context.req);
-
-    if (limit === null) {
-      return createProblemResponse(
-        invalidRequest(`Query parameter limit must be an integer between 1 and ${MAX_LIST_LIMIT}.`),
+      const result = await runProblemEffect(
+        runtime,
+        listMailboxMessages(params.mailboxId, {
+          cursor: params.cursor,
+          limit: params.limit,
+          workspaceId: auth.workspace.workspaceId,
+        }),
       );
-    }
 
-    const result = await matchProblemEffect(
-      runtime,
-      listMailboxMessages(mailboxId, {
-        cursor: parseListCursor(context.req),
-        limit,
-        workspaceId: auth.workspace.workspaceId,
-      }),
-    );
+      if (result.tag === "failure") {
+        return createProblemResponse(result.problem);
+      }
 
-    if (result._tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
-
-    return context.json(result.value);
-  });
+      return context.json(result.value);
+    },
+  );
 
   app.get("/v1/messages/:messageId", async (context) => {
     const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
+    if (auth.tag === "failure") {
       return createProblemResponse(auth.problem);
     }
 
-    const result = await matchProblemEffect(
+    const result = await runProblemEffect(
       runtime,
       getMessageOrFail(context.req.param("messageId"), {
         workspaceId: auth.workspace.workspaceId,
       }),
     );
 
-    if (result._tag === "failure") {
+    if (result.tag === "failure") {
       return createProblemResponse(result.problem);
     }
 
     return context.json(result.value);
   });
 
-  app.get("/v1/threads", async (context) => {
-    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+  app.get(
+    "/v1/threads",
+    describeRoute({
+      summary: "List mailbox threads",
+      responses: {
+        200: {
+          description: "Mailbox threads",
+        },
+        400: {
+          description: "Invalid request",
+        },
+      },
+    }),
+    validate("query", MailboxListQuerySchema, mailboxListQueryDetail),
+    async (context) => {
+      const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
-      return createProblemResponse(auth.problem);
-    }
+      if (auth.tag === "failure") {
+        return createProblemResponse(auth.problem);
+      }
 
-    const mailboxId = getMailboxIdQuery(context.req);
+      const params = toMailboxListParams(context.req.valid("query"));
 
-    if (mailboxId === null) {
-      return createProblemResponse(invalidRequest("Query must include mailboxId or mailbox_id."));
-    }
-
-    const limit = parseListLimit(context.req);
-
-    if (limit === null) {
-      return createProblemResponse(
-        invalidRequest(`Query parameter limit must be an integer between 1 and ${MAX_LIST_LIMIT}.`),
+      const result = await runProblemEffect(
+        runtime,
+        listMailboxThreads(params.mailboxId, {
+          cursor: params.cursor,
+          limit: params.limit,
+          workspaceId: auth.workspace.workspaceId,
+        }),
       );
-    }
 
-    const result = await matchProblemEffect(
-      runtime,
-      listMailboxThreads(mailboxId, {
-        cursor: parseListCursor(context.req),
-        limit,
-        workspaceId: auth.workspace.workspaceId,
-      }),
-    );
+      if (result.tag === "failure") {
+        return createProblemResponse(result.problem);
+      }
 
-    if (result._tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
-
-    return context.json(result.value);
-  });
+      return context.json(result.value);
+    },
+  );
 
   app.get("/v1/threads/:threadId", async (context) => {
     const auth = await authenticateRequest(runtime, context.req.header("authorization"));
 
-    if (auth._tag === "failure") {
+    if (auth.tag === "failure") {
       return createProblemResponse(auth.problem);
     }
 
-    const result = await matchProblemEffect(
+    const result = await runProblemEffect(
       runtime,
       getThreadOrFail(context.req.param("threadId"), {
         workspaceId: auth.workspace.workspaceId,
       }),
     );
 
-    if (result._tag === "failure") {
+    if (result.tag === "failure") {
       return createProblemResponse(result.problem);
     }
 
@@ -619,12 +473,12 @@ export const createApp = (runtime: ApiServerRuntime) => {
       );
     }
 
-    const connectSessionResult = await matchProblemEffect(
+    const connectSessionResult = await runProblemEffect(
       runtime,
       getConnectSessionOrFail(connectSessionId),
     );
 
-    if (connectSessionResult._tag === "failure") {
+    if (connectSessionResult.tag === "failure") {
       return createProblemResponse(connectSessionResult.problem);
     }
 
@@ -646,12 +500,12 @@ export const createApp = (runtime: ApiServerRuntime) => {
       });
     }
 
-    const completion = await matchProblemEffect(
+    const completion = await runProblemEffect(
       runtime,
       completeGmailMailboxConnectSession(connectSessionId, code, getRequestOrigin(context.req.url)),
     );
 
-    if (completion._tag === "failure") {
+    if (completion.tag === "failure") {
       return redirectToConnectResult(connectSessionResult.value.redirectUrl, {
         code: completion.problem.code,
         detail: completion.problem.detail,
@@ -668,7 +522,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
   });
 
   app.get("/oauth/gmail/:connectSessionId", async (context) => {
-    const result = await matchProblemEffect(
+    const result = await runProblemEffect(
       runtime,
       getGmailMailboxConnectAuthorizationUrl(
         context.req.param("connectSessionId"),
@@ -676,12 +530,25 @@ export const createApp = (runtime: ApiServerRuntime) => {
       ),
     );
 
-    if (result._tag === "failure") {
+    if (result.tag === "failure") {
       return createProblemResponse(result.problem);
     }
 
     return Response.redirect(result.value, 302);
   });
+
+  app.get(
+    "/openapi.json",
+    openAPIRouteHandler(app, {
+      documentation: {
+        openapi: "3.1.0",
+        info: {
+          title: "Mailmon API",
+          version: "1.0.0",
+        },
+      },
+    }),
+  );
 
   return app;
 };

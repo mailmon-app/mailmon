@@ -16,14 +16,18 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.0",
+    "@hono/standard-validator": "^0.2.2",
     "@mailmon/config": "workspace:*",
     "@mailmon/core": "workspace:*",
     "@mailmon/db": "workspace:*",
     "@mailmon/gmail": "workspace:*",
     "@mailmon/queue": "workspace:*",
+    "@standard-community/standard-json": "^0.3.5",
+    "@standard-community/standard-openapi": "^0.2.9",
     "@varlock/google-secret-manager-plugin": "catalog:",
     "effect": "catalog:",
     "hono": "^4.12.15",
+    "hono-openapi": "^1.3.0",
     "varlock": "catalog:"
   }
 }

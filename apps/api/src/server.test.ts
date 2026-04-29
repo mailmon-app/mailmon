@@ -16,6 +16,12 @@ import {
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { describe, expect, it } from "vitest";
 
+import {
+  INVALID_JSON_DETAIL,
+  INVALID_LIMIT_DETAIL,
+  INVALID_WEBHOOK_EVENT_TYPES_DETAIL,
+  MISSING_MAILBOX_QUERY_DETAIL,
+} from "./http/parsers.js";
 import { createApp } from "./server.js";
 
 const primaryWorkspaceId = "ws_123";
@@ -382,6 +388,24 @@ describe("createApp", () => {
     await expect(response.json()).resolves.toEqual({ status: "ok" });
   });
 
+  it("serves the generated OpenAPI document", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/openapi.json");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      openapi: "3.1.0",
+      info: {
+        title: "Mailmon API",
+        version: "1.0.0",
+      },
+      paths: {
+        "/v1/mailboxes/connect-sessions": expect.any(Object),
+        "/v1/messages": expect.any(Object),
+      },
+    });
+  });
+
   it("requires a bearer API key for mailbox reads", async () => {
     const { app } = createRuntime();
     const response = await app.request("/v1/mailboxes/mbx_demo");
@@ -449,6 +473,36 @@ describe("createApp", () => {
     });
   });
 
+  it("rejects non-integer message list limit with deterministic invalid_request detail", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/messages?mailbox_id=mbx_demo&limit=abc", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_request",
+      detail: INVALID_LIMIT_DETAIL,
+    });
+  });
+
+  it("rejects message lists missing mailbox query with deterministic invalid_request detail", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/messages", {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_request",
+      detail: MISSING_MAILBOX_QUERY_DETAIL,
+    });
+  });
+
   it("returns a single message resource scoped to the authenticated workspace", async () => {
     const { app } = createRuntime();
     const response = await app.request("/v1/messages/msg_demo", {
@@ -511,6 +565,24 @@ describe("createApp", () => {
       object: "connect_session",
       connectUrl: expect.stringMatching(/^http:\/\/localhost\/oauth\/gmail\/mcs_/),
       expiresAt: expect.any(String),
+    });
+  });
+
+  it("returns invalid_request when connect session body is malformed JSON", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/mailboxes/connect-sessions", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: "{ not-json",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_request",
+      detail: INVALID_JSON_DETAIL,
     });
   });
 
@@ -598,6 +670,27 @@ describe("createApp", () => {
         },
       ],
       nextCursor: null,
+    });
+  });
+
+  it("rejects unsupported webhook event type with deterministic invalid_request detail", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/webhook-endpoints/whe_demo/subscriptions", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxIds: ["mbx_demo"],
+        eventTypes: ["message.deleted"],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_request",
+      detail: INVALID_WEBHOOK_EVENT_TYPES_DETAIL,
     });
   });
 
