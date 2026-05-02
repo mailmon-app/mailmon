@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import {
   MailboxCatalog,
@@ -98,6 +98,7 @@ import {
   webhookEndpoints,
   webhookEndpointSubscriptions,
   workspaceApiKeys,
+  workspaces,
 } from "./schema.js";
 
 type DatabaseHandle = ReturnType<typeof createDb>;
@@ -110,6 +111,30 @@ type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
 type WebhookEndpointSubscriptionRow = typeof webhookEndpointSubscriptions.$inferSelect;
 
 type SyncRunRow = typeof syncRuns.$inferSelect;
+
+export interface CreatedWorkspaceOperatorResult {
+  readonly workspaceId: string;
+  readonly created: boolean;
+}
+
+export interface CreatedWorkspaceApiKeyOperatorResult {
+  readonly apiKeyId: string;
+  readonly apiKey: string;
+  readonly keyPrefix: "mm_live_" | "mm_test_";
+  readonly workspaceId: string;
+}
+
+export interface RevokedWorkspaceApiKeyOperatorResult {
+  readonly apiKeyId: string | null;
+  readonly revoked: boolean;
+}
+
+export interface LocalReplayMailboxEvent {
+  readonly id: string;
+  readonly mailboxId: string;
+  readonly occurredAt: string;
+  readonly payload: MailboxEventEnvelope;
+}
 
 const WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS = 30_000;
 const TERMINAL_GMAIL_CREDENTIAL_PROBLEM_CODES = new Set([
@@ -153,6 +178,10 @@ export interface GmailMailboxCredentialRewrapResult {
 
 const hashApiKey = (apiKey: string) => {
   return createHash("sha256").update(apiKey).digest("hex");
+};
+
+const generateWorkspaceApiKey = (prefix: "mm_live_" | "mm_test_") => {
+  return `${prefix}${randomBytes(32).toString("base64url")}`;
 };
 
 const normalizeEmailAddress = (emailAddress: string) => {
@@ -1266,6 +1295,145 @@ export const createDatabaseLayer = (connectionString: string) =>
     ),
   );
 
+const withDatabase = <A>(connectionString: string, f: (database: DatabaseHandle) => Promise<A>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => createDb(connectionString)),
+    (database) => Effect.promise(() => f(database)),
+    ({ client }) => Effect.promise(() => client.end()),
+  );
+
+export const createWorkspaceForOperators = (params: {
+  readonly connectionString: string;
+  readonly workspaceId?: string;
+}) =>
+  withDatabase(params.connectionString, async (database) => {
+    const now = new Date();
+    const workspaceId = params.workspaceId ?? `ws_${globalThis.crypto.randomUUID()}`;
+    const [inserted] = await database.db
+      .insert(workspaces)
+      .values({
+        id: workspaceId,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing({
+        target: workspaces.id,
+      })
+      .returning({
+        id: workspaces.id,
+      });
+
+    return {
+      workspaceId,
+      created: inserted !== undefined,
+    } satisfies CreatedWorkspaceOperatorResult;
+  });
+
+export const createWorkspaceApiKeyForOperators = (params: {
+  readonly connectionString: string;
+  readonly keyPrefix: "mm_live_" | "mm_test_";
+  readonly workspaceId: string;
+}) =>
+  withDatabase(params.connectionString, async (database) => {
+    const now = new Date();
+    const apiKey = generateWorkspaceApiKey(params.keyPrefix);
+    const [row] = await database.db
+      .insert(workspaceApiKeys)
+      .values({
+        id: `wak_${globalThis.crypto.randomUUID()}`,
+        workspaceId: params.workspaceId,
+        keyPrefix: params.keyPrefix,
+        apiKeyHash: hashApiKey(apiKey),
+        revokedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({
+        id: workspaceApiKeys.id,
+      });
+
+    if (row === undefined) {
+      throw new Error(`Workspace API key insert failed for workspace ${params.workspaceId}.`);
+    }
+
+    return {
+      apiKeyId: row.id,
+      apiKey,
+      keyPrefix: params.keyPrefix,
+      workspaceId: params.workspaceId,
+    } satisfies CreatedWorkspaceApiKeyOperatorResult;
+  });
+
+export const revokeWorkspaceApiKeyForOperators = (params: {
+  readonly apiKey?: string;
+  readonly apiKeyId?: string;
+  readonly connectionString: string;
+}) =>
+  withDatabase(params.connectionString, async (database) => {
+    if (params.apiKey === undefined && params.apiKeyId === undefined) {
+      throw new Error("Either apiKey or apiKeyId is required to revoke a workspace API key.");
+    }
+
+    const now = new Date();
+    const [row] = await database.db
+      .update(workspaceApiKeys)
+      .set({
+        revokedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          params.apiKeyId === undefined
+            ? eq(workspaceApiKeys.apiKeyHash, hashApiKey(params.apiKey ?? ""))
+            : eq(workspaceApiKeys.id, params.apiKeyId),
+          isNull(workspaceApiKeys.revokedAt),
+        ),
+      )
+      .returning({
+        id: workspaceApiKeys.id,
+      });
+
+    return {
+      apiKeyId: row?.id ?? params.apiKeyId ?? null,
+      revoked: row !== undefined,
+    } satisfies RevokedWorkspaceApiKeyOperatorResult;
+  });
+
+export const listMailboxEventsForLocalReplay = (params: {
+  readonly connectionString: string;
+  readonly mailboxId: string;
+  readonly since: string;
+  readonly until?: string;
+  readonly limit?: number;
+}) =>
+  withDatabase(params.connectionString, async (database) => {
+    const since = toDate(params.since);
+    const until = params.until === undefined ? null : toDate(params.until);
+    const predicates = [
+      eq(mailboxEvents.mailboxId, params.mailboxId),
+      gte(mailboxEvents.occurredAt, since),
+      ...(until === null ? [] : [lte(mailboxEvents.occurredAt, until)]),
+    ];
+    const rows = await database.db
+      .select({
+        id: mailboxEvents.id,
+        mailboxId: mailboxEvents.mailboxId,
+        occurredAt: mailboxEvents.occurredAt,
+        payload: mailboxEvents.payload,
+      })
+      .from(mailboxEvents)
+      .where(and(...predicates))
+      .orderBy(asc(mailboxEvents.occurredAt), asc(mailboxEvents.id))
+      .limit(params.limit ?? 500);
+
+    return rows.map((row) => ({
+      id: row.id,
+      mailboxId: row.mailboxId,
+      occurredAt: row.occurredAt.toISOString(),
+      payload: row.payload,
+    })) satisfies ReadonlyArray<LocalReplayMailboxEvent>;
+  });
+
 export const createMailboxCatalogLayer = Layer.effect(
   MailboxCatalog,
   Effect.gen(function* () {
@@ -1334,7 +1502,12 @@ export const createWorkspaceApiKeyStoreLayer = Layer.effect(
               workspaceId: workspaceApiKeys.workspaceId,
             })
             .from(workspaceApiKeys)
-            .where(eq(workspaceApiKeys.apiKeyHash, hashApiKey(apiKey)))
+            .where(
+              and(
+                eq(workspaceApiKeys.apiKeyHash, hashApiKey(apiKey)),
+                isNull(workspaceApiKeys.revokedAt),
+              ),
+            )
             .limit(1);
 
           return Option.fromNullable(row).pipe(

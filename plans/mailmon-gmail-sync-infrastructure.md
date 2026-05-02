@@ -252,12 +252,12 @@ Complete the developer local-dev story and back-office operations. The CLI shoul
 
 ### Acceptance criteria
 
-- [ ] `mailmon listen --forward-to <url>` forwards Mailmon deliveries to a local endpoint
-- [ ] `mailmon replay --mailbox ... --last ... --forward-to ...` replays stored events into localhost
-- [ ] `mailmon admin workspace create` and `mailmon admin keys create/revoke` commands exist
-- [ ] API keys are generated with secure prefixes (`mm_live_`, `mm_test_`) and stored only as hashes
-- [ ] Local testing does not require local Gmail Pub/Sub or watch infrastructure
-- [ ] Test signatures are supported for local webhook verification
+- [x] `mailmon listen --forward-to <url>` forwards Mailmon deliveries to a local endpoint
+- [x] `mailmon replay --mailbox ... --last ... --forward-to ...` replays stored events into localhost
+- [x] `mailmon admin workspace create` and `mailmon admin keys create/revoke` commands exist
+- [x] API keys are generated with secure prefixes (`mm_live_`, `mm_test_`) and stored only as hashes
+- [x] Local testing does not require local Gmail Pub/Sub or watch infrastructure
+- [x] Test signatures are supported for local webhook verification
 - [ ] Developers can run control-job behavior manually through CLI or local runtime entrypoints instead of cloud schedulers
 
 ---

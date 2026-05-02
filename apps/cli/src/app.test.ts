@@ -3,9 +3,13 @@ import { CliConfig } from "@mailmon/config";
 import { Effect, Option } from "effect";
 
 import {
+  formatCreatedWorkspace,
+  formatCreatedWorkspaceApiKey,
   formatGmailCredentialAuditSummary,
   formatGmailCredentialRewrapSummary,
+  formatRevokedWorkspaceApiKey,
   getListenMessage,
+  parseLastDurationMs,
 } from "./app.js";
 
 describe("getListenMessage", () => {
@@ -26,6 +30,49 @@ describe("getListenMessage", () => {
       expect(message).toContain("http://localhost:3000/webhooks/mailmon");
     }).pipe(Effect.provide(CliConfig.testLayer)),
   );
+});
+
+describe("phase 8 operator helpers", () => {
+  it("parses replay durations", () => {
+    expect(parseLastDurationMs("30m")).toBe(1_800_000);
+    expect(parseLastDurationMs("2h")).toBe(7_200_000);
+    expect(() => parseLastDurationMs("yesterday")).toThrow(/Duration must use/);
+  });
+
+  it("formats workspace creation output", () => {
+    expect(formatCreatedWorkspace({ created: true, workspaceId: "ws_demo" })).toBe(
+      "created workspace ws_demo",
+    );
+    expect(formatCreatedWorkspace({ created: false, workspaceId: "ws_demo" })).toBe(
+      "workspace ws_demo already exists",
+    );
+  });
+
+  it("formats generated API keys with the raw key visible exactly once", () => {
+    expect(
+      formatCreatedWorkspaceApiKey({
+        apiKey: "mm_test_raw",
+        apiKeyId: "wak_demo",
+        keyPrefix: "mm_test_",
+        workspaceId: "ws_demo",
+      }),
+    ).toBe(
+      [
+        "created workspace API key wak_demo for ws_demo",
+        "prefix: mm_test_",
+        "api_key: mm_test_raw",
+      ].join("\n"),
+    );
+  });
+
+  it("formats API key revocation output", () => {
+    expect(formatRevokedWorkspaceApiKey({ apiKeyId: "wak_demo", revoked: true })).toBe(
+      "revoked workspace API key wak_demo",
+    );
+    expect(formatRevokedWorkspaceApiKey({ apiKeyId: null, revoked: false })).toBe(
+      "workspace API key was not found or was already revoked",
+    );
+  });
 });
 
 describe("gmail credential summaries", () => {

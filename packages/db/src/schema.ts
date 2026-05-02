@@ -28,7 +28,9 @@ export const workspaceApiKeys = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id),
+    keyPrefix: text("key_prefix"),
     apiKeyHash: text("api_key_hash").notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
