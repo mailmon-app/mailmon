@@ -88,8 +88,10 @@ The infrastructure layer creates:
 - `google_pubsub_topic.mailbox_sync_dispatch`
 - `google_pubsub_subscription.mailbox_sync_dispatch_worker`
 - `google_pubsub_topic.mailbox_sync_dispatch_dead_letter`
+- `google_pubsub_subscription.mailbox_sync_dispatch_dead_letter_worker`
 - log-based metrics for mailbox sync lease contention, lease loss, and stuck sync recovery
-- optional Monitoring alert policies for those lease-health metrics
+- log-based metrics for mailbox sync dispatch retry exhaustion, webhook delivery retry exhaustion, and webhook delivery worker `5xx` responses
+- optional Monitoring alert policies for those operational metrics
 
 Relevant outputs include:
 
@@ -116,6 +118,9 @@ Terraform always creates these log-based metrics:
 - `mailmon_lease_contention_count`
 - `mailmon_lease_loss_count`
 - `mailmon_stuck_sync_recovery_count`
+- `mailmon_sync_dispatch_exhaustion_count`
+- `mailmon_webhook_retry_exhaustion_count`
+- `mailmon_webhook_delivery_worker_5xx_count`
 
 Set `enable_operational_alerts=true` to create alert policies.
 Alert policies use five-minute aligned counts and send notifications to `alert_notification_channel_ids`.
@@ -128,6 +133,12 @@ The default thresholds are:
 For production, keep stuck sync recovery at `1` initially.
 Any recovery means a lease expired while a worker still appeared to own the sync critical section.
 Investigate the structured log event first, then use the observability API for mailbox history.
+
+Mailbox sync dispatch and webhook delivery use different exhaustion paths:
+
+- mailbox sync dispatch is Pub/Sub-backed; exhausted pushes are sent to the mailbox sync dispatch dead-letter topic and then pushed to `/internal/sync-dead-letter`, where the worker records `mailbox_sync_dispatch_retry_exhausted` as a Sync Run outcome and Mailbox Last Error
+- webhook delivery is Cloud Tasks-backed; customer endpoint retries are owned by Mailmon in `webhook_deliveries`, and exhausted deliveries are persisted with `webhook_delivery_retry_exhausted`
+- Cloud Tasks platform dispatch failures to `/internal/webhook-deliveries` are surfaced through `mailmon_webhook_delivery_worker_5xx_count`; investigate worker errors before changing Cloud Tasks retry settings
 
 ## Environment variables
 

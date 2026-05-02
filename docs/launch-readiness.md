@@ -395,7 +395,8 @@ Must have:
 - Terraform-managed infrastructure
 - environment separation for dev, staging, and prod
 - CI/CD pipeline with rollback path
-- dead-letter and retry-exhaustion handling
+- mailbox sync dispatch dead-letter handling
+- webhook delivery retry-exhaustion handling
 - migration workflow for database changes
 - backup and restore process
 
@@ -421,11 +422,12 @@ This section translates the current repo state into launch language.
 - repair and full-resync flow for invalid or expired Gmail history cursors
 - local webhook delivery runtime with retries, endpoint health, and startup recovery of pending/in-flight deliveries
 - mailbox observability routes for sync runs and current operational state via `GET /v1/mailboxes/{mailbox_id}/sync-runs` and `GET /v1/mailboxes/{mailbox_id}/observability`
+- staging/production retry-exhaustion handling for mailbox sync dispatch and webhook delivery: Pub/Sub dead-letters exhausted mailbox sync dispatches into `/internal/sync-dead-letter`, while exhausted webhook deliveries are persisted as `webhook_delivery_retry_exhausted` and surfaced through structured logs, log-based metrics, and optional Monitoring alerts
 
 ### 6.2 Immediate Launch Blockers
 
-- webhook deliveries work in staging and production
-- Gmail push/watch production path
+- live staging validation of webhook deliveries through Cloud Tasks
+- live staging validation of Gmail push/watch production path
 
 ### 6.3 Likely Public-Launch Blockers
 
@@ -523,7 +525,8 @@ Use this as the final go/no-go list.
 - [x] Sync Run observability exists
 - [x] webhook delivery observability exists
 - [ ] alerting exists
-- [ ] dead-letter handling exists
+- [x] mailbox sync dispatch dead-letter handling exists
+- [x] webhook delivery retry-exhaustion handling exists
 - [ ] backup and restore plan exists
 - [ ] incident response runbook exists
 

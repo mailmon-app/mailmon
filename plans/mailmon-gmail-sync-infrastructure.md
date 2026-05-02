@@ -258,7 +258,7 @@ Complete the developer local-dev story and back-office operations. The CLI shoul
 - [x] API keys are generated with secure prefixes (`mm_live_`, `mm_test_`) and stored only as hashes
 - [x] Local testing does not require local Gmail Pub/Sub or watch infrastructure
 - [x] Test signatures are supported for local webhook verification
-- [ ] Developers can run control-job behavior manually through CLI or local runtime entrypoints instead of cloud schedulers
+- [x] Developers can run control-job behavior manually through CLI or local runtime entrypoints instead of cloud schedulers
 
 ---
 

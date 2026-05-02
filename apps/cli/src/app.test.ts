@@ -9,6 +9,7 @@ import {
   formatGmailCredentialRewrapSummary,
   formatRevokedWorkspaceApiKey,
   getListenMessage,
+  parseControlJobKind,
   parseLastDurationMs,
 } from "./app.js";
 
@@ -37,6 +38,12 @@ describe("phase 8 operator helpers", () => {
     expect(parseLastDurationMs("30m")).toBe(1_800_000);
     expect(parseLastDurationMs("2h")).toBe(7_200_000);
     expect(() => parseLastDurationMs("yesterday")).toThrow(/Duration must use/);
+  });
+
+  it("parses supported control job kinds", () => {
+    expect(parseControlJobKind("renew_watches")).toBe("renew_watches");
+    expect(parseControlJobKind("recover_stuck_syncs")).toBe("recover_stuck_syncs");
+    expect(() => parseControlJobKind("daily_report")).toThrow(/Control job kind must be/);
   });
 
   it("formats workspace creation output", () => {

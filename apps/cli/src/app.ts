@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { Args, Command, Options } from "@effect/cli";
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
 import {
+  type ControlJobKind,
   dispatchMailboxSync,
   runWebhookDelivery,
   WebhookDeliveryScheduler,
@@ -83,6 +84,14 @@ const markUnreadableReconnectRequiredOption = Options.boolean(
     "Move credentials that cannot be decrypted into reconnect_required instead of only reporting them",
   ),
 );
+
+const controlJobKinds = [
+  "renew_watches",
+  "dispatch_replays",
+  "repair_mailboxes",
+  "recover_stuck_syncs",
+  "cleanup",
+] as const satisfies ReadonlyArray<ControlJobKind>;
 
 const createCredentialOperatorRuntime = (config: {
   readonly databaseUrl: string;
@@ -399,6 +408,61 @@ const parseApiKeyPrefix = (prefix: string): "mm_live_" | "mm_test_" => {
   throw new Error("API key prefix must be mm_live_ or mm_test_.");
 };
 
+const isControlJobKind = (kind: string): kind is ControlJobKind =>
+  controlJobKinds.some((candidate) => candidate === kind);
+
+export const parseControlJobKind = (kind: string): ControlJobKind => {
+  if (isControlJobKind(kind)) {
+    return kind;
+  }
+
+  throw new Error(`Control job kind must be one of: ${controlJobKinds.join(", ")}.`);
+};
+
+const runControlJobDispatch = (options: { readonly kind: string }) =>
+  Effect.gen(function* () {
+    const config = yield* MailmonCliConfig;
+
+    if (config.asyncTransportMode !== "local") {
+      yield* Console.error(
+        `manual control-job dispatch is only supported against the local worker runtime; received ${config.asyncTransportMode}`,
+      );
+      return;
+    }
+
+    const kind = parseControlJobKind(options.kind);
+    const workerBaseUrl = config.workerBaseUrl.endsWith("/")
+      ? config.workerBaseUrl.slice(0, -1)
+      : config.workerBaseUrl;
+    const responseText = yield* Effect.tryPromise({
+      catch: (error) =>
+        new CliError({
+          message:
+            error instanceof Error
+              ? error.message
+              : `Failed to run control job ${kind} through the local worker runtime.`,
+        }),
+      try: async () => {
+        const response = await globalThis.fetch(`${workerBaseUrl}/internal/control-jobs`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: encodeJsonString({ kind }),
+        });
+        const body = await response.text();
+
+        if (!response.ok) {
+          throw new Error(`Control job ${kind} failed with HTTP ${response.status}: ${body}`);
+        }
+
+        return body;
+      },
+    });
+
+    yield* Console.log(responseText);
+  });
+
 const runAdminWorkspaceCreate = (options: { readonly workspaceId: Option.Option<string> }) =>
   Effect.gen(function* () {
     const config = yield* MailmonCliConfig;
@@ -602,6 +666,16 @@ const syncMailboxCommand = Command.make(
   (options) => runSyncMailbox(options),
 ).pipe(Command.withDescription("Dispatch mailbox sync through the local worker runtime"));
 
+const controlJobCommand = Command.make(
+  "control-job",
+  {
+    kind: Args.text({
+      name: "kind",
+    }),
+  },
+  (options) => runControlJobDispatch(options),
+).pipe(Command.withDescription("Run a control job through the local worker runtime"));
+
 const gmailCredentialsAuditCommand = Command.make("audit", {}, () =>
   runGmailCredentialsAudit(),
 ).pipe(Command.withDescription("Audit stored Gmail refresh-token credential envelopes"));
@@ -666,6 +740,7 @@ export const appCommand = Command.make("mailmon", {}).pipe(
     listenCommand,
     replayCommand,
     syncMailboxCommand,
+    controlJobCommand,
     adminCommand,
     gmailCredentialsCommand,
   ]),
