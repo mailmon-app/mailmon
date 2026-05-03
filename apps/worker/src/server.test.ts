@@ -60,6 +60,18 @@ const defaultProcessControlJob = async (request: ControlJobDispatchRequest) => {
     };
   }
 
+  if (request.kind === "dispatch_replays") {
+    return {
+      completedAt: "2026-03-25T00:00:00.000Z",
+      dispatched: 0,
+      eventsReplayed: 0,
+      failed: 0,
+      kind: request.kind,
+      scanned: 0,
+      status: "completed" as const,
+    };
+  }
+
   if (request.kind !== "renew_watches") {
     return {
       completedAt: "2026-03-25T00:00:00.000Z",
@@ -846,11 +858,21 @@ describe("startWorkerHttpRuntime", () => {
                   skippedReconnectRequired: 0,
                   status: "completed" as const,
                 }
-              : {
-                  completedAt: "2026-03-25T00:00:00.000Z",
-                  kind: request.kind,
-                  status: "noop" as const,
-                },
+              : request.kind === "dispatch_replays"
+                ? {
+                    completedAt: "2026-03-25T00:00:00.000Z",
+                    dispatched: 0,
+                    eventsReplayed: 0,
+                    failed: 0,
+                    kind: request.kind,
+                    scanned: 0,
+                    status: "completed" as const,
+                  }
+                : {
+                    completedAt: "2026-03-25T00:00:00.000Z",
+                    kind: request.kind,
+                    status: "noop" as const,
+                  },
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",

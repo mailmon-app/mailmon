@@ -440,7 +440,7 @@ const runReplay = (options: {
       yield* Console.log(`replayed ${delivery.deliveryId}: ${result.status}`);
     }
 
-    yield* Console.log(
+    return yield* Console.log(
       `replay ${replay.id} completed: ${dispatchResult.eventsReplayed} mailbox events for ${options.mailbox}`,
     );
   }).pipe(Effect.scoped);
