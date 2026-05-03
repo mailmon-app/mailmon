@@ -12,6 +12,7 @@ import {
   MailboxSyncDispatchExhaustionStore,
   MailboxStateStore,
   MailboxWatchStore,
+  ReplayStore,
   SyncRunStore,
   WebhookDeliveryStore,
   WebhookEndpointCatalog,
@@ -20,6 +21,7 @@ import {
   WorkspaceApiKeyStore,
   invalidPaginationCursor,
   mailboxAlreadyConnected,
+  replayConflict,
   webhookEndpointAlreadyExists,
   webhookEndpointSubscriptionAlreadyExists,
   makeProblem,
@@ -43,6 +45,7 @@ import {
   type StuckMailboxSyncExecution,
   type MailboxWebhookDeliveryDegradationResource,
   type MailboxEventType,
+  type ReplayResource,
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncCommitResult,
   type MailboxSyncDispatchExhaustedResult,
@@ -92,6 +95,7 @@ import {
   mailboxEvents,
   mailboxes,
   messages,
+  replays,
   syncRuns,
   threads,
   webhookDeliveries,
@@ -109,6 +113,7 @@ type ThreadRow = typeof threads.$inferSelect;
 type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
 type WebhookEndpointRow = typeof webhookEndpoints.$inferSelect;
 type WebhookEndpointSubscriptionRow = typeof webhookEndpointSubscriptions.$inferSelect;
+type ReplayRow = typeof replays.$inferSelect;
 
 type SyncRunRow = typeof syncRuns.$inferSelect;
 
@@ -134,6 +139,11 @@ export interface LocalReplayMailboxEvent {
   readonly mailboxId: string;
   readonly occurredAt: string;
   readonly payload: MailboxEventEnvelope;
+}
+
+export interface LocalReplayWebhookEndpoint {
+  readonly webhookEndpointId: string;
+  readonly workspaceId: string;
 }
 
 const WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS = 30_000;
@@ -460,6 +470,23 @@ const toWebhookEndpointSubscriptionResource = (
     mailboxId: row.mailboxId,
     eventTypes: toWebhookEventTypes(row.eventTypes),
     createdAt: row.createdAt.toISOString(),
+  };
+};
+
+const toReplayResource = (row: ReplayRow): ReplayResource => {
+  return {
+    id: row.id,
+    object: "replay",
+    status: row.status,
+    mailboxId: row.mailboxId,
+    webhookEndpointId: row.webhookEndpointId,
+    startTime: row.startTime.toISOString(),
+    endTime: row.endTime.toISOString(),
+    eventsReplayed: row.eventsReplayed,
+    createdAt: row.createdAt.toISOString(),
+    startedAt: toIsoString(row.startedAt),
+    completedAt: toIsoString(row.completedAt),
+    lastError: row.lastError,
   };
 };
 
@@ -1434,6 +1461,78 @@ export const listMailboxEventsForLocalReplay = (params: {
     })) satisfies ReadonlyArray<LocalReplayMailboxEvent>;
   });
 
+export const ensureLocalReplayWebhookEndpoint = (params: {
+  readonly connectionString: string;
+  readonly forwardTo: string;
+  readonly mailboxId: string;
+  readonly signingSecret: string;
+}) =>
+  withDatabase(params.connectionString, async (database) => {
+    const [mailbox] = await database.db
+      .select({
+        workspaceId: mailboxes.workspaceId,
+      })
+      .from(mailboxes)
+      .where(eq(mailboxes.id, params.mailboxId))
+      .limit(1);
+
+    if (mailbox?.workspaceId === undefined || mailbox.workspaceId === null) {
+      throw new Error(`Mailbox ${params.mailboxId} does not exist or has no workspace.`);
+    }
+
+    const now = new Date();
+    const webhookEndpointId = `whe_local_replay_${createHash("sha256")
+      .update(mailbox.workspaceId)
+      .update("\0")
+      .update(params.forwardTo)
+      .digest("hex")
+      .slice(0, 32)}`;
+
+    await database.db
+      .insert(webhookEndpoints)
+      .values({
+        id: webhookEndpointId,
+        workspaceId: mailbox.workspaceId,
+        url: params.forwardTo,
+        description: "local replay endpoint",
+        signingSecret: params.signingSecret,
+        deliveryState: "healthy",
+        consecutiveDeliveryFailures: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [webhookEndpoints.workspaceId, webhookEndpoints.url],
+        set: {
+          description: "local replay endpoint",
+          signingSecret: params.signingSecret,
+          updatedAt: now,
+        },
+      });
+
+    const [endpoint] = await database.db
+      .select({
+        id: webhookEndpoints.id,
+      })
+      .from(webhookEndpoints)
+      .where(
+        and(
+          eq(webhookEndpoints.workspaceId, mailbox.workspaceId),
+          eq(webhookEndpoints.url, params.forwardTo),
+        ),
+      )
+      .limit(1);
+
+    if (endpoint === undefined) {
+      throw new Error(`Local Replay webhook endpoint ${params.forwardTo} could not be prepared.`);
+    }
+
+    return {
+      webhookEndpointId: endpoint.id,
+      workspaceId: mailbox.workspaceId,
+    } satisfies LocalReplayWebhookEndpoint;
+  });
+
 export const createMailboxCatalogLayer = Layer.effect(
   MailboxCatalog,
   Effect.gen(function* () {
@@ -1745,6 +1844,71 @@ export const createWebhookDeliveryStoreLayer = Layer.effect(
             notBefore: row.nextAttemptAt.toISOString(),
           }));
         }),
+      createWebhookDeliveriesForReplay: (params) =>
+        Effect.promise(async () => {
+          if (params.mailboxEventIds.length === 0) {
+            return [];
+          }
+
+          const eventRows = await database.db
+            .select({
+              id: mailboxEvents.id,
+            })
+            .from(mailboxEvents)
+            .where(inArray(mailboxEvents.id, [...new Set(params.mailboxEventIds)]));
+
+          if (eventRows.length === 0) {
+            return [];
+          }
+
+          const notBefore = toDate(params.notBefore);
+          const deliveryRows = eventRows
+            .toSorted((left, right) => left.id.localeCompare(right.id))
+            .map((event) => ({
+              id: createStableWebhookDeliveryId(event.id, params.webhookEndpointId),
+              mailboxEventId: event.id,
+              webhookEndpointId: params.webhookEndpointId,
+              state: "pending",
+              attemptCount: 0,
+              processingStartedAt: null,
+              lastAttemptedAt: null,
+              nextAttemptAt: notBefore,
+              deliveredAt: null,
+              lastResponseStatus: null,
+              lastErrorCode: null,
+              lastErrorMessage: null,
+              lastErrorOccurredAt: null,
+              lastErrorRetryable: null,
+              createdAt: notBefore,
+              updatedAt: notBefore,
+            }));
+
+          await database.db
+            .insert(webhookDeliveries)
+            .values(deliveryRows)
+            .onConflictDoUpdate({
+              target: [webhookDeliveries.mailboxEventId, webhookDeliveries.webhookEndpointId],
+              set: {
+                attemptCount: 0,
+                deliveredAt: null,
+                lastAttemptedAt: null,
+                lastErrorCode: null,
+                lastErrorMessage: null,
+                lastErrorOccurredAt: null,
+                lastErrorRetryable: null,
+                lastResponseStatus: null,
+                nextAttemptAt: notBefore,
+                processingStartedAt: null,
+                state: "pending",
+                updatedAt: notBefore,
+              },
+            });
+
+          return deliveryRows.map((row) => ({
+            deliveryId: row.id,
+            notBefore: row.nextAttemptAt.toISOString(),
+          }));
+        }),
       listWebhookDeliveryRecoverySchedules: (recoveredAt: string) =>
         Effect.promise(async () => {
           const recoveryRows = await database.db
@@ -1922,6 +2086,178 @@ export const createWebhookDeliveryStoreLayer = Layer.effect(
 
             return true;
           });
+        }),
+    };
+  }),
+);
+
+export const createReplayStoreLayer = Layer.effect(
+  ReplayStore,
+  Effect.gen(function* () {
+    const database = yield* MailmonDatabase;
+
+    return {
+      createReplay: (params) =>
+        Effect.tryPromise({
+          try: async () => {
+            const startTime = toDate(params.startTime);
+            const endTime = toDate(params.endTime);
+            const createdAt = toDate(params.createdAt);
+
+            return database.db.transaction(async (transaction) => {
+              const [conflict] = await transaction
+                .select({
+                  id: replays.id,
+                })
+                .from(replays)
+                .where(
+                  and(
+                    eq(replays.workspaceId, params.workspaceId),
+                    eq(replays.mailboxId, params.mailboxId),
+                    eq(replays.webhookEndpointId, params.webhookEndpointId),
+                    inArray(replays.status, ["queued", "running"]),
+                    lte(replays.startTime, endTime),
+                    gte(replays.endTime, startTime),
+                  ),
+                )
+                .orderBy(asc(replays.createdAt), asc(replays.id))
+                .limit(1);
+
+              if (conflict !== undefined) {
+                throw replayConflict(params.mailboxId, params.webhookEndpointId, conflict.id);
+              }
+
+              const [createdReplay] = await transaction
+                .insert(replays)
+                .values({
+                  id: params.id,
+                  workspaceId: params.workspaceId,
+                  mailboxId: params.mailboxId,
+                  webhookEndpointId: params.webhookEndpointId,
+                  status: "queued",
+                  startTime,
+                  endTime,
+                  eventsReplayed: null,
+                  lastError: null,
+                  startedAt: null,
+                  completedAt: null,
+                  createdAt,
+                  updatedAt: createdAt,
+                })
+                .returning();
+
+              if (createdReplay === undefined) {
+                throw new Error(`Replay ${params.id} could not be created.`);
+              }
+
+              return toReplayResource(createdReplay);
+            });
+          },
+          catch: (error) =>
+            isProblemDetails(error)
+              ? error
+              : makeProblem({
+                  type: "https://api.mailmon.dev/problems/replay-create-failed",
+                  title: "Replay create failed",
+                  status: 500,
+                  code: "replay_create_failed",
+                  detail: error instanceof Error ? error.message : "Replay could not be created.",
+                  retryable: true,
+                }),
+        }),
+      getReplay: (replayId, options = {}) =>
+        Effect.promise(async () => {
+          const [row] = await database.db
+            .select()
+            .from(replays)
+            .where(
+              options.workspaceId === undefined
+                ? eq(replays.id, replayId)
+                : and(eq(replays.id, replayId), eq(replays.workspaceId, options.workspaceId)),
+            )
+            .limit(1);
+
+          return Option.fromNullable(row).pipe(Option.map(toReplayResource));
+        }),
+      listReplayDispatchTargets: ({ limit }) =>
+        Effect.promise(async () => {
+          const rows = await database.db
+            .select()
+            .from(replays)
+            .where(eq(replays.status, "queued"))
+            .orderBy(asc(replays.createdAt), asc(replays.id))
+            .limit(limit);
+
+          return rows.map((row) => toReplayResource(row));
+        }),
+      prepareReplayDispatch: ({ replayId, startedAt }) =>
+        Effect.promise(async () => {
+          const startedAtDate = toDate(startedAt);
+
+          return database.db.transaction(async (transaction) => {
+            const [claimedReplay] = await transaction
+              .update(replays)
+              .set({
+                lastError: null,
+                startedAt: startedAtDate,
+                status: "running",
+                updatedAt: startedAtDate,
+              })
+              .where(and(eq(replays.id, replayId), eq(replays.status, "queued")))
+              .returning();
+
+            if (claimedReplay === undefined) {
+              return Option.none();
+            }
+
+            const eventRows = await transaction
+              .select({
+                id: mailboxEvents.id,
+              })
+              .from(mailboxEvents)
+              .where(
+                and(
+                  eq(mailboxEvents.mailboxId, claimedReplay.mailboxId),
+                  gte(mailboxEvents.occurredAt, claimedReplay.startTime),
+                  lte(mailboxEvents.occurredAt, claimedReplay.endTime),
+                ),
+              )
+              .orderBy(asc(mailboxEvents.occurredAt), asc(mailboxEvents.id));
+
+            return Option.some({
+              replay: toReplayResource(claimedReplay),
+              mailboxEventIds: eventRows.map((event) => event.id),
+            });
+          });
+        }),
+      completeReplayDispatch: ({ replayId, completedAt, eventsReplayed }) =>
+        Effect.promise(async () => {
+          const completedAtDate = toDate(completedAt);
+
+          await database.db
+            .update(replays)
+            .set({
+              completedAt: completedAtDate,
+              eventsReplayed,
+              lastError: null,
+              status: "completed",
+              updatedAt: completedAtDate,
+            })
+            .where(and(eq(replays.id, replayId), eq(replays.status, "running")));
+        }),
+      failReplayDispatch: ({ replayId, completedAt, error }) =>
+        Effect.promise(async () => {
+          const completedAtDate = toDate(completedAt);
+
+          await database.db
+            .update(replays)
+            .set({
+              completedAt: completedAtDate,
+              lastError: error,
+              status: "failed",
+              updatedAt: completedAtDate,
+            })
+            .where(eq(replays.id, replayId));
         }),
     };
   }),
@@ -3440,6 +3776,7 @@ export const createPersistenceServicesLayer = Layer.mergeAll(
   createMailboxSyncCoordinatorLayer,
   createMailboxSyncDispatchExhaustionStoreLayer,
   createMailboxWatchStoreLayer,
+  createReplayStoreLayer,
   createSyncRunStoreLayer,
   createWebhookDeliveryStoreLayer,
   createWebhookEndpointCatalogLayer,

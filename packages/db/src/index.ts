@@ -23,6 +23,7 @@ export {
   createMailboxStateStoreLayer,
   createMailboxWatchStoreLayer,
   createPersistenceServicesLayer,
+  createReplayStoreLayer,
   createSyncRunStoreLayer,
   createWebhookDeliveryStoreLayer,
   createWebhookEndpointCatalogLayer,
@@ -30,6 +31,7 @@ export {
   createWebhookEndpointSubscriptionStoreLayer,
   createWorkspaceApiKeyStoreLayer,
   createWorkerPersistenceLayer,
+  ensureLocalReplayWebhookEndpoint,
   listMailboxEventsForLocalReplay,
   MailmonDatabase,
   revokeWorkspaceApiKeyForOperators,
@@ -42,5 +44,6 @@ export {
   type GmailMailboxCredentialAuditSummary,
   type GmailMailboxCredentialRewrapResult,
   type LocalReplayMailboxEvent,
+  type LocalReplayWebhookEndpoint,
   type RevokedWorkspaceApiKeyOperatorResult,
 } from "./persistence.js";

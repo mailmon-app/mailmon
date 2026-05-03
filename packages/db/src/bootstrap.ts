@@ -71,6 +71,13 @@ export const createBootstrapWebhookDeliveryStoreLayer = Layer.succeed(WebhookDel
         notBefore: new Date().toISOString(),
       })),
     ),
+  createWebhookDeliveriesForReplay: ({ mailboxEventIds, notBefore, replayId }) =>
+    Effect.succeed(
+      mailboxEventIds.map((mailboxEventId) => ({
+        deliveryId: `del_${replayId}_${mailboxEventId}`,
+        notBefore,
+      })),
+    ),
   listWebhookDeliveryRecoverySchedules: () => Effect.succeed([]),
   prepareWebhookDeliveryAttempt: () => Effect.succeed(Option.none()),
   completeWebhookDeliveryAttempt: () => Effect.succeed(true),
