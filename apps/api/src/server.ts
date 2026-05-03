@@ -1,9 +1,11 @@
 import {
   completeGmailMailboxConnectSession,
+  createReplay,
   createWebhookEndpoint,
   createWebhookEndpointSubscription,
   createMailboxConnectSession,
   getConnectSessionOrFail,
+  getReplayOrFail,
   getMailboxObservability,
   getGmailMailboxConnectAuthorizationUrl,
   getMessageOrFail,
@@ -26,6 +28,7 @@ import {
 } from "./http/handlers.js";
 import {
   CreateConnectSessionBodySchema,
+  CreateReplayBodySchema,
   CreateWebhookEndpointBodySchema,
   CreateWebhookEndpointSubscriptionBodySchema,
   CursorLimitQuerySchema,
@@ -33,8 +36,10 @@ import {
   INVALID_CONNECT_SESSION_BODY_DETAIL,
   INVALID_JSON_DETAIL,
   INVALID_LIMIT_DETAIL,
+  INVALID_REPLAY_BODY_DETAIL,
   INVALID_WEBHOOK_ENDPOINT_BODY_DETAIL,
   MailboxListQuerySchema,
+  type CreateReplayBody,
   type CreateWebhookEndpointSubscriptionBody,
   type CursorLimitQueryParams,
   type MailboxListQueryParams,
@@ -123,6 +128,22 @@ const toWebhookEndpointSubscriptionRequest = (request: CreateWebhookEndpointSubs
     : {
         mailboxIds: request.mailbox_ids,
         eventTypes: request.event_types,
+      };
+};
+
+const toReplayRequest = (request: CreateReplayBody) => {
+  return "mailboxId" in request
+    ? {
+        mailboxId: request.mailboxId,
+        webhookEndpointId: request.webhookEndpointId,
+        startTime: request.startTime,
+        endTime: request.endTime,
+      }
+    : {
+        mailboxId: request.mailbox_id,
+        webhookEndpointId: request.webhook_endpoint_id,
+        startTime: request.start_time,
+        endTime: request.end_time,
       };
 };
 
@@ -331,6 +352,64 @@ export const createApp = (runtime: ApiServerRuntime) => {
     const result = await runProblemEffect(
       runtime,
       getMailboxObservability(context.req.param("mailboxId"), {
+        workspaceId: auth.workspace.workspaceId,
+      }),
+    );
+
+    if (result.tag === "failure") {
+      return createProblemResponse(result.problem);
+    }
+
+    return context.json(result.value);
+  });
+
+  app.post(
+    "/v1/replays",
+    describeRoute({
+      summary: "Create a mailbox event replay",
+      responses: {
+        201: {
+          description: "Replay created",
+        },
+        400: {
+          description: "Invalid request",
+        },
+        409: {
+          description: "Overlapping active replay conflict",
+        },
+      },
+    }),
+    validate("json", CreateReplayBodySchema, INVALID_REPLAY_BODY_DETAIL),
+    async (context) => {
+      const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+      if (auth.tag === "failure") {
+        return createProblemResponse(auth.problem);
+      }
+
+      const result = await runProblemEffect(
+        runtime,
+        createReplay(auth.workspace.workspaceId, toReplayRequest(context.req.valid("json"))),
+      );
+
+      if (result.tag === "failure") {
+        return createProblemResponse(result.problem);
+      }
+
+      return context.json(result.value, 201);
+    },
+  );
+
+  app.get("/v1/replays/:replayId", async (context) => {
+    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+
+    if (auth.tag === "failure") {
+      return createProblemResponse(auth.problem);
+    }
+
+    const result = await runProblemEffect(
+      runtime,
+      getReplayOrFail(context.req.param("replayId"), {
         workspaceId: auth.workspace.workspaceId,
       }),
     );

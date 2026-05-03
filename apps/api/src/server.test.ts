@@ -5,11 +5,13 @@ import {
   MailboxObservabilityCatalog,
   MailboxQueryCatalog,
   MailboxSyncDispatcher,
+  ReplayStore,
   WebhookEndpointCatalog,
   WebhookEndpointStore,
   WebhookEndpointSubscriptionStore,
   WorkspaceApiKeyStore,
   type MailboxResource,
+  type ReplayResource,
   type StoredConnectSession,
   type WebhookEndpointResource,
 } from "@mailmon/core";
@@ -19,6 +21,7 @@ import { describe, expect, it } from "vitest";
 import {
   INVALID_JSON_DETAIL,
   INVALID_LIMIT_DETAIL,
+  INVALID_REPLAY_BODY_DETAIL,
   INVALID_WEBHOOK_EVENT_TYPES_DETAIL,
   MISSING_MAILBOX_QUERY_DETAIL,
 } from "./http/parsers.js";
@@ -190,6 +193,13 @@ const createRuntime = () => {
     [mailboxFixture.id, { mailbox: mailboxFixture, workspaceId: primaryWorkspaceId }],
     [foreignMailboxFixture.id, { mailbox: foreignMailboxFixture, workspaceId: foreignWorkspaceId }],
   ]);
+  const replays = new Map<
+    string,
+    {
+      replay: ReplayResource;
+      workspaceId: string;
+    }
+  >();
 
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
@@ -304,6 +314,46 @@ const createRuntime = () => {
             nextCursor: null,
           }),
       }),
+      Layer.succeed(ReplayStore, {
+        createReplay: (params) =>
+          Effect.sync(() => {
+            const replay: ReplayResource = {
+              id: params.id,
+              object: "replay",
+              status: "queued",
+              mailboxId: params.mailboxId,
+              webhookEndpointId: params.webhookEndpointId,
+              startTime: params.startTime,
+              endTime: params.endTime,
+              eventsReplayed: null,
+              createdAt: params.createdAt,
+              startedAt: null,
+              completedAt: null,
+              lastError: null,
+            };
+
+            replays.set(replay.id, {
+              replay,
+              workspaceId: params.workspaceId,
+            });
+
+            return replay;
+          }),
+        getReplay: (replayId, options) =>
+          Effect.succeed(
+            Option.fromNullable(replays.get(replayId)).pipe(
+              Option.filter(
+                (value) =>
+                  options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
+              ),
+              Option.map((value) => value.replay),
+            ),
+          ),
+        listReplayDispatchTargets: () => Effect.succeed([]),
+        prepareReplayDispatch: () => Effect.succeed(Option.none()),
+        completeReplayDispatch: () => Effect.void,
+        failReplayDispatch: () => Effect.void,
+      }),
       Layer.succeed(MailboxConnectSessionStore, {
         createConnectSession: (params) =>
           Effect.sync(() => {
@@ -402,6 +452,7 @@ describe("createApp", () => {
       paths: {
         "/v1/mailboxes/connect-sessions": expect.any(Object),
         "/v1/messages": expect.any(Object),
+        "/v1/replays": expect.any(Object),
       },
     });
   });
@@ -670,6 +721,65 @@ describe("createApp", () => {
         },
       ],
       nextCursor: null,
+    });
+  });
+
+  it("creates and fetches a Replay for the authenticated workspace", async () => {
+    const { app } = createRuntime();
+    const createResponse = await app.request("/v1/replays", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailbox_id: "mbx_demo",
+        webhook_endpoint_id: "whe_demo",
+        start_time: "2026-03-24T00:00:00.000Z",
+        end_time: "2026-03-24T01:00:00.000Z",
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const replay = await createResponse.json();
+    expect(replay).toMatchObject({
+      id: expect.stringMatching(/^rpl_/),
+      object: "replay",
+      status: "queued",
+      mailboxId: "mbx_demo",
+      webhookEndpointId: "whe_demo",
+      startTime: "2026-03-24T00:00:00.000Z",
+      endTime: "2026-03-24T01:00:00.000Z",
+      eventsReplayed: null,
+    });
+
+    const getResponse = await app.request(`/v1/replays/${replay.id}`, {
+      headers: {
+        authorization: "Bearer test-api-key",
+      },
+    });
+
+    expect(getResponse.status).toBe(200);
+    await expect(getResponse.json()).resolves.toEqual(replay);
+  });
+
+  it("rejects invalid Replay request bodies", async () => {
+    const { app } = createRuntime();
+    const response = await app.request("/v1/replays", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-api-key",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailbox_id: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_request",
+      detail: INVALID_REPLAY_BODY_DETAIL,
     });
   });
 

@@ -10,6 +10,8 @@ export const INVALID_CONNECT_SESSION_BODY_DETAIL =
   "Body must include provider, tenantExternalId, mailboxExternalId, and redirectUrl.";
 export const INVALID_WEBHOOK_ENDPOINT_BODY_DETAIL =
   "Body must include a valid http(s) url and an optional description.";
+export const INVALID_REPLAY_BODY_DETAIL =
+  "Body must include mailboxId/mailbox_id, webhookEndpointId/webhook_endpoint_id, startTime/start_time, and endTime/end_time.";
 export const INVALID_WEBHOOK_SUBSCRIPTION_BODY_DETAIL =
   "Body must include mailboxIds/mailbox_ids and eventTypes/event_types arrays.";
 export const INVALID_WEBHOOK_EVENT_TYPES_DETAIL =
@@ -70,6 +72,24 @@ export const CreateWebhookEndpointSubscriptionBodySchema = Schema.Union(
 export type CreateWebhookEndpointSubscriptionBody = Schema.Schema.Type<
   typeof CreateWebhookEndpointSubscriptionBodySchema
 >;
+
+const ReplayCamelBodySchema = Schema.Struct({
+  mailboxId: NonEmptyString,
+  webhookEndpointId: NonEmptyString,
+  startTime: NonEmptyString,
+  endTime: NonEmptyString,
+});
+
+const ReplaySnakeBodySchema = Schema.Struct({
+  mailbox_id: NonEmptyString,
+  webhook_endpoint_id: NonEmptyString,
+  start_time: NonEmptyString,
+  end_time: NonEmptyString,
+});
+
+export const CreateReplayBodySchema = Schema.Union(ReplayCamelBodySchema, ReplaySnakeBodySchema);
+
+export type CreateReplayBody = Schema.Schema.Type<typeof CreateReplayBodySchema>;
 
 export const CursorLimitQuerySchema = Schema.Struct({
   cursor: OptionalString,
