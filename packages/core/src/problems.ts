@@ -182,3 +182,49 @@ export const webhookEndpointSubscriptionAlreadyExists = (
     retryable: false,
   });
 };
+
+export const replayNotFound = (replayId: string): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/replay-not-found",
+    title: "Replay not found",
+    status: 404,
+    code: "replay_not_found",
+    detail: `Replay ${replayId} does not exist in the current workspace.`,
+    resource: {
+      replay_id: replayId,
+    },
+    retryable: false,
+  });
+};
+
+export const invalidReplayTimeRange = (): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/invalid-replay-time-range",
+    title: "Invalid replay time range",
+    status: 400,
+    code: "invalid_replay_time_range",
+    detail:
+      "Replay startTime must be before or equal to endTime, and both values must be valid timestamps.",
+    retryable: false,
+  });
+};
+
+export const replayConflict = (
+  mailboxId: string,
+  webhookEndpointId: string,
+  replayId: string,
+): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/replay-conflict",
+    title: "Replay conflict",
+    status: 409,
+    code: "replay_conflict",
+    detail: `Replay ${replayId} already covers an overlapping time range for mailbox ${mailboxId} and webhook endpoint ${webhookEndpointId}.`,
+    resource: {
+      mailbox_id: mailboxId,
+      replay_id: replayId,
+      webhook_endpoint_id: webhookEndpointId,
+    },
+    retryable: false,
+  });
+};

@@ -7,8 +7,10 @@ import type {
   ControlJobDispatchRequest,
   ControlJobRunResult,
   CreateConnectSessionRequest,
+  CreateReplayRequest,
   CreateWebhookEndpointRequest,
   CreateWebhookEndpointSubscriptionRequest,
+  DispatchReplaysResult,
   GmailPushNotification,
   GmailPushNotificationResult,
   MailboxSyncDispatchExhaustedResult,
@@ -29,9 +31,11 @@ import {
   connectSessionExpired,
   connectSessionNotFound,
   invalidApiKey,
+  invalidReplayTimeRange,
   mailboxNotFound,
   mailboxSyncLeaseLost,
   messageNotFound,
+  replayNotFound,
   threadNotFound,
   webhookEndpointNotFound,
 } from "./problems.js";
@@ -51,6 +55,7 @@ import {
   MailboxStateStore,
   MailboxWatchProvider,
   MailboxWatchStore,
+  ReplayStore,
   SyncRunStore,
   WebhookDeliveryScheduler,
   WebhookDeliverySender,
@@ -68,6 +73,7 @@ const DEFAULT_GMAIL_WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60_000;
 const DEFAULT_GMAIL_WATCH_RENEWAL_BATCH_SIZE = 100;
 const DEFAULT_MAILBOX_REPAIR_BATCH_SIZE = 100;
 const DEFAULT_STUCK_MAILBOX_SYNC_RECOVERY_BATCH_SIZE = 100;
+const DEFAULT_REPLAY_DISPATCH_BATCH_SIZE = 100;
 const DEFAULT_WEBHOOK_DELIVERY_MAX_ATTEMPTS = 5;
 const DEFAULT_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 5_000;
 const MAX_WEBHOOK_DELIVERY_RETRY_DELAY_MS = 15 * 60_000;
@@ -118,6 +124,10 @@ const createWebhookEndpointSecret = () => {
 
 const createSyncRunId = () => {
   return `sr_${globalThis.crypto.randomUUID()}`;
+};
+
+const createReplayId = () => {
+  return `rpl_${globalThis.crypto.randomUUID()}`;
 };
 
 const WEBHOOK_EVENT_TYPE_ORDER: ReadonlyArray<WebhookEventType> = [
@@ -566,6 +576,141 @@ export const scheduleMailboxEventDeliveries = (mailboxEventIds: ReadonlyArray<st
     );
 
     return deliveryRequests;
+  });
+
+const parseReplayTimestamp = (value: string) => {
+  const timestamp = Date.parse(value);
+
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const validateReplayTimeRange = (request: CreateReplayRequest) => {
+  const start = parseReplayTimestamp(request.startTime);
+  const end = parseReplayTimestamp(request.endTime);
+
+  if (start === null || end === null || start > end) {
+    return Effect.fail(invalidReplayTimeRange());
+  }
+
+  return Effect.succeed({
+    endTime: new Date(end).toISOString(),
+    startTime: new Date(start).toISOString(),
+  });
+};
+
+export const createReplay = (workspaceId: string, request: CreateReplayRequest) =>
+  Effect.gen(function* () {
+    const range = yield* validateReplayTimeRange(request);
+    yield* getMailboxOrFail(request.mailboxId, { workspaceId });
+    yield* getWebhookEndpointOrFail(request.webhookEndpointId, { workspaceId });
+
+    const replayStore = yield* ReplayStore;
+
+    return yield* replayStore.createReplay({
+      ...request,
+      endTime: range.endTime,
+      startTime: range.startTime,
+      createdAt: new Date().toISOString(),
+      id: createReplayId(),
+      workspaceId,
+    });
+  });
+
+export const getReplayOrFail = (
+  replayId: string,
+  options: Readonly<{
+    workspaceId?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const replayStore = yield* ReplayStore;
+    const replay = yield* replayStore.getReplay(replayId, options);
+
+    return yield* Option.match(replay, {
+      onNone: () => Effect.fail(replayNotFound(replayId)),
+      onSome: (resource) => Effect.succeed(resource),
+    });
+  });
+
+export const dispatchReplays = (
+  options: Readonly<{
+    limit?: number;
+    observedAt?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const observedAt = options.observedAt ?? new Date().toISOString();
+    const limit = options.limit ?? DEFAULT_REPLAY_DISPATCH_BATCH_SIZE;
+    const replayStore = yield* ReplayStore;
+    const webhookDeliveryStore = yield* WebhookDeliveryStore;
+    const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
+    const targets = yield* replayStore.listReplayDispatchTargets({
+      limit,
+      observedAt,
+    });
+
+    const outcomes = yield* Effect.forEach(
+      targets,
+      (target) =>
+        replayStore
+          .prepareReplayDispatch({
+            replayId: target.id,
+            startedAt: observedAt,
+          })
+          .pipe(
+            Effect.flatMap((prepared) =>
+              Option.match(prepared, {
+                onNone: () =>
+                  Effect.succeed({
+                    dispatched: false,
+                    eventsReplayed: 0,
+                    failed: false,
+                  }),
+                onSome: (dispatch) =>
+                  webhookDeliveryStore
+                    .createWebhookDeliveriesForReplay({
+                      mailboxEventIds: dispatch.mailboxEventIds,
+                      notBefore: observedAt,
+                      replayId: dispatch.replay.id,
+                      webhookEndpointId: dispatch.replay.webhookEndpointId,
+                    })
+                    .pipe(
+                      Effect.flatMap((deliveryRequests) =>
+                        Effect.forEach(
+                          deliveryRequests,
+                          (request) => webhookDeliveryScheduler.scheduleWebhookDelivery(request),
+                          { discard: true },
+                        ).pipe(
+                          Effect.zipRight(
+                            replayStore.completeReplayDispatch({
+                              replayId: dispatch.replay.id,
+                              completedAt: observedAt,
+                              eventsReplayed: deliveryRequests.length,
+                            }),
+                          ),
+                          Effect.as({
+                            dispatched: true,
+                            eventsReplayed: deliveryRequests.length,
+                            failed: false,
+                          }),
+                        ),
+                      ),
+                    ),
+              }),
+            ),
+          ),
+      { concurrency: 10 },
+    );
+
+    return {
+      completedAt: observedAt,
+      dispatched: outcomes.filter((outcome) => outcome.dispatched).length,
+      eventsReplayed: outcomes.reduce((total, outcome) => total + outcome.eventsReplayed, 0),
+      failed: outcomes.filter((outcome) => outcome.failed).length,
+      kind: "dispatch_replays",
+      scanned: targets.length,
+      status: "completed",
+    } satisfies DispatchReplaysResult;
   });
 
 export const recoverWebhookDeliveryScheduling = (recoveredAt = new Date().toISOString()) =>
@@ -1030,7 +1175,14 @@ export function runControlJob(
   MailboxExecutionRecoveryStore | MailboxSyncDispatcher
 >;
 export function runControlJob(
-  request: Readonly<{ kind: "cleanup" | "dispatch_replays" }>,
+  request: Readonly<{ kind: "dispatch_replays" }>,
+): Effect.Effect<
+  DispatchReplaysResult,
+  never,
+  ReplayStore | WebhookDeliveryScheduler | WebhookDeliveryStore
+>;
+export function runControlJob(
+  request: Readonly<{ kind: "cleanup" }>,
 ): Effect.Effect<NoopControlJobResult>;
 export function runControlJob(
   request: ControlJobDispatchRequest,
@@ -1042,6 +1194,9 @@ export function runControlJob(
   | MailboxSyncDispatcher
   | MailboxWatchProvider
   | MailboxWatchStore
+  | ReplayStore
+  | WebhookDeliveryScheduler
+  | WebhookDeliveryStore
 >;
 export function runControlJob(
   request: ControlJobDispatchRequest,
@@ -1053,17 +1208,21 @@ export function runControlJob(
   | MailboxSyncDispatcher
   | MailboxWatchProvider
   | MailboxWatchStore
+  | ReplayStore
+  | WebhookDeliveryScheduler
+  | WebhookDeliveryStore
 > {
   switch (request.kind) {
     case "renew_watches":
       return renewExpiringMailboxWatches();
     case "cleanup":
-    case "dispatch_replays":
       return Effect.succeed({
         completedAt: new Date().toISOString(),
         kind: request.kind,
         status: "noop",
       });
+    case "dispatch_replays":
+      return dispatchReplays();
     case "repair_mailboxes":
       return repairMailboxes();
     case "recover_stuck_syncs":

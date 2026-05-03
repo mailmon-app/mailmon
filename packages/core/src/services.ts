@@ -3,8 +3,10 @@ import { Context, Effect, Option } from "effect";
 import type {
   CompletedWebhookDeliveryAttempt,
   CompletedMailboxConnectSession,
+  CompletedReplayDispatch,
   CompletedSyncRun,
   CreatedWebhookEndpointResource,
+  CreateReplayRequest,
   GmailPushNotification,
   ListMailboxSyncRunsRequest,
   ListMailboxMessagesRequest,
@@ -29,7 +31,9 @@ import type {
   MailboxSyncRequest,
   MailboxSyncSnapshot,
   PreparedWebhookDelivery,
+  PreparedReplayDispatch,
   ProblemDetails,
+  ReplayResource,
   StartedSyncRun,
   StoredConnectSession,
   ThreadListItemResource,
@@ -366,6 +370,12 @@ export class WebhookDeliveryStore extends Context.Tag("@mailmon/core/WebhookDeli
     readonly createWebhookDeliveriesForMailboxEvents: (
       mailboxEventIds: ReadonlyArray<string>,
     ) => Effect.Effect<ReadonlyArray<WebhookDeliveryScheduleRequest>>;
+    readonly createWebhookDeliveriesForReplay: (params: {
+      readonly mailboxEventIds: ReadonlyArray<string>;
+      readonly notBefore: string;
+      readonly replayId: string;
+      readonly webhookEndpointId: string;
+    }) => Effect.Effect<ReadonlyArray<WebhookDeliveryScheduleRequest>>;
     readonly listWebhookDeliveryRecoverySchedules: (
       recoveredAt: string,
     ) => Effect.Effect<ReadonlyArray<WebhookDeliveryScheduleRequest>>;
@@ -376,6 +386,39 @@ export class WebhookDeliveryStore extends Context.Tag("@mailmon/core/WebhookDeli
     readonly completeWebhookDeliveryAttempt: (
       attempt: CompletedWebhookDeliveryAttempt,
     ) => Effect.Effect<boolean>;
+  }
+>() {}
+
+export class ReplayStore extends Context.Tag("@mailmon/core/ReplayStore")<
+  ReplayStore,
+  {
+    readonly createReplay: (
+      params: CreateReplayRequest & {
+        readonly createdAt: string;
+        readonly id: string;
+        readonly workspaceId: string;
+      },
+    ) => Effect.Effect<ReplayResource, ProblemDetails>;
+    readonly getReplay: (
+      replayId: string,
+      options?: Readonly<{
+        workspaceId?: string;
+      }>,
+    ) => Effect.Effect<Option.Option<ReplayResource>>;
+    readonly listReplayDispatchTargets: (params: {
+      readonly limit: number;
+      readonly observedAt: string;
+    }) => Effect.Effect<ReadonlyArray<ReplayResource>>;
+    readonly prepareReplayDispatch: (params: {
+      readonly replayId: string;
+      readonly startedAt: string;
+    }) => Effect.Effect<Option.Option<PreparedReplayDispatch>>;
+    readonly completeReplayDispatch: (params: CompletedReplayDispatch) => Effect.Effect<void>;
+    readonly failReplayDispatch: (params: {
+      readonly completedAt: string;
+      readonly error: string;
+      readonly replayId: string;
+    }) => Effect.Effect<void>;
   }
 >() {}
 

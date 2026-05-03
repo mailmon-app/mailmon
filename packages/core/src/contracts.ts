@@ -195,9 +195,32 @@ export interface ReplayResource {
   readonly object: "replay";
   readonly status: ReplayStatus;
   readonly mailboxId: string;
+  readonly webhookEndpointId: string;
   readonly startTime: string;
   readonly endTime: string;
-  readonly eventsReplayed?: number;
+  readonly eventsReplayed: number | null;
+  readonly createdAt: string;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+  readonly lastError: string | null;
+}
+
+export interface CreateReplayRequest {
+  readonly mailboxId: string;
+  readonly webhookEndpointId: string;
+  readonly startTime: string;
+  readonly endTime: string;
+}
+
+export interface PreparedReplayDispatch {
+  readonly replay: ReplayResource;
+  readonly mailboxEventIds: ReadonlyArray<string>;
+}
+
+export interface CompletedReplayDispatch {
+  readonly replayId: string;
+  readonly completedAt: string;
+  readonly eventsReplayed: number;
 }
 
 export interface ListResource<T> {
@@ -612,16 +635,27 @@ export interface RecoverStuckMailboxSyncExecutionsResult {
   readonly status: "completed";
 }
 
+export interface DispatchReplaysResult {
+  readonly completedAt: string;
+  readonly dispatched: number;
+  readonly eventsReplayed: number;
+  readonly failed: number;
+  readonly kind: "dispatch_replays";
+  readonly scanned: number;
+  readonly status: "completed";
+}
+
 export interface NoopControlJobResult {
   readonly completedAt: string;
   readonly kind: Exclude<
     ControlJobKind,
-    "renew_watches" | "repair_mailboxes" | "recover_stuck_syncs"
+    "renew_watches" | "repair_mailboxes" | "recover_stuck_syncs" | "dispatch_replays"
   >;
   readonly status: "noop";
 }
 
 export type ControlJobRunResult =
+  | DispatchReplaysResult
   | RenewMailboxWatchesResult
   | RepairMailboxesResult
   | RecoverStuckMailboxSyncExecutionsResult

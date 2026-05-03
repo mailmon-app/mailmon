@@ -7,6 +7,7 @@ import type {
   MailboxSyncDispatchExhaustedResult,
   MailboxResource,
   PreparedWebhookDelivery,
+  ReplayResource,
   WebhookEndpointResource,
 } from "./contracts.js";
 import { makeProblem } from "./problems.js";
@@ -24,6 +25,7 @@ import {
   MailboxStateStore,
   MailboxWatchProvider,
   MailboxWatchStore,
+  ReplayStore,
   SyncRunStore,
   WebhookDeliveryScheduler,
   WebhookDeliverySender,
@@ -35,6 +37,9 @@ import {
 import {
   createWebhookEndpoint,
   createWebhookEndpointSubscription,
+  createReplay,
+  dispatchReplays,
+  getReplayOrFail,
   dispatchMailboxSync,
   getMailboxObservability,
   getMailboxOrFail,
@@ -310,6 +315,12 @@ const createWebhookDeliveryStoreTestLayer = (
       }>
     >;
     observedMailboxEventIds?: Array<ReadonlyArray<string>>;
+    observedReplayCreates?: Array<{
+      mailboxEventIds: ReadonlyArray<string>;
+      notBefore: string;
+      replayId: string;
+      webhookEndpointId: string;
+    }>;
     observedRecoveredAt?: Array<string>;
     preparedDelivery?: PreparedWebhookDelivery | null;
     prepareCalls?: Array<{
@@ -341,6 +352,20 @@ const createWebhookDeliveryStoreTestLayer = (
             notBefore: request.notBefore ?? "2026-03-24T00:00:00.000Z",
           })),
         );
+      }),
+    createWebhookDeliveriesForReplay: (request) =>
+      Effect.sync(() => {
+        params.observedReplayCreates?.push({
+          mailboxEventIds: [...request.mailboxEventIds],
+          notBefore: request.notBefore,
+          replayId: request.replayId,
+          webhookEndpointId: request.webhookEndpointId,
+        });
+
+        return request.mailboxEventIds.map((mailboxEventId) => ({
+          deliveryId: `del_${request.replayId}_${mailboxEventId}`,
+          notBefore: request.notBefore,
+        }));
       }),
     listWebhookDeliveryRecoverySchedules: (recoveredAt) =>
       Effect.sync(() => {
@@ -390,6 +415,77 @@ const createWebhookDeliverySchedulerTestLayer = (
           deliveryId,
           notBefore,
         });
+      }),
+  });
+
+const createReplayStoreTestLayer = (
+  params: Readonly<{
+    createdReplays?: Array<ReplayResource>;
+    dispatchTargets?: ReadonlyArray<ReplayResource>;
+    preparedEventIds?: Readonly<Record<string, ReadonlyArray<string>>>;
+    completedDispatches?: Array<{
+      replayId: string;
+      completedAt: string;
+      eventsReplayed: number;
+    }>;
+    failedDispatches?: Array<{
+      replayId: string;
+      completedAt: string;
+      error: string;
+    }>;
+    replayById?: Readonly<Record<string, ReplayResource>>;
+  }> = {},
+) =>
+  Layer.succeed(ReplayStore, {
+    createReplay: (request) =>
+      Effect.sync(() => {
+        const replay: ReplayResource = {
+          id: request.id,
+          object: "replay",
+          status: "queued",
+          mailboxId: request.mailboxId,
+          webhookEndpointId: request.webhookEndpointId,
+          startTime: request.startTime,
+          endTime: request.endTime,
+          eventsReplayed: null,
+          createdAt: request.createdAt,
+          startedAt: null,
+          completedAt: null,
+          lastError: null,
+        };
+        params.createdReplays?.push(replay);
+
+        return replay;
+      }),
+    getReplay: (replayId, options) =>
+      Effect.succeed(
+        Option.fromNullable(params.replayById?.[replayId]).pipe(
+          Option.filter(
+            () => options?.workspaceId === undefined || options.workspaceId === primaryWorkspaceId,
+          ),
+        ),
+      ),
+    listReplayDispatchTargets: () => Effect.succeed([...(params.dispatchTargets ?? [])]),
+    prepareReplayDispatch: ({ replayId, startedAt }) =>
+      Effect.succeed(
+        Option.fromNullable(params.dispatchTargets?.find((target) => target.id === replayId)).pipe(
+          Option.map((replay) => ({
+            replay: {
+              ...replay,
+              status: "running" as const,
+              startedAt,
+            },
+            mailboxEventIds: params.preparedEventIds?.[replayId] ?? [],
+          })),
+        ),
+      ),
+    completeReplayDispatch: (completion) =>
+      Effect.sync(() => {
+        params.completedDispatches?.push(completion);
+      }),
+    failReplayDispatch: (failure) =>
+      Effect.sync(() => {
+        params.failedDispatches?.push(failure);
       }),
   });
 
@@ -1013,6 +1109,197 @@ describe("webhook endpoint use cases", () => {
           catalogLayer,
           webhookEndpointCatalogLayer,
           createWebhookEndpointSubscriptionStoreTestLayer([]),
+        ),
+      ),
+    ),
+  );
+});
+
+describe("Replay", () => {
+  const replayFixture: ReplayResource = {
+    id: "rpl_demo",
+    object: "replay",
+    status: "queued",
+    mailboxId: mailboxFixture.id,
+    webhookEndpointId: webhookEndpointFixture.id,
+    startTime: "2026-03-24T00:00:00.000Z",
+    endTime: "2026-03-24T01:00:00.000Z",
+    eventsReplayed: null,
+    createdAt: "2026-03-24T00:05:00.000Z",
+    startedAt: null,
+    completedAt: null,
+    lastError: null,
+  };
+
+  it.effect("creates a mailbox-scoped Replay after ownership and time range validation", () => {
+    const createdReplays: Array<ReplayResource> = [];
+
+    return Effect.gen(function* () {
+      const replay = yield* createReplay(primaryWorkspaceId, {
+        mailboxId: mailboxFixture.id,
+        webhookEndpointId: webhookEndpointFixture.id,
+        startTime: "2026-03-24T01:00:00+01:00",
+        endTime: "2026-03-24T01:00:00.000Z",
+      });
+
+      expect(replay.status).toBe("queued");
+      expect(replay.mailboxId).toBe(mailboxFixture.id);
+      expect(replay.webhookEndpointId).toBe(webhookEndpointFixture.id);
+      expect(replay.startTime).toBe("2026-03-24T00:00:00.000Z");
+      expect(createdReplays).toHaveLength(1);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          catalogLayer,
+          webhookEndpointCatalogLayer,
+          createReplayStoreTestLayer({ createdReplays }),
+        ),
+      ),
+    );
+  });
+
+  it.effect("rejects invalid Replay time ranges before persistence", () =>
+    createReplay(primaryWorkspaceId, {
+      mailboxId: mailboxFixture.id,
+      webhookEndpointId: webhookEndpointFixture.id,
+      startTime: "2026-03-24T02:00:00.000Z",
+      endTime: "2026-03-24T01:00:00.000Z",
+    }).pipe(
+      Effect.flip,
+      Effect.map((problem) => {
+        expect(problem.code).toBe("invalid_replay_time_range");
+        expect(problem.status).toBe(400);
+      }),
+      Effect.provide(
+        Layer.mergeAll(catalogLayer, webhookEndpointCatalogLayer, createReplayStoreTestLayer()),
+      ),
+    ),
+  );
+
+  it.effect("gets Replay status scoped to the authenticated workspace", () =>
+    getReplayOrFail(replayFixture.id, { workspaceId: primaryWorkspaceId }).pipe(
+      Effect.map((replay) => {
+        expect(replay).toEqual(replayFixture);
+      }),
+      Effect.provide(
+        createReplayStoreTestLayer({
+          replayById: {
+            [replayFixture.id]: replayFixture,
+          },
+        }),
+      ),
+    ),
+  );
+
+  it.effect("dispatches queued Replays through deterministic webhook scheduling", () => {
+    const observedReplayCreates: Array<{
+      mailboxEventIds: ReadonlyArray<string>;
+      notBefore: string;
+      replayId: string;
+      webhookEndpointId: string;
+    }> = [];
+    const scheduledRequests: Array<{ deliveryId: string; notBefore: string }> = [];
+    const completedDispatches: Array<{
+      replayId: string;
+      completedAt: string;
+      eventsReplayed: number;
+    }> = [];
+    const observedAt = "2026-03-24T02:00:00.000Z";
+
+    return Effect.gen(function* () {
+      const result = yield* dispatchReplays({ observedAt });
+
+      expect(result).toEqual({
+        completedAt: observedAt,
+        dispatched: 1,
+        eventsReplayed: 2,
+        failed: 0,
+        kind: "dispatch_replays",
+        scanned: 1,
+        status: "completed",
+      });
+      expect(observedReplayCreates).toEqual([
+        {
+          mailboxEventIds: ["evt_1", "evt_2"],
+          notBefore: observedAt,
+          replayId: replayFixture.id,
+          webhookEndpointId: webhookEndpointFixture.id,
+        },
+      ]);
+      expect(scheduledRequests).toEqual([
+        { deliveryId: "del_rpl_demo_evt_1", notBefore: observedAt },
+        { deliveryId: "del_rpl_demo_evt_2", notBefore: observedAt },
+      ]);
+      expect(completedDispatches).toEqual([
+        {
+          replayId: replayFixture.id,
+          completedAt: observedAt,
+          eventsReplayed: 2,
+        },
+      ]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          createReplayStoreTestLayer({
+            dispatchTargets: [replayFixture],
+            preparedEventIds: {
+              [replayFixture.id]: ["evt_1", "evt_2"],
+            },
+            completedDispatches,
+          }),
+          createWebhookDeliveryStoreTestLayer({ observedReplayCreates }),
+          createWebhookDeliverySchedulerTestLayer(scheduledRequests),
+        ),
+      ),
+    );
+  });
+
+  it.effect("completes empty Replay ranges with zero replayed events", () => {
+    const completedDispatches: Array<{
+      replayId: string;
+      completedAt: string;
+      eventsReplayed: number;
+    }> = [];
+    const observedAt = "2026-03-24T02:00:00.000Z";
+
+    return dispatchReplays({ observedAt }).pipe(
+      Effect.map((result) => {
+        expect(result.eventsReplayed).toBe(0);
+        expect(completedDispatches).toEqual([
+          {
+            replayId: replayFixture.id,
+            completedAt: observedAt,
+            eventsReplayed: 0,
+          },
+        ]);
+      }),
+      Effect.provide(
+        Layer.mergeAll(
+          createReplayStoreTestLayer({
+            dispatchTargets: [replayFixture],
+            preparedEventIds: {
+              [replayFixture.id]: [],
+            },
+            completedDispatches,
+          }),
+          createWebhookDeliveryStoreTestLayer(),
+          createWebhookDeliverySchedulerTestLayer(),
+        ),
+      ),
+    );
+  });
+
+  it.effect("routes dispatch_replays control jobs to the Replay dispatcher", () =>
+    runControlJob({ kind: "dispatch_replays" }).pipe(
+      Effect.map((result) => {
+        expect(result.kind).toBe("dispatch_replays");
+        expect(result.status).toBe("completed");
+      }),
+      Effect.provide(
+        Layer.mergeAll(
+          createReplayStoreTestLayer(),
+          createWebhookDeliveryStoreTestLayer(),
+          createWebhookDeliverySchedulerTestLayer(),
         ),
       ),
     ),
