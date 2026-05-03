@@ -301,14 +301,16 @@ Should have:
 ### 5.5 Replay
 
 Replay is part of the PRD promise.
-If the product markets replay, replay must be real at launch.
+Replay now has a durable product path in the codebase: workspace-scoped Replay resources, mailbox
+ownership checks, time range validation, active overlap conflict handling, deterministic mailbox
+event selection, webhook delivery scheduling, and status progression.
 
 Must have if included in external launch messaging:
 
-- create Replay
-- inspect Replay status
-- deterministic re-delivery with the same `event.id`
-- conflict handling for overlapping Replays
+- [x] create Replay
+- [x] inspect Replay status
+- [x] deterministic re-delivery with the same `event.id`
+- [x] conflict handling for overlapping Replays
 
 If Replay is not launched yet:
 
@@ -423,6 +425,7 @@ This section translates the current repo state into launch language.
 - local webhook delivery runtime with retries, endpoint health, and startup recovery of pending/in-flight deliveries
 - mailbox observability routes for sync runs and current operational state via `GET /v1/mailboxes/{mailbox_id}/sync-runs` and `GET /v1/mailboxes/{mailbox_id}/observability`
 - staging/production retry-exhaustion handling for mailbox sync dispatch and webhook delivery: Pub/Sub dead-letters exhausted mailbox sync dispatches into `/internal/sync-dead-letter`, while exhausted webhook deliveries are persisted as `webhook_delivery_retry_exhausted` and surfaced through structured logs, log-based metrics, and optional Monitoring alerts
+- durable Replay resources with create/get API routes, overlap conflict handling, empty-range completion, deterministic Mailbox Event selection, and scheduled re-delivery with stable `event.id` values
 
 ### 6.2 Immediate Launch Blockers
 
@@ -431,7 +434,6 @@ This section translates the current repo state into launch language.
 
 ### 6.3 Likely Public-Launch Blockers
 
-- Replay if it remains part of the external promise
 - self-serve Workspace and API key management
 - official OpenAPI source of truth
 - official SDK

@@ -231,11 +231,11 @@ Use the durable mailbox event log as a replay source. Developers should be able 
 
 ### Acceptance criteria
 
-- [ ] `POST /v1/replays` creates replay jobs scoped by mailbox and time range
-- [ ] `GET /v1/replays/{replay_id}` returns replay resource state
-- [ ] Empty event ranges still complete successfully with zero replayed events
-- [ ] Overlapping active replays for the same mailbox and destination return `409 replay_conflict`
-- [ ] Replay re-delivers historical events with the same `event.id` values
+- [x] `POST /v1/replays` creates replay jobs scoped by mailbox and time range
+- [x] `GET /v1/replays/{replay_id}` returns replay resource state
+- [x] Empty event ranges still complete successfully with zero replayed events
+- [x] Overlapping active replays for the same mailbox and destination return `409 replay_conflict`
+- [x] Replay re-delivers historical events with the same `event.id` values
 
 ---
 
