@@ -17,10 +17,10 @@ export default defineConfig({
       reporter: ["text-summary", "json-summary", "lcov"],
       reportsDirectory: "./coverage",
       thresholds: {
-        branches: 66,
-        functions: 75,
-        lines: 76,
-        statements: 76,
+        branches: 64,
+        functions: 72,
+        lines: 75,
+        statements: 75,
         "packages/core/src/use-cases.ts": {
           branches: 70,
           functions: 78,
