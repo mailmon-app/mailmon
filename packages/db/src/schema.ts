@@ -1,4 +1,4 @@
-import type { MailboxEventEnvelope, MailboxEventType } from "@mailmon/core";
+import type { MailboxEventEnvelope, MailboxEventType, ReplayStatus } from "@mailmon/core";
 import {
   boolean,
   index,
@@ -279,6 +279,46 @@ export const mailboxEvents = pgTable(
       table.occurredAt.desc(),
       table.id.desc(),
     ),
+  }),
+);
+
+export const replays = pgTable(
+  "replays",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    mailboxId: text("mailbox_id")
+      .notNull()
+      .references(() => mailboxes.id),
+    webhookEndpointId: text("webhook_endpoint_id")
+      .notNull()
+      .references(() => webhookEndpoints.id),
+    status: text("status").$type<ReplayStatus>().notNull(),
+    startTime: timestamp("start_time", { withTimezone: true }).notNull(),
+    endTime: timestamp("end_time", { withTimezone: true }).notNull(),
+    eventsReplayed: integer("events_replayed"),
+    lastError: text("last_error"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    dispatchIndex: index("replays_status_created_at_idx").on(
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    mailboxDestinationStatusRangeIndex: index("replays_mailbox_endpoint_status_range_idx").on(
+      table.mailboxId,
+      table.webhookEndpointId,
+      table.status,
+      table.startTime,
+      table.endTime,
+    ),
+    workspaceIndex: index("replays_workspace_id_idx").on(table.workspaceId),
   }),
 );
 
