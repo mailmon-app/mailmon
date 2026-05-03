@@ -4,11 +4,14 @@ import { Args, Command, Options } from "@effect/cli";
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
 import {
   type ControlJobKind,
+  createReplay,
+  dispatchReplays,
   dispatchMailboxSync,
   runWebhookDelivery,
   WebhookDeliveryScheduler,
   WebhookDeliverySender,
   WebhookDeliveryStore,
+  type MailboxEventEnvelope,
   type PreparedWebhookDelivery,
   type WebhookDeliverySendFailure,
 } from "@mailmon/core";
@@ -19,14 +22,13 @@ import {
   createWebhookDeliveryStoreLayer,
   createWorkspaceApiKeyForOperators,
   createWorkspaceForOperators,
-  listMailboxEventsForLocalReplay,
+  ensureLocalReplayWebhookEndpoint,
   rewrapGmailMailboxCredentials,
   revokeWorkspaceApiKeyForOperators,
   type CreatedWorkspaceApiKeyOperatorResult,
   type CreatedWorkspaceOperatorResult,
   type GmailMailboxCredentialAuditSummary,
   type GmailMailboxCredentialRewrapResult,
-  type LocalReplayMailboxEvent,
   type RevokedWorkspaceApiKeyOperatorResult,
 } from "@mailmon/db";
 import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
@@ -208,7 +210,7 @@ const classifyWebhookDeliveryFailure = (error: unknown): WebhookDeliverySendFail
 const sendLocalWebhookEvent = (params: {
   readonly attemptCount: number;
   readonly deliveryId: string;
-  readonly event: LocalReplayMailboxEvent["payload"];
+  readonly event: MailboxEventEnvelope;
   readonly forwardTo: string;
   readonly signingSecret: string;
   readonly attemptedAt?: string;
@@ -377,28 +379,71 @@ const runReplay = (options: {
   Effect.gen(function* () {
     const config = yield* MailmonCliConfig;
     const databaseUrl = yield* requireDatabaseUrl(config.databaseUrl, "replay mailbox events");
-    const since = new Date(Date.now() - parseLastDurationMs(options.last)).toISOString();
-    const events = yield* listMailboxEventsForLocalReplay({
-      connectionString: databaseUrl,
-      mailboxId: options.mailbox,
-      since,
-    });
-
-    for (const event of events) {
-      const result = yield* sendLocalWebhookEvent({
-        attemptCount: 1,
-        attemptedAt: event.occurredAt,
-        deliveryId: `test_replay_${event.id}`,
-        event: event.payload,
-        forwardTo: options.forwardTo,
-        signingSecret: options.testSigningSecret,
+    if (config.gmailRefreshTokenEncryptionKey === null) {
+      return yield* new CliError({
+        message: "MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY is required to replay mailbox events.",
       });
+    }
+    const endTime = new Date().toISOString();
+    const startTime = new Date(
+      Date.parse(endTime) - parseLastDurationMs(options.last),
+    ).toISOString();
+    const endpoint = yield* ensureLocalReplayWebhookEndpoint({
+      connectionString: databaseUrl,
+      forwardTo: options.forwardTo,
+      mailboxId: options.mailbox,
+      signingSecret: options.testSigningSecret,
+    });
+    const scheduledDeliveries: Array<{ deliveryId: string; notBefore: string }> = [];
+    const gmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
+      activeKeyId: config.gmailRefreshTokenEncryptionKeyId,
+      allowPlaintextFallback: config.nodeEnv !== "production",
+      decryptionKeys: config.gmailRefreshTokenPreviousEncryptionKeys,
+      encryptionKey: config.gmailRefreshTokenEncryptionKey,
+    });
+    const runtime = ManagedRuntime.make(
+      Layer.mergeAll(
+        createCorePersistenceLayer(databaseUrl).pipe(Layer.provide(gmailRefreshTokenCipherLayer)),
+        createLocalForwardingWebhookDeliverySenderLayer({
+          forwardTo: options.forwardTo,
+          testSigningSecret: options.testSigningSecret,
+        }),
+        Layer.succeed(WebhookDeliveryScheduler, {
+          scheduleWebhookDelivery: (request) =>
+            Effect.sync(() => {
+              scheduledDeliveries.push(request);
+            }),
+        }),
+      ),
+    );
+    yield* Effect.addFinalizer(() => Effect.promise(() => runtime.dispose()));
 
-      yield* Console.log(`replayed ${event.id}: HTTP ${result.statusCode}`);
+    const replay = yield* Effect.promise(() =>
+      runtime.runPromise(
+        createReplay(endpoint.workspaceId, {
+          mailboxId: options.mailbox,
+          webhookEndpointId: endpoint.webhookEndpointId,
+          startTime,
+          endTime,
+        }),
+      ),
+    );
+    const dispatchResult = yield* Effect.promise(() =>
+      runtime.runPromise(dispatchReplays({ observedAt: endTime })),
+    );
+
+    for (const delivery of scheduledDeliveries) {
+      const result = yield* Effect.promise(() =>
+        runtime.runPromise(runWebhookDelivery(delivery.deliveryId)),
+      );
+
+      yield* Console.log(`replayed ${delivery.deliveryId}: ${result.status}`);
     }
 
-    yield* Console.log(`replayed ${events.length} mailbox events for ${options.mailbox}`);
-  });
+    yield* Console.log(
+      `replay ${replay.id} completed: ${dispatchResult.eventsReplayed} mailbox events for ${options.mailbox}`,
+    );
+  }).pipe(Effect.scoped);
 
 const parseApiKeyPrefix = (prefix: string): "mm_live_" | "mm_test_" => {
   if (prefix === "mm_live_" || prefix === "mm_test_") {
