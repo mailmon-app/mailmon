@@ -1,4 +1,5 @@
 export * from "./contracts.js";
+export * from "./internal-message-codec.js";
 export * from "./problems.js";
 export * from "./services.js";
 export * from "./use-cases.js";

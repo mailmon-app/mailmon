@@ -4,14 +4,20 @@ import { PubSub } from "@google-cloud/pubsub";
 import { CloudTasksClient } from "@google-cloud/tasks";
 import {
   ControlJobDispatcher,
+  createMailboxSyncJobData,
+  encodeInternalJsonPayload,
   MailboxSyncDispatcher,
   WebhookDeliveryScheduler,
   type ControlJobDispatchRequest,
   type WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
-import { Context, Effect, Layer, Ref, Runtime, Schema } from "effect";
+import { Context, Effect, Layer, Ref, Runtime } from "effect";
 
-export { MailboxSyncJobDataSchema, type MailboxSyncJobData } from "@mailmon/core";
+export {
+  createMailboxSyncJobData,
+  MailboxSyncJobDataSchema,
+  type MailboxSyncJobData,
+} from "@mailmon/core";
 
 export const SYNC_MAILBOX_QUEUE = "mailmon.sync-mailbox";
 export const DEFAULT_LOCAL_WORKER_BASE_URL = "http://127.0.0.1:3001";
@@ -21,13 +27,7 @@ const WEBHOOK_DELIVERY_TASK_PATH = "/internal/webhook-deliveries";
 const MAILBOX_SYNC_TASK_PATH = "/internal/sync";
 const CONTROL_JOB_TASK_PATH = "/internal/control-jobs";
 const encodeJsonString = (value: unknown) => {
-  return Schema.encodeUnknownSync(Schema.parseJson())(value);
-};
-
-export const createMailboxSyncJobData = (mailboxId: string) => {
-  return {
-    mailboxId,
-  };
+  return encodeInternalJsonPayload(value);
 };
 
 export const createRedisConnectionOptions = (redisUrl: string) => {

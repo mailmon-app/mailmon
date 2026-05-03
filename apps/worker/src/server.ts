@@ -1,17 +1,22 @@
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import type { AsyncTransportMode } from "@mailmon/config";
-import type {
-  ControlJobDispatchRequest,
-  ControlJobRunResult,
-  GmailPushNotification,
-  GmailPushNotificationResult,
-  MailboxSyncJobData,
-  MailboxSyncDispatchExhaustedResult,
-  ProblemDetails,
-  ProcessWebhookDeliveryResult,
-  SyncMailboxResult,
-  WebhookDeliveryScheduleRequest,
+import {
+  decodeControlJobDispatchRequest,
+  decodeGmailPushNotificationPubSubEnvelope,
+  decodeMailboxSyncDeadLetterRequest,
+  decodeMailboxSyncWorkerRequest,
+  decodeWebhookDeliveryScheduleRequest,
+  type ControlJobDispatchRequest,
+  type ControlJobRunResult,
+  type GmailPushNotification,
+  type GmailPushNotificationResult,
+  type MailboxSyncDispatchExhaustedResult,
+  type MailboxSyncJobData,
+  type ProblemDetails,
+  type ProcessWebhookDeliveryResult,
+  type SyncMailboxResult,
+  type WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
 import { Context, Layer, ManagedRuntime } from "effect";
 import { OAuth2Client } from "google-auth-library";
@@ -119,185 +124,6 @@ const readJsonRequest = async (request: { readonly text: () => Promise<string> }
   }
 
   return JSON.parse(body) as unknown;
-};
-
-const isMailboxSyncJobData = (value: unknown): value is MailboxSyncJobData => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "mailboxId" in value &&
-    typeof value.mailboxId === "string" &&
-    value.mailboxId.length > 0
-  );
-};
-
-const isWebhookDeliveryScheduleRequest = (
-  value: unknown,
-): value is WebhookDeliveryScheduleRequest => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "deliveryId" in value &&
-    "notBefore" in value &&
-    typeof value.deliveryId === "string" &&
-    value.deliveryId.length > 0 &&
-    typeof value.notBefore === "string" &&
-    value.notBefore.length > 0
-  );
-};
-
-const isControlJobDispatchRequest = (value: unknown): value is ControlJobDispatchRequest => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "kind" in value &&
-    (value.kind === "renew_watches" ||
-      value.kind === "dispatch_replays" ||
-      value.kind === "repair_mailboxes" ||
-      value.kind === "recover_stuck_syncs" ||
-      value.kind === "cleanup")
-  );
-};
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
-  return typeof value === "object" && value !== null;
-};
-
-const decodeBase64Json = (encoded: string): unknown => {
-  return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as unknown;
-};
-
-const parseGmailPushNotification = (
-  payload: unknown,
-): { readonly notification: GmailPushNotification } | { readonly error: string } => {
-  if (!isRecord(payload) || !isRecord(payload.message)) {
-    return {
-      error: "Expected a Pub/Sub push envelope with a message object.",
-    };
-  }
-
-  const message = payload.message;
-
-  if (typeof message.data !== "string" || message.data.length === 0) {
-    return {
-      error: "Expected Pub/Sub message.data to contain a base64-encoded Gmail notification.",
-    };
-  }
-
-  try {
-    const decoded = decodeBase64Json(message.data);
-
-    if (
-      !isRecord(decoded) ||
-      typeof decoded.emailAddress !== "string" ||
-      decoded.emailAddress.length === 0 ||
-      typeof decoded.historyId !== "string" ||
-      decoded.historyId.length === 0
-    ) {
-      return {
-        error:
-          "Expected Gmail notification data to include non-empty emailAddress and historyId fields.",
-      };
-    }
-
-    return {
-      notification: {
-        emailAddress: decoded.emailAddress,
-        historyId: decoded.historyId,
-        messageId:
-          typeof message.messageId === "string" && message.messageId.length > 0
-            ? message.messageId
-            : null,
-        subscription:
-          typeof payload.subscription === "string" && payload.subscription.length > 0
-            ? payload.subscription
-            : null,
-      },
-    };
-  } catch {
-    return {
-      error: "Pub/Sub message.data was not valid base64-encoded JSON.",
-    };
-  }
-};
-
-const parseMailboxSyncRequest = (
-  payload: unknown,
-): { readonly job: MailboxSyncJobData } | { readonly error: string } => {
-  if (isMailboxSyncJobData(payload)) {
-    return {
-      job: payload,
-    };
-  }
-
-  if (!isRecord(payload) || !isRecord(payload.message)) {
-    return {
-      error: "Expected a mailbox-scoped sync payload or a Pub/Sub push envelope.",
-    };
-  }
-
-  const message = payload.message;
-
-  if (typeof message.data !== "string" || message.data.length === 0) {
-    return {
-      error: "Expected Pub/Sub message.data to contain a base64-encoded mailbox sync payload.",
-    };
-  }
-
-  try {
-    const decoded = decodeBase64Json(message.data);
-
-    if (!isMailboxSyncJobData(decoded)) {
-      return {
-        error: "Expected mailbox sync data to include a non-empty mailboxId field.",
-      };
-    }
-
-    return {
-      job: decoded,
-    };
-  } catch {
-    return {
-      error: "Pub/Sub message.data was not valid base64-encoded JSON.",
-    };
-  }
-};
-
-const parseMailboxSyncDeadLetterRequest = (
-  payload: unknown,
-): { readonly job: MailboxSyncJobData } | { readonly error: string } => {
-  if (!isRecord(payload) || !isRecord(payload.message)) {
-    return {
-      error: "Expected a Pub/Sub dead-letter push envelope with a message object.",
-    };
-  }
-
-  const message = payload.message;
-
-  if (typeof message.data !== "string" || message.data.length === 0) {
-    return {
-      error:
-        "Expected Pub/Sub dead-letter message.data to contain a base64-encoded mailbox sync payload.",
-    };
-  }
-
-  try {
-    const decoded = decodeBase64Json(message.data);
-
-    if (!isMailboxSyncJobData(decoded)) {
-      return {
-        error: "Expected dead-lettered mailbox sync data to include a non-empty mailboxId field.",
-      };
-    }
-
-    return {
-      job: decoded,
-    };
-  } catch {
-    return {
-      error: "Pub/Sub dead-letter message.data was not valid base64-encoded JSON.",
-    };
-  }
 };
 
 const logInvalidMailboxSyncDeadLetter = (detail: string) => {
@@ -528,7 +354,7 @@ export const createWorkerApp = (
   app.post("/internal/sync", async (context) => {
     try {
       const payload = await readJsonRequest(context.req);
-      const parsed = parseMailboxSyncRequest(payload);
+      const parsed = decodeMailboxSyncWorkerRequest(payload);
 
       if ("error" in parsed) {
         return createJsonResponse(
@@ -541,7 +367,7 @@ export const createWorkerApp = (
       }
 
       const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processSyncJob(parsed.job);
+      const result = await processors.processSyncJob(parsed.value);
 
       return context.json(result);
     } catch (error) {
@@ -558,7 +384,7 @@ export const createWorkerApp = (
   app.post("/internal/sync-dead-letter", async (context) => {
     try {
       const payload = await readJsonRequest(context.req);
-      const parsed = parseMailboxSyncDeadLetterRequest(payload);
+      const parsed = decodeMailboxSyncDeadLetterRequest(payload);
 
       if ("error" in parsed) {
         logInvalidMailboxSyncDeadLetter(parsed.error);
@@ -570,7 +396,7 @@ export const createWorkerApp = (
       }
 
       const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processMailboxSyncDeadLetter(parsed.job);
+      const result = await processors.processMailboxSyncDeadLetter(parsed.value);
 
       return context.json(result);
     } catch (error) {
@@ -598,7 +424,7 @@ export const createWorkerApp = (
 
     try {
       const payload = await readJsonRequest(context.req);
-      const parsed = parseGmailPushNotification(payload);
+      const parsed = decodeGmailPushNotificationPubSubEnvelope(payload);
 
       if ("error" in parsed) {
         return createJsonResponse(
@@ -611,7 +437,7 @@ export const createWorkerApp = (
       }
 
       const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processGmailPushNotification(parsed.notification);
+      const result = await processors.processGmailPushNotification(parsed.value);
 
       return context.json(result, 202);
     } catch (error) {
@@ -628,20 +454,20 @@ export const createWorkerApp = (
   app.post("/internal/webhook-deliveries", async (context) => {
     try {
       const payload = await readJsonRequest(context.req);
+      const parsed = decodeWebhookDeliveryScheduleRequest(payload);
 
-      if (!isWebhookDeliveryScheduleRequest(payload)) {
+      if ("error" in parsed) {
         return createJsonResponse(
           {
             code: "invalid_webhook_delivery_request",
-            detail:
-              "Expected a webhook delivery payload with non-empty deliveryId and notBefore fields.",
+            detail: parsed.error,
           },
           400,
         );
       }
 
       const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processWebhookDelivery(payload);
+      const result = await processors.processWebhookDelivery(parsed.value);
 
       return context.json(result);
     } catch (error) {
@@ -658,19 +484,20 @@ export const createWorkerApp = (
   app.post("/internal/control-jobs", async (context) => {
     try {
       const payload = await readJsonRequest(context.req);
+      const parsed = decodeControlJobDispatchRequest(payload);
 
-      if (!isControlJobDispatchRequest(payload)) {
+      if ("error" in parsed) {
         return createJsonResponse(
           {
             code: "invalid_control_job_request",
-            detail: "Expected a control job payload with a supported kind.",
+            detail: parsed.error,
           },
           400,
         );
       }
 
       const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processControlJob(payload);
+      const result = await processors.processControlJob(parsed.value);
 
       return context.json(result);
     } catch (error) {
