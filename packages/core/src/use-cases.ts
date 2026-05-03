@@ -1,9 +1,8 @@
-import { Duration, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 
 import type {
-  CompletedWebhookDeliveryAttempt,
-  CompletedSyncRun,
   ConnectSessionResource,
+  CompletedWebhookDeliveryAttempt,
   ControlJobDispatchRequest,
   ControlJobRunResult,
   CreateConnectSessionRequest,
@@ -22,18 +21,17 @@ import type {
   RepairMailboxesResult,
   RenewMailboxWatchesResult,
   StoredConnectSession,
-  SyncMailboxResult,
-  SyncRunOutcome,
   WebhookDeliverySendFailure,
   WebhookEventType,
 } from "./contracts.js";
+export { scheduleMailboxEventDeliveries } from "./mailbox-event-delivery-scheduling.js";
+export { runMailboxSync } from "./mailbox-sync-execution.js";
 import {
   connectSessionExpired,
   connectSessionNotFound,
   invalidApiKey,
   invalidReplayTimeRange,
   mailboxNotFound,
-  mailboxSyncLeaseLost,
   messageNotFound,
   replayNotFound,
   threadNotFound,
@@ -48,15 +46,11 @@ import {
   MailboxExecutionRecoveryStore,
   MailboxPushNotificationStore,
   MailboxRepairStore,
-  MailboxSyncCoordinator,
   MailboxSyncDispatchExhaustionStore,
   MailboxSyncDispatcher,
-  MailboxSyncProvider,
-  MailboxStateStore,
   MailboxWatchProvider,
   MailboxWatchStore,
   ReplayStore,
-  SyncRunStore,
   WebhookDeliveryScheduler,
   WebhookDeliverySender,
   WebhookDeliveryStore,
@@ -67,8 +61,6 @@ import {
 } from "./services.js";
 
 const DEFAULT_CONNECT_SESSION_TTL_MS = 15 * 60_000;
-const DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS = 90_000;
-const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 const DEFAULT_GMAIL_WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60_000;
 const DEFAULT_GMAIL_WATCH_RENEWAL_BATCH_SIZE = 100;
 const DEFAULT_MAILBOX_REPAIR_BATCH_SIZE = 100;
@@ -84,11 +76,6 @@ interface StuckMailboxSyncRecoveryOutcome {
   readonly recoveredExecution: RecoveredStuckMailboxSyncExecution | null;
   readonly skippedReconnectRequired: boolean;
 }
-const TERMINAL_MAILBOX_SYNC_PROBLEM_CODES = new Set([
-  "gmail_mailbox_credentials_missing",
-  "gmail_mailbox_credential_unreadable",
-  "gmail_token_refresh_reconnect_required",
-]);
 
 const addMillisecondsToIsoTimestamp = (timestamp: string, milliseconds: number) => {
   return new Date(Date.parse(timestamp) + milliseconds).toISOString();
@@ -152,32 +139,6 @@ const isConnectSessionExpired = (
     connectSession.completedAt === null &&
     Date.parse(connectSession.expiresAt) <= Date.parse(observedAt)
   );
-};
-
-const createSyncRunCompletion = (
-  params: Readonly<{
-    syncRunId: string;
-    mailboxId: string;
-    completedAt: string;
-    status: SyncRunOutcome;
-    eventsEmitted: number;
-    nextCursor: string | null;
-    detail?: string | null;
-  }>,
-): CompletedSyncRun => {
-  return {
-    syncRunId: params.syncRunId,
-    mailboxId: params.mailboxId,
-    completedAt: params.completedAt,
-    status: params.status,
-    eventsEmitted: params.eventsEmitted,
-    nextCursor: params.nextCursor,
-    detail: params.detail ?? null,
-  };
-};
-
-const isTerminalMailboxSyncProblem = (code: string) => {
-  return TERMINAL_MAILBOX_SYNC_PROBLEM_CODES.has(code);
 };
 
 const calculateWebhookDeliveryRetryDelayMs = (attemptCount: number) => {
@@ -556,26 +517,6 @@ export const completeGmailMailboxConnectSession = (
     }
 
     return completedSession;
-  });
-
-export const scheduleMailboxEventDeliveries = (mailboxEventIds: ReadonlyArray<string>) =>
-  Effect.gen(function* () {
-    if (mailboxEventIds.length === 0) {
-      return [] as const;
-    }
-
-    const webhookDeliveryStore = yield* WebhookDeliveryStore;
-    const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
-    const deliveryRequests =
-      yield* webhookDeliveryStore.createWebhookDeliveriesForMailboxEvents(mailboxEventIds);
-
-    yield* Effect.forEach(
-      deliveryRequests,
-      (request) => webhookDeliveryScheduler.scheduleWebhookDelivery(request),
-      { discard: true },
-    );
-
-    return deliveryRequests;
   });
 
 const parseReplayTimestamp = (value: string) => {
@@ -1235,179 +1176,6 @@ export function runControlJob(
     status: "noop",
   });
 }
-
-export const runMailboxSync = (mailboxId: string) =>
-  Effect.gen(function* () {
-    const mailbox = yield* getMailboxOrFail(mailboxId);
-    const syncRunStore = yield* SyncRunStore;
-
-    if (mailbox.status === "reconnect_required") {
-      const syncRun = yield* syncRunStore.startSyncRun(mailbox.id);
-      const completedAt = new Date().toISOString();
-      const completion = createSyncRunCompletion({
-        syncRunId: syncRun.syncRunId,
-        mailboxId: mailbox.id,
-        completedAt,
-        status: "reconnect_required",
-        eventsEmitted: 0,
-        nextCursor: null,
-        detail: "mailbox_reconnect_required",
-      });
-
-      yield* syncRunStore.completeSyncRun(completion);
-
-      return {
-        ...syncRun,
-        status: "reconnect_required",
-        completedAt,
-        eventsEmitted: 0,
-        nextCursor: null,
-      } satisfies SyncMailboxResult;
-    }
-
-    const syncCoordinator = yield* MailboxSyncCoordinator;
-    const mailboxProvider = yield* MailboxSyncProvider;
-    const mailboxStateStore = yield* MailboxStateStore;
-    const cursor = yield* mailboxStateStore.getMailboxCursor(mailbox.id);
-    const syncRun = yield* syncRunStore.startSyncRun(mailbox.id);
-    const leaseOwnerId = globalThis.crypto.randomUUID();
-    const acquisition = yield* syncCoordinator.acquireMailboxSyncLease({
-      mailboxId: mailbox.id,
-      syncRunId: syncRun.syncRunId,
-      leaseOwnerId,
-      acquiredAt: syncRun.startedAt,
-      expiresAt: addMillisecondsToIsoTimestamp(
-        syncRun.startedAt,
-        DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS,
-      ),
-    });
-
-    if (!acquisition.acquired) {
-      const completedAt = new Date().toISOString();
-      const completion = createSyncRunCompletion({
-        syncRunId: syncRun.syncRunId,
-        mailboxId: mailbox.id,
-        completedAt,
-        status: "skipped_due_to_active_lease",
-        eventsEmitted: 0,
-        nextCursor: null,
-      });
-
-      yield* syncRunStore.completeSyncRun(completion);
-
-      const skipped: SyncMailboxResult = {
-        ...syncRun,
-        status: "skipped_due_to_active_lease",
-        completedAt,
-        eventsEmitted: 0,
-        leaseOwnerId: acquisition.leaseOwnerId,
-        nextCursor: null,
-      };
-
-      return skipped;
-    }
-
-    const heartbeat = Effect.forever(
-      Effect.sleep(Duration.millis(DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS)).pipe(
-        Effect.zipRight(
-          syncCoordinator.renewMailboxSyncLease({
-            mailboxId: mailbox.id,
-            leaseOwnerId,
-            heartbeatAt: new Date().toISOString(),
-            expiresAt: addMillisecondsToIsoTimestamp(
-              new Date().toISOString(),
-              DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS,
-            ),
-          }),
-        ),
-        Effect.flatMap((renewal) =>
-          renewal.renewed
-            ? Effect.void
-            : Effect.fail(
-                mailboxSyncLeaseLost(mailbox.id, {
-                  leaseOwnerId,
-                  syncRunId: syncRun.syncRunId,
-                }),
-              ),
-        ),
-      ),
-    );
-
-    const syncWork = mailboxProvider.syncMailbox({ mailbox, cursor }).pipe(
-      Effect.flatMap((providerResult) => {
-        const completedAt = new Date().toISOString();
-        return mailboxStateStore
-          .applySyncResult({
-            eventsEmitted: providerResult.eventsEmitted,
-            mailboxId: mailbox.id,
-            leaseOwnerId,
-            syncRunId: syncRun.syncRunId,
-            snapshot: providerResult.snapshot,
-            nextCursor: providerResult.nextCursor,
-            syncedAt: completedAt,
-          })
-          .pipe(
-            Effect.flatMap((commitResult) =>
-              commitResult.applied
-                ? scheduleMailboxEventDeliveries(commitResult.mailboxEventIds).pipe(
-                    Effect.as({
-                      ...syncRun,
-                      status: "completed",
-                      completedAt,
-                      eventsEmitted: commitResult.mailboxEventIds.length,
-                      nextCursor: providerResult.nextCursor,
-                    } satisfies SyncMailboxResult),
-                  )
-                : Effect.fail(
-                    mailboxSyncLeaseLost(mailbox.id, {
-                      leaseOwnerId,
-                      syncRunId: syncRun.syncRunId,
-                    }),
-                  ),
-            ),
-          );
-      }),
-    );
-
-    return yield* Effect.raceFirst(syncWork, heartbeat).pipe(
-      Effect.catchAll((problem) => {
-        const completedAt = new Date().toISOString();
-        const completion = createSyncRunCompletion({
-          syncRunId: syncRun.syncRunId,
-          mailboxId: mailbox.id,
-          completedAt,
-          status: isTerminalMailboxSyncProblem(problem.code)
-            ? "reconnect_required"
-            : problem.code === "mailbox_sync_lease_lost"
-              ? "lease_lost"
-              : "failed_after_lease_acquired",
-          eventsEmitted: 0,
-          nextCursor: null,
-          detail: problem.code,
-        });
-
-        return syncRunStore.completeSyncRun(completion).pipe(
-          Effect.flatMap(() =>
-            isTerminalMailboxSyncProblem(problem.code)
-              ? Effect.succeed({
-                  ...syncRun,
-                  status: "reconnect_required",
-                  completedAt,
-                  eventsEmitted: 0,
-                  nextCursor: null,
-                } satisfies SyncMailboxResult)
-              : Effect.fail(problem),
-          ),
-        );
-      }),
-      Effect.ensuring(
-        syncCoordinator.releaseMailboxSyncLease({
-          mailboxId: mailbox.id,
-          leaseOwnerId,
-        }),
-      ),
-    );
-  });
 
 export const dispatchMailboxSync = (mailboxId: string) =>
   Effect.gen(function* () {
