@@ -186,6 +186,10 @@ pnpm --filter @mailmon/cli dev -- replay \
 
 ## Architecture
 
+Mailmon is built on Effect service interfaces (transport-neutral contracts), PostgreSQL persistence via Drizzle ORM for atomic state commits, and GCP-native async transport: Pub/Sub for mailbox sync dispatch, Cloud Tasks for webhook delivery scheduling. TypeScript, Hono, and Effect power the API and worker runtimes.
+
+**Key guarantee:** Sync runs hold a database-backed lease. Only one sync executes per mailbox. State and events are committed atomically with cursor advancement.
+
 ```mermaid
 flowchart TD
     App[Developer Application] -->|API key| API[Mailmon API]
@@ -233,27 +237,6 @@ flowchart TD
 └── docker-compose.yml
 ```
 
-## Tech stack
-
-- TypeScript
-- Effect
-- Hono
-- PostgreSQL
-- Drizzle ORM
-- Gmail API
-- Google Pub/Sub
-- Google Cloud Tasks
-- Google Cloud Run
-- Google Cloud SQL
-- Google Secret Manager
-- Google Cloud KMS
-- pnpm workspaces
-- Turbo
-- Vitest
-- oxlint / oxfmt
-- Terraform
-- Mintlify docs app
-
 ## API examples
 
 All public API examples require a workspace API key:
@@ -261,6 +244,9 @@ All public API examples require a workspace API key:
 ```bash
 export MAILMON_API_KEY=mm_test_...
 ```
+
+> [!TIP]
+> Webhook events include an `id` field. Consumers must deduplicate by event ID—delivery is at-least-once, not exactly-once.
 
 ### Create a Gmail connect session
 
@@ -474,6 +460,9 @@ Used for staging/production.
 MAILMON_ASYNC_TRANSPORT_MODE=gcp
 ```
 
+> [!NOTE]
+> Mailmon is GCP-native. We optimize for Pub/Sub, Cloud Tasks, and Cloud SQL. We do not target cloud-agnostic or Kubernetes-generic deployments.
+
 GCP deployments commonly set:
 
 ```bash
@@ -521,45 +510,15 @@ Staging/production resources include:
 ## Development commands
 
 ```bash
-# Install
-pnpm install
-
-# Start local containers
-pnpm docker:up
-
-# Stop local containers
-pnpm docker:down
-
-# Run API and worker
-pnpm dev
-
-# Generate DB migrations
-pnpm db:generate
-
-# Run DB migrations
-pnpm db:migrate
-
-# Build
-pnpm build
-
-# Lint
-pnpm lint
-
-# Typecheck
-pnpm typecheck
-
-# Test
-pnpm test
-
-# Coverage
-pnpm test:coverage
-
-# Format
-pnpm format
-
-# Check formatting
-pnpm format:check
+pnpm install          # Install dependencies
+pnpm docker:up        # Start local containers
+pnpm dev              # Run API and worker
+pnpm build            # Build all packages
+pnpm test             # Run tests
+pnpm lint             # Lint and format check
 ```
+
+For full reference (migrations, coverage, watch modes), see [Development Guide](docs/DEVELOPMENT.md).
 
 ## Roadmap
 
