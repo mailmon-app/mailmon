@@ -1,12 +1,32 @@
-# Mailmon
+<h1>
+<p align="center">
+  Mailmon
+</h1>
+  <p align="center">
+    Gmail-first sync infrastructure for correct mailbox state, durable events, and replayable webhooks.
+    <br />
+    A reliable event system on top of Gmail.
+    <br />
+    <a href="#about">About</a>
+    ·
+    <a href="#quickstart">Quickstart</a>
+    ·
+    <a href="https://github.com/anomalyco/mailmon">GitHub</a>
+  </p>
+</p>
 
-> Gmail-first email sync infrastructure for correct mailbox state, durable events, and replayable webhooks.
+## At a glance
 
-Mailmon turns Gmail from a fragile trigger source into a stateful sync system developers can build on. It connects Gmail mailboxes, maintains canonical message/thread state, emits durable mailbox events, and delivers those events through retryable webhooks.
+| Area            | Current state                                                                     |
+| --------------- | --------------------------------------------------------------------------------- |
+| Provider        | Gmail                                                                             |
+| Runtime         | Local adapters for development, GCP-native async transport for staging/production |
+| Public API      | Hono HTTP API with workspace-scoped API keys                                      |
+| Persistence     | PostgreSQL through Drizzle                                                        |
+| Async execution | Pub/Sub for sync dispatch, Cloud Tasks for webhook delivery                       |
+| Local tooling   | CLI for operator flows, mailbox sync dispatch, webhook forwarding, and replay     |
 
-This is not an email client and not an AI inbox. It is the infrastructure layer underneath those products.
-
-## What problem does this solve?
+## Problem
 
 Most Gmail integrations start as a simple webhook + worker pipeline and fail once real production conditions appear:
 
@@ -30,33 +50,21 @@ The key question is:
 
 Mailmon is an active infrastructure project.
 
-Implemented:
+**Implemented**
 
-- Gmail OAuth connect sessions
-- encrypted Gmail refresh-token storage
-- initial and incremental mailbox sync
-- Gmail `historyId` cursor handling
-- database-backed mailbox leases
-- canonical messages and threads API
-- sync run tracking and mailbox observability
-- durable mailbox event log
-- webhook endpoints and subscriptions
-- retryable webhook delivery
-- public replay job API with DB-backed persistence and overlap conflict detection
-- replay dispatch through the shared control-job path
-- local CLI for operator and webhook testing flows
-- CLI Gmail credential audit and rewrap flows
-- Pub/Sub-backed sync dispatch in GCP mode
-- Cloud Tasks-backed webhook delivery in GCP mode
-- internal worker OIDC authentication outside local mode
-- Terraform GCP infrastructure definitions
+- Connectivity: Gmail OAuth connect sessions and encrypted refresh-token storage
+- Sync: initial/incremental sync, Gmail `historyId` cursor handling, and database-backed mailbox leases
+- Read API: canonical messages, threads, sync runs, and mailbox observability
+- Events: durable mailbox event log, webhook endpoints/subscriptions, retryable delivery, and replay jobs
+- Operations: local CLI flows, Gmail credential audit/rewrap commands, internal worker OIDC outside local mode
+- Cloud runtime: Pub/Sub-backed sync dispatch, Cloud Tasks-backed webhook delivery, and Terraform GCP infrastructure
 
-Still in progress:
+**Still in progress**
 
-- more cloud-transport integration tests
-- stronger API key metadata such as labels, last-used timestamps, rotation UX, and audit trails
+- Broader cloud-transport integration tests
+- Stronger API key metadata such as labels, last-used timestamps, rotation UX, and audit trails
 
-## Why this is interesting
+## Design rules
 
 Mailmon is built around correctness guarantees that are easy to ignore in early prototypes:
 
@@ -161,13 +169,13 @@ flowchart TD
 - Docker Compose
 - Gmail OAuth credentials, if testing real Gmail connectivity
 
-### Install dependencies
+### 1. Install dependencies
 
 ```bash
 pnpm install
 ```
 
-### Configure local environment
+### 2. Configure local environment
 
 Create a `.env` file:
 
@@ -192,7 +200,7 @@ Generate a local encryption key:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
-### Start local services
+### 3. Start local services
 
 ```bash
 pnpm docker:up
@@ -208,7 +216,7 @@ Default local URLs:
 > [!TIP]
 > Local mode does not require local Pub/Sub, Cloud Tasks, or Gmail watch infrastructure. It uses local adapters so the core sync and webhook flows can be developed without cloud emulators.
 
-## Local operator flow
+## Operator CLI
 
 Create a workspace:
 
@@ -258,6 +266,12 @@ pnpm --filter @mailmon/cli dev -- replay \
 ```
 
 ## API examples
+
+All public API examples require a workspace API key:
+
+```bash
+export MAILMON_API_KEY=mm_test_...
+```
 
 ### Create a Gmail connect session
 
