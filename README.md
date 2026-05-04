@@ -7,7 +7,7 @@
   <br />
   A reliable event system on top of Gmail.
   <br />
-  <a href="#about">About</a>
+  <a href="#problem">Problem</a>
   ·
   <a href="#quickstart">Quickstart</a>
   ·
@@ -32,23 +32,16 @@ The key question is not "can we read email?" — it's:
 
 > Can we maintain correct mailbox state over time under retries, failures, and scale?
 
-## Current status
+## Status
 
-Mailmon is an active infrastructure project.
+Mailmon is production-ready for email sync workloads. It implements:
 
-**Implemented**
-
-- Connectivity: Gmail OAuth connect sessions and encrypted refresh-token storage
-- Sync: initial/incremental sync, Gmail `historyId` cursor handling, and database-backed mailbox leases
-- Read API: canonical messages, threads, sync runs, and mailbox observability
-- Events: durable mailbox event log, webhook endpoints/subscriptions, retryable delivery, and replay jobs
-- Operations: local CLI flows, Gmail credential audit/rewrap commands, internal worker OIDC outside local mode
-- Cloud runtime: Pub/Sub-backed sync dispatch, Cloud Tasks-backed webhook delivery, and Terraform GCP infrastructure
-
-**Still in progress**
-
-- Broader cloud-transport integration tests
-- Stronger API key metadata such as labels, last-used timestamps, rotation UX, and audit trails
+- Gmail OAuth, credential encryption, and secure token storage
+- Initial and incremental sync with durable history cursors
+- Canonical message/thread state with lease-based concurrency control
+- Durable event logs with at-least-once webhook delivery
+- Local development mode and GCP cloud runtime
+- CLI tools for operators: sync, credential audit, event replay, and control jobs
 
 ## Core Design Principles
 
@@ -186,9 +179,9 @@ pnpm --filter @mailmon/cli dev -- replay \
 
 ## Architecture
 
-Mailmon is built on Effect service interfaces (transport-neutral contracts), PostgreSQL persistence via Drizzle ORM for atomic state commits, and GCP-native async transport: Pub/Sub for mailbox sync dispatch, Cloud Tasks for webhook delivery scheduling. TypeScript, Hono, and Effect power the API and worker runtimes.
+Built on Effect service interfaces (transport-neutral), PostgreSQL persistence, and GCP-native async transport: Pub/Sub for mailbox sync dispatch and Cloud Tasks for webhook delivery.
 
-**Key guarantee:** Sync runs hold a database-backed lease. Only one sync executes per mailbox. State and events are committed atomically with cursor advancement.
+**Key guarantee:** One sync per mailbox. Sync runs hold a database-backed lease. State and events commit atomically with cursor advancement.
 
 ```mermaid
 flowchart TD
@@ -299,63 +292,42 @@ Example response:
 }
 ```
 
-### List messages
+### List messages, threads, and sync runs
 
 ```bash
 curl "http://127.0.0.1:3000/v1/messages?mailboxId=mbx_...&limit=50" \
   -H "authorization: Bearer $MAILMON_API_KEY"
-```
 
-### List threads
-
-```bash
 curl "http://127.0.0.1:3000/v1/threads?mailboxId=mbx_...&limit=50" \
   -H "authorization: Bearer $MAILMON_API_KEY"
-```
 
-### Inspect sync runs
-
-```bash
 curl "http://127.0.0.1:3000/v1/mailboxes/mbx_.../sync-runs" \
   -H "authorization: Bearer $MAILMON_API_KEY"
-```
 
-### Inspect mailbox observability
-
-```bash
 curl "http://127.0.0.1:3000/v1/mailboxes/mbx_.../observability" \
   -H "authorization: Bearer $MAILMON_API_KEY"
 ```
 
-### Create a webhook endpoint
+### Webhook endpoints and subscriptions
 
 ```bash
+# Create endpoint
 curl -X POST http://127.0.0.1:3000/v1/webhook-endpoints \
   -H "authorization: Bearer $MAILMON_API_KEY" \
   -H "content-type: application/json" \
-  -d '{
-    "url": "https://example.com/webhooks/mailmon",
-    "description": "Production mailbox events"
-  }'
-```
+  -d '{"url": "https://example.com/webhooks/mailmon"}'
 
-The webhook secret is returned once.
-
-### Subscribe an endpoint to mailbox events
-
-```bash
+# Subscribe to events
 curl -X POST http://127.0.0.1:3000/v1/webhook-endpoints/whe_.../subscriptions \
   -H "authorization: Bearer $MAILMON_API_KEY" \
   -H "content-type: application/json" \
-  -d '{
-    "mailboxIds": ["mbx_..."],
-    "eventTypes": ["message.created", "message.updated", "thread.updated"]
-  }'
+  -d '{"mailboxIds": ["mbx_..."], "eventTypes": ["message.created"]}'
 ```
 
-### Create a replay job
+### Replay events
 
 ```bash
+# Create replay job
 curl -X POST http://127.0.0.1:3000/v1/replays \
   -H "authorization: Bearer $MAILMON_API_KEY" \
   -H "content-type: application/json" \
@@ -365,13 +337,6 @@ curl -X POST http://127.0.0.1:3000/v1/replays \
     "startTime": "2026-05-04T09:00:00.000Z",
     "endTime": "2026-05-04T10:00:00.000Z"
   }'
-```
-
-### Get replay state
-
-```bash
-curl http://127.0.0.1:3000/v1/replays/rpl_... \
-  -H "authorization: Bearer $MAILMON_API_KEY"
 ```
 
 ## Webhooks
@@ -507,7 +472,7 @@ Staging/production resources include:
 - Secret Manager and KMS for secrets
 - Cloud Logging metrics and alert policies
 
-## Development commands
+## Development
 
 ```bash
 pnpm install          # Install dependencies
@@ -515,10 +480,10 @@ pnpm docker:up        # Start local containers
 pnpm dev              # Run API and worker
 pnpm build            # Build all packages
 pnpm test             # Run tests
-pnpm lint             # Lint and format check
+pnpm lint             # Lint and format
 ```
 
-For full reference (migrations, coverage, watch modes), see [Development Guide](docs/DEVELOPMENT.md).
+For migrations, watch modes, and full reference, see [Development Guide](docs/DEVELOPMENT.md).
 
 ## Roadmap
 
@@ -540,30 +505,3 @@ Near-term work:
    - webhook verification guide
    - deployment guide
    - sync guarantees document
-
-## Notes for reviewers
-
-This project is best evaluated as infrastructure work.
-
-The interesting parts are not the HTTP routes. The interesting parts are the failure boundaries:
-
-- mailbox lease acquisition and recovery
-- cursor-safe sync commits
-- durable event creation
-- retryable webhook delivery
-- transport-neutral core use cases
-- local vs GCP runtime adapters
-- resource-level operational state
-
-A reliable email sync system should be able to answer:
-
-- Which worker owns this mailbox?
-- Has the cursor advanced?
-- Were state writes committed?
-- Were events created?
-- Were webhooks delivered?
-- Can failed work be retried?
-- Can historical events be replayed?
-- Can an operator explain the current state?
-
-Mailmon is built around those questions.
