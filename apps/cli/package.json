@@ -1,14 +1,17 @@
 {
   "name": "@mailmon/cli",
-  "private": true,
+  "private": false,
   "bin": {
-    "mailmon": "./dist/index.js"
+    "mailmon": "./dist/index.mjs"
   },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "scripts": {
     "dev": "varlock run -- tsx src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "varlock run -- node dist/index.js",
+    "build": "tsdown",
+    "start": "varlock run -- node dist/index.mjs",
     "lint": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json .",
     "lint:fix": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --fix .",
     "typecheck": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --type-check .",
@@ -20,13 +23,16 @@
   "dependencies": {
     "@effect/cli": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@varlock/google-secret-manager-plugin": "catalog:",
+    "effect": "catalog:",
+    "varlock": "catalog:"
+  },
+  "devDependencies": {
     "@mailmon/config": "workspace:*",
     "@mailmon/core": "workspace:*",
     "@mailmon/db": "workspace:*",
     "@mailmon/gmail": "workspace:*",
     "@mailmon/queue": "workspace:*",
-    "@varlock/google-secret-manager-plugin": "catalog:",
-    "effect": "catalog:",
-    "varlock": "catalog:"
+    "tsdown": "^0.21.10"
   }
 }
