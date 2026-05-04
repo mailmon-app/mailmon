@@ -1,6 +1,6 @@
 {
   "name": "@mailmon.dev/cli",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": false,
   "description": "Mailmon CLI for local development and testing.",
   "bin": {
