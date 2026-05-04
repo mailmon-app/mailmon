@@ -17,7 +17,7 @@ import {
   type MailboxSyncRunInspectionResource,
 } from "@mailmon/core";
 import { Hono } from "hono";
-import { describeRoute, openAPIRouteHandler } from "hono-openapi";
+import { describeRoute, openAPIRouteHandler, type GenerateSpecOptions } from "hono-openapi";
 import { HTTPException } from "hono/http-exception";
 
 import {
@@ -98,6 +98,39 @@ const redirectToConnectResult = (
 ) => {
   return Response.redirect(buildConnectRedirectUrl(redirectUrl, params), 302);
 };
+
+export const mailmonOpenApiOptions = {
+  documentation: {
+    openapi: "3.1.0",
+    info: {
+      title: "Mailmon API",
+      version: "1.0.0",
+    },
+    servers: [
+      {
+        url: "https://api.mailmon.dev",
+        description: "Production",
+      },
+      {
+        url: "http://localhost:3000",
+        description: "Local development",
+      },
+    ],
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+        },
+      },
+    },
+  },
+} satisfies Partial<GenerateSpecOptions>;
 
 const toCursorLimitParams = (query: CursorLimitQueryParams) => {
   return {
@@ -616,18 +649,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
     return Response.redirect(result.value, 302);
   });
 
-  app.get(
-    "/openapi.json",
-    openAPIRouteHandler(app, {
-      documentation: {
-        openapi: "3.1.0",
-        info: {
-          title: "Mailmon API",
-          version: "1.0.0",
-        },
-      },
-    }),
-  );
+  app.get("/openapi.json", openAPIRouteHandler(app, mailmonOpenApiOptions));
 
   return app;
 };

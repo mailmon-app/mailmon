@@ -1,16 +1,18 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "OpenAPI Plant Store",
-    "description": "A sample API that uses a plant store as an example to demonstrate features in the OpenAPI specification",
-    "license": {
-      "name": "MIT"
-    },
+    "title": "Mailmon API",
+    "description": "Development documentation",
     "version": "1.0.0"
   },
   "servers": [
     {
-      "url": "http://sandbox.mintlify.com"
+      "url": "https://api.mailmon.dev",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
     }
   ],
   "security": [
@@ -18,192 +20,317 @@
       "bearerAuth": []
     }
   ],
-  "paths": {
-    "/plants": {
-      "get": {
-        "description": "Returns all plants from the system that the user has access to",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "description": "The maximum number of results to return",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plant response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Plant"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "description": "Creates a new plant in the store",
-        "requestBody": {
-          "description": "Plant to add to the store",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NewPlant"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "plant response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Plant"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/plants/{id}": {
-      "delete": {
-        "description": "Deletes a single plant based on the ID supplied",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "ID of plant to delete",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Plant deleted",
-            "content": {}
-          },
-          "400": {
-            "description": "unexpected error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  },
-  "webhooks": {
-    "/plant/webhook": {
-      "post": {
-        "description": "Information about a new plant added to the store",
-        "requestBody": {
-          "description": "Plant added to the store",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NewPlant"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Return a 200 status to indicate that the data was received successfully"
-          }
-        }
-      }
-    }
-  },
   "components": {
-    "schemas": {
-      "Plant": {
-        "required": ["name"],
-        "type": "object",
-        "properties": {
-          "name": {
-            "description": "The name of the plant",
-            "type": "string"
-          },
-          "tag": {
-            "description": "Tag to specify the type",
-            "type": "string"
-          }
-        }
-      },
-      "NewPlant": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/Plant"
-          },
-          {
-            "required": ["id"],
-            "type": "object",
-            "properties": {
-              "id": {
-                "description": "Identification number of the plant",
-                "type": "integer",
-                "format": "int64"
-              }
-            }
-          }
-        ]
-      },
-      "Error": {
-        "required": ["error", "message"],
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      }
-    },
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "NonEmptyString": {
+        "type": "string",
+        "description": "a non empty string",
+        "title": "nonEmptyString",
+        "minLength": 1
+      }
+    }
+  },
+  "paths": {
+    "/v1/mailboxes/connect-sessions": {
+      "post": {
+        "operationId": "postV1MailboxesConnectSessions",
+        "summary": "Create a mailbox connect session",
+        "responses": {
+          "201": {
+            "description": "Connect session created"
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["provider", "tenantExternalId", "mailboxExternalId", "redirectUrl"],
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": ["gmail"]
+                  },
+                  "tenantExternalId": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  },
+                  "mailboxExternalId": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  },
+                  "redirectUrl": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhook-endpoints": {
+      "post": {
+        "operationId": "postV1WebhookEndpoints",
+        "summary": "Create a webhook endpoint",
+        "responses": {
+          "201": {
+            "description": "Webhook endpoint created"
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/NonEmptyString"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhook-endpoints/{endpointId}/subscriptions": {
+      "post": {
+        "operationId": "postV1WebhookEndpointsByEndpointIdSubscriptions",
+        "summary": "Create mailbox-scoped webhook subscriptions",
+        "responses": {
+          "201": {
+            "description": "Webhook subscriptions created"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Mailbox or webhook endpoint not found"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["mailboxIds", "eventTypes"],
+                "properties": {
+                  "mailboxIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "$ref": "#/components/schemas/NonEmptyString"
+                    }
+                  },
+                  "eventTypes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "enum": ["message.created", "message.updated", "thread.updated"]
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "endpointId",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/v1/mailboxes/{mailboxId}/sync-runs": {
+      "get": {
+        "operationId": "getV1MailboxesByMailboxIdSyncRuns",
+        "summary": "List mailbox sync runs",
+        "responses": {
+          "200": {
+            "description": "Mailbox sync runs"
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "string"
+            },
+            "description": "a string to be decoded into a number"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "mailboxId",
+            "required": true
+          }
+        ]
+      }
+    },
+    "/v1/replays": {
+      "post": {
+        "operationId": "postV1Replays",
+        "summary": "Create a mailbox event replay",
+        "responses": {
+          "201": {
+            "description": "Replay created"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "409": {
+            "description": "Overlapping active replay conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["mailboxId", "webhookEndpointId", "startTime", "endTime"],
+                "properties": {
+                  "mailboxId": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  },
+                  "webhookEndpointId": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  },
+                  "startTime": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  },
+                  "endTime": {
+                    "$ref": "#/components/schemas/NonEmptyString"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages": {
+      "get": {
+        "operationId": "getV1Messages",
+        "summary": "List mailbox messages",
+        "responses": {
+          "200": {
+            "description": "Mailbox messages"
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "string"
+            },
+            "description": "a string to be decoded into a number"
+          },
+          {
+            "in": "query",
+            "name": "mailboxId",
+            "schema": {
+              "$ref": "#/components/schemas/NonEmptyString"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/threads": {
+      "get": {
+        "operationId": "getV1Threads",
+        "summary": "List mailbox threads",
+        "responses": {
+          "200": {
+            "description": "Mailbox threads"
+          },
+          "400": {
+            "description": "Invalid request"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "string"
+            },
+            "description": "a string to be decoded into a number"
+          },
+          {
+            "in": "query",
+            "name": "mailboxId",
+            "schema": {
+              "$ref": "#/components/schemas/NonEmptyString"
+            }
+          }
+        ]
       }
     }
   }
