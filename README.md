@@ -61,30 +61,15 @@ Mailmon is an active infrastructure project.
 - Broader cloud-transport integration tests
 - Stronger API key metadata such as labels, last-used timestamps, rotation UX, and audit trails
 
-## Design rules
+## Core Design Principles
 
-Mailmon is built around correctness guarantees that are easy to ignore in early prototypes:
+1. **Mailbox is the unit of work.** Each mailbox owns its cursor, operational state, and active sync lease. No account-scoped state.
 
-1. **Mailbox is the unit of work**  
-   Each mailbox owns its cursor, operational state, and active sync lease.
+2. **Push is a wake-up, not truth.** Gmail push notifications trigger work. Gmail history remains the source of truth.
 
-2. **Push is a wake-up, not truth**  
-   Gmail push notifications only trigger work. Gmail history remains the source of truth.
+3. **State first, cursor second.** The cursor advances only after mailbox state and events are durably committed.
 
-3. **State first, cursor second**  
-   The cursor advances only after mailbox state and events are durably committed.
-
-4. **Leases protect correctness**  
-   Queue ordering is not trusted for correctness. A database-backed lease enforces one active sync per mailbox.
-
-5. **Events are durable before delivery**  
-   Webhook delivery starts from persisted events, not inline network calls during sync.
-
-6. **Delivery is at-least-once**  
-   Consumers deduplicate by `event.id`.
-
-7. **Operational failure is resource state**  
-   Revoked tokens, expired watches, failed syncs, and unhealthy webhooks are represented as resource state.
+4. **Correctness over speed.** Durable event logs, transactional state commits, and mailbox leases enforce one sync per mailbox—queue ordering is not trusted.
 
 ## Architecture
 
