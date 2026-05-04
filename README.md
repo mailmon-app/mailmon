@@ -14,17 +14,6 @@
   <a href="https://github.com/anomalyco/mailmon">GitHub</a>
 </p>
 
-## At a glance
-
-| Area            | Current state                                                                     |
-| --------------- | --------------------------------------------------------------------------------- |
-| Provider        | Gmail                                                                             |
-| Runtime         | Local adapters for development, GCP-native async transport for staging/production |
-| Public API      | Hono HTTP API with workspace-scoped API keys                                      |
-| Persistence     | PostgreSQL through Drizzle                                                        |
-| Async execution | Pub/Sub for sync dispatch, Cloud Tasks for webhook delivery                       |
-| Local tooling   | CLI for operator flows, mailbox sync dispatch, webhook forwarding, and replay     |
-
 ## Problem
 
 Most Gmail integrations fail in production because:
@@ -70,6 +59,17 @@ Mailmon is an active infrastructure project.
 3. **State first, cursor second.** The cursor advances only after mailbox state and events are durably committed.
 
 4. **Correctness over speed.** Durable event logs, transactional state commits, and mailbox leases enforce one sync per mailbox—queue ordering is not trusted.
+
+## At a Glance
+
+| Area            | Current state                                                   |
+| --------------- | --------------------------------------------------------------- |
+| Provider        | Gmail                                                           |
+| Sync model      | Canonical state + durable event log with at-least-once webhooks |
+| API             | HTTP with workspace-scoped API keys                             |
+| Persistence     | PostgreSQL (Drizzle ORM)                                        |
+| Async transport | Pub/Sub (sync dispatch) + Cloud Tasks (webhook delivery)        |
+| Local dev       | Full feature parity via local adapters, no emulators required   |
 
 ## Architecture
 
