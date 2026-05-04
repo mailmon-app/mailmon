@@ -27,21 +27,19 @@
 
 ## Problem
 
-Most Gmail integrations start as a simple webhook + worker pipeline and fail once real production conditions appear:
+Most Gmail integrations fail in production because:
 
-- duplicate Gmail push notifications
-- missed changes from bad cursor handling
-- worker crashes between fetch and commit
-- invalid or expired Gmail history cursors
-- revoked OAuth tokens
-- webhook endpoints going down
-- no replay path for historical changes
-- poor visibility into mailbox sync health
+- Duplicate push notifications cause replayed state
+- Missed changes from bad cursor handling
+- Worker crashes between fetch and commit
+- Invalid or expired Gmail history cursors
+- Revoked OAuth tokens
+- Webhook endpoints going down
+- No replay path for historical changes
 
 Mailmon treats email sync as a distributed systems problem, not a fetch loop.
 
-The key question is not “can we read email?”  
-The key question is:
+The key question is not "can we read email?" — it's:
 
 > Can we maintain correct mailbox state over time under retries, failures, and scale?
 
