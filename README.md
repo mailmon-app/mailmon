@@ -135,6 +135,55 @@ Default local URLs:
 > [!TIP]
 > Local mode does not require local Pub/Sub, Cloud Tasks, or Gmail watch infrastructure. It uses local adapters so the core sync and webhook flows can be developed without cloud emulators.
 
+## Operator CLI
+
+Create a workspace:
+
+```bash
+pnpm --filter @mailmon/cli dev -- admin workspace create
+```
+
+Create an API key:
+
+```bash
+pnpm --filter @mailmon/cli dev -- admin keys create --workspace-id <workspace-id>
+```
+
+Run a mailbox sync:
+
+```bash
+pnpm --filter @mailmon/cli dev -- sync-mailbox <mailbox-id>
+```
+
+Run a control job:
+
+```bash
+pnpm --filter @mailmon/cli dev -- control-job recover_stuck_syncs
+```
+
+Audit or rewrap persisted Gmail credential envelopes:
+
+```bash
+pnpm --filter @mailmon/cli dev -- gmail-credentials audit
+pnpm --filter @mailmon/cli dev -- gmail-credentials rewrap
+```
+
+Forward webhook deliveries to a local app:
+
+```bash
+pnpm --filter @mailmon/cli dev -- listen \
+  --forward-to http://localhost:4000/webhooks/mailmon
+```
+
+Replay stored events into a local endpoint:
+
+```bash
+pnpm --filter @mailmon/cli dev -- replay \
+  --mailbox <mailbox-id> \
+  --last 1h \
+  --forward-to http://localhost:4000/webhooks/mailmon
+```
+
 ## Architecture
 
 ```mermaid
@@ -204,55 +253,6 @@ flowchart TD
 - oxlint / oxfmt
 - Terraform
 - Mintlify docs app
-
-## Operator CLI
-
-Create a workspace:
-
-```bash
-pnpm --filter @mailmon/cli dev -- admin workspace create
-```
-
-Create an API key:
-
-```bash
-pnpm --filter @mailmon/cli dev -- admin keys create --workspace-id <workspace-id>
-```
-
-Run a mailbox sync:
-
-```bash
-pnpm --filter @mailmon/cli dev -- sync-mailbox <mailbox-id>
-```
-
-Run a control job:
-
-```bash
-pnpm --filter @mailmon/cli dev -- control-job recover_stuck_syncs
-```
-
-Audit or rewrap persisted Gmail credential envelopes:
-
-```bash
-pnpm --filter @mailmon/cli dev -- gmail-credentials audit
-pnpm --filter @mailmon/cli dev -- gmail-credentials rewrap
-```
-
-Forward webhook deliveries to a local app:
-
-```bash
-pnpm --filter @mailmon/cli dev -- listen \
-  --forward-to http://localhost:4000/webhooks/mailmon
-```
-
-Replay stored events into a local endpoint:
-
-```bash
-pnpm --filter @mailmon/cli dev -- replay \
-  --mailbox <mailbox-id> \
-  --last 1h \
-  --forward-to http://localhost:4000/webhooks/mailmon
-```
 
 ## API examples
 
