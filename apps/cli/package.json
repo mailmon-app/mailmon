@@ -1,8 +1,10 @@
 {
-  "name": "@mailmon/cli",
+  "name": "@mailmon.dev/cli",
+  "version": "0.0.0",
   "private": false,
+  "description": "Mailmon CLI for local development and testing.",
   "bin": {
-    "mailmon": "./dist/index.mjs"
+    "mailmon": "dist/index.mjs"
   },
   "files": [
     "dist"
