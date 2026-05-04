@@ -1,5 +1,5 @@
 {
-  "name": "mailmon-dev",
+  "name": "mailmon.dev",
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
@@ -9,6 +9,8 @@
     "sdk:check": "pnpm openapi:generate && fern check",
     "sdk:generate": "pnpm openapi:generate && fern generate --group ts-sdk --local --force",
     "sdk:generate:remote": "pnpm openapi:generate && fern generate --group ts-sdk",
+    "build-packages": "pnpm openapi:generate && pnpm sdk:generate && pnpm --filter @mailmon.dev/cli build",
+    "release": "pnpm build-packages && changeset publish",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
     "typecheck": "turbo run typecheck",
@@ -27,6 +29,7 @@
     "prepare": "effect-language-service patch && husky"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@effect/language-service": "catalog:",
     "@effect/vitest": "^0.29.0",
     "@types/node": "catalog:",

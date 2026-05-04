@@ -10,6 +10,9 @@
     "dist"
   ],
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "varlock run -- tsx src/index.ts",
     "build": "tsdown",
