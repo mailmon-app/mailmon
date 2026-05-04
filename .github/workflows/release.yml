@@ -57,6 +57,6 @@ jobs:
           # `pnpm release` will run the build steps and then `changeset publish`.
           publish: pnpm release
         env:
+          HUSKY: 0
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: "unused" # Required by Changesets action to trigger publish, but NPM uses OIDC
           NPM_CONFIG_PROVENANCE: true
