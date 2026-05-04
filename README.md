@@ -71,6 +71,70 @@ Mailmon is an active infrastructure project.
 | Async transport | Pub/Sub (sync dispatch) + Cloud Tasks (webhook delivery)        |
 | Local dev       | Full feature parity via local adapters, no emulators required   |
 
+## Quickstart
+
+### Prerequisites
+
+- Node.js 22+
+- pnpm 10.32.1
+- Docker
+- Docker Compose
+- Gmail OAuth credentials, if testing real Gmail connectivity
+
+### 1. Install dependencies
+
+```bash
+pnpm install
+```
+
+### 2. Configure local environment
+
+Create a `.env` file:
+
+```bash
+NODE_ENV=development
+DATABASE_URL=postgres://mailmon:mailmon@127.0.0.1:5432/mailmon
+MAILMON_ASYNC_TRANSPORT_MODE=local
+MAILMON_WORKER_BASE_URL=http://127.0.0.1:3001
+
+# Generate your own 32-byte base64 key.
+MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY=replace_me
+MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY_ID=primary
+
+# Required for real Gmail OAuth.
+MAILMON_GMAIL_OAUTH_CLIENT_ID=replace_me
+MAILMON_GMAIL_OAUTH_CLIENT_SECRET=replace_me
+```
+
+Generate a local encryption key:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+> [!IMPORTANT]
+> The encryption key must be exactly 32 bytes base64-encoded. Generate with:
+>
+> ```bash
+> node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+> ```
+
+### 3. Start local services
+
+```bash
+pnpm docker:up
+pnpm db:migrate
+pnpm dev
+```
+
+Default local URLs:
+
+- API: `http://127.0.0.1:3000`
+- Worker: `http://127.0.0.1:3001`
+
+> [!TIP]
+> Local mode does not require local Pub/Sub, Cloud Tasks, or Gmail watch infrastructure. It uses local adapters so the core sync and webhook flows can be developed without cloud emulators.
+
 ## Architecture
 
 ```mermaid
@@ -140,63 +204,6 @@ flowchart TD
 - oxlint / oxfmt
 - Terraform
 - Mintlify docs app
-
-## Quickstart
-
-### Prerequisites
-
-- Node.js 22+
-- pnpm 10.32.1
-- Docker
-- Docker Compose
-- Gmail OAuth credentials, if testing real Gmail connectivity
-
-### 1. Install dependencies
-
-```bash
-pnpm install
-```
-
-### 2. Configure local environment
-
-Create a `.env` file:
-
-```bash
-NODE_ENV=development
-DATABASE_URL=postgres://mailmon:mailmon@127.0.0.1:5432/mailmon
-MAILMON_ASYNC_TRANSPORT_MODE=local
-MAILMON_WORKER_BASE_URL=http://127.0.0.1:3001
-
-# Generate your own 32-byte base64 key.
-MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY=replace_me
-MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY_ID=primary
-
-# Required for real Gmail OAuth.
-MAILMON_GMAIL_OAUTH_CLIENT_ID=replace_me
-MAILMON_GMAIL_OAUTH_CLIENT_SECRET=replace_me
-```
-
-Generate a local encryption key:
-
-```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
-```
-
-### 3. Start local services
-
-```bash
-pnpm docker:up
-pnpm db:migrate
-pnpm dev
-```
-
-Default local URLs:
-
-- API: `http://127.0.0.1:3000`
-- Worker: `http://127.0.0.1:3001`
-
-> [!TIP]
-> Local mode does not require local Pub/Sub, Cloud Tasks, or Gmail watch infrastructure. It uses local adapters so the core sync and webhook flows can be developed without cloud emulators.
 
 ## Operator CLI
 
