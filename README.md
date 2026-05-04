@@ -1,18 +1,17 @@
-<h1>
-<p align="center">
+<h1 align="center">
   Mailmon
 </h1>
-  <p align="center">
-    Gmail-first sync infrastructure for correct mailbox state, durable events, and replayable webhooks.
-    <br />
-    A reliable event system on top of Gmail.
-    <br />
-    <a href="#about">About</a>
-    ·
-    <a href="#quickstart">Quickstart</a>
-    ·
-    <a href="https://github.com/anomalyco/mailmon">GitHub</a>
-  </p>
+
+<p align="center">
+  Gmail-first sync infrastructure for correct mailbox state, durable events, and replayable webhooks.
+  <br />
+  A reliable event system on top of Gmail.
+  <br />
+  <a href="#about">About</a>
+  ·
+  <a href="#quickstart">Quickstart</a>
+  ·
+  <a href="https://github.com/anomalyco/mailmon">GitHub</a>
 </p>
 
 ## At a glance
