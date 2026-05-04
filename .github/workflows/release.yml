@@ -33,11 +33,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           cache: pnpm
-          node-version: 22
+          node-version: 24
           registry-url: "https://registry.npmjs.org"
 
-      - name: Update NPM
-        run: npm install -g npm@latest
+      - name: Check versions
+        run: |
+          node --version
+          npm --version
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
