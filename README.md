@@ -11,7 +11,7 @@
   ·
   <a href="#quickstart">Quickstart</a>
   ·
-  <a href="https://github.com/anomalyco/mailmon">GitHub</a>
+  <a href="https://github.com/mailmon-app/mailmon">GitHub</a>
 </p>
 
 ## Problem
