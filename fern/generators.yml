@@ -1,0 +1,24 @@
+api:
+  specs:
+    - openapi: ../apps/docs/api-reference/openapi.json
+      settings:
+        title-as-schema-name: true
+
+groups:
+  ts-sdk:
+    generators:
+      - name: fernapi/fern-typescript-sdk
+        version: 3.69.0
+        output:
+          location: local-file-system
+          path: ../sdks/typescript
+        config:
+          outputSourceFiles: false
+          namespaceExport: Mailmon
+          noSerdeLayer: true
+          fetchSupport: native
+          generateSubpackageExports: true
+          packageJson:
+            name: "@mailmon/sdk"
+            version: "0.0.0"
+            description: "TypeScript SDK for the Mailmon API."

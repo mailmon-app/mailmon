@@ -1,0 +1,11 @@
+{
+  "name": "@mailmon.dev/sdk",
+  "version": "0.0.0",
+  "description": "TypeScript SDK for the Mailmon API.",
+  "main": "cjs/index.js",
+  "module": "esm/index.js",
+  "types": "cjs/index.d.ts",
+  "scripts": {
+    "build": "echo 'already compiled by fern'"
+  }
+}

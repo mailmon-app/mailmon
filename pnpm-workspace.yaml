@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - sdks/*
 
 catalog:
   "@effect/cli": ^0.75.1
@@ -20,6 +21,7 @@ engineStrict: true
 
 onlyBuiltDependencies:
   - "@parcel/watcher"
+  - "@scarf/scarf"
   - esbuild
   - msgpackr-extract
   - protobufjs
