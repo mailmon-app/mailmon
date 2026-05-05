@@ -103,7 +103,10 @@ class MailmonClient {
                 logging: this._options.logging,
             });
             if (_response.ok) {
-                return { data: undefined, rawResponse: _response.rawResponse };
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
             }
             if (_response.error.reason === "status-code") {
                 switch (_response.error.statusCode) {
@@ -154,7 +157,10 @@ class MailmonClient {
                 logging: this._options.logging,
             });
             if (_response.ok) {
-                return { data: undefined, rawResponse: _response.rawResponse };
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
             }
             if (_response.error.reason === "status-code") {
                 switch (_response.error.statusCode) {
@@ -209,7 +215,10 @@ class MailmonClient {
                 logging: this._options.logging,
             });
             if (_response.ok) {
-                return { data: undefined, rawResponse: _response.rawResponse };
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
             }
             if (_response.error.reason === "status-code") {
                 switch (_response.error.statusCode) {
@@ -226,6 +235,61 @@ class MailmonClient {
                 }
             }
             return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "POST", "/v1/webhook-endpoints/{endpointId}/subscriptions");
+        });
+    }
+    /**
+     * @param {Mailmon.GetV1MailboxesByMailboxIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1MailboxesByMailboxId({
+     *         mailboxId: "mailboxId"
+     *     })
+     */
+    getV1MailboxesByMailboxId(request, requestOptions) {
+        return core.HttpResponsePromise.fromPromise(this.__getV1MailboxesByMailboxId(request, requestOptions));
+    }
+    __getV1MailboxesByMailboxId(request, requestOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            const { mailboxId } = request;
+            const _authRequest = yield this._options.authProvider.getAuthRequest();
+            const _headers = (0, headers_js_1.mergeHeaders)(_authRequest.headers, (_a = this._options) === null || _a === void 0 ? void 0 : _a.headers, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers);
+            const _response = yield core.fetcher({
+                url: core.url.join((_c = (_b = (yield core.Supplier.get(this._options.baseUrl))) !== null && _b !== void 0 ? _b : (yield core.Supplier.get(this._options.environment))) !== null && _c !== void 0 ? _c : environments.MailmonEnvironment.Production, `v1/mailboxes/${core.url.encodePathParam(mailboxId)}`),
+                method: "GET",
+                headers: _headers,
+                queryString: core.url.queryBuilder().mergeAdditional(requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.queryParams).build(),
+                timeoutMs: ((_f = (_d = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) !== null && _d !== void 0 ? _d : (_e = this._options) === null || _e === void 0 ? void 0 : _e.timeoutInSeconds) !== null && _f !== void 0 ? _f : 60) * 1000,
+                maxRetries: (_g = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries) !== null && _g !== void 0 ? _g : (_h = this._options) === null || _h === void 0 ? void 0 : _h.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+                fetchFn: (_j = this._options) === null || _j === void 0 ? void 0 : _j.fetch,
+                logging: this._options.logging,
+            });
+            if (_response.ok) {
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                switch (_response.error.statusCode) {
+                    case 400:
+                        throw new Mailmon.BadRequestError(_response.error.body, _response.rawResponse);
+                    case 404:
+                        throw new Mailmon.NotFoundError(_response.error.body, _response.rawResponse);
+                    default:
+                        throw new errors.MailmonError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.body,
+                            rawResponse: _response.rawResponse,
+                        });
+                }
+            }
+            return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "GET", "/v1/mailboxes/{mailboxId}");
         });
     }
     /**
@@ -268,7 +332,10 @@ class MailmonClient {
                 logging: this._options.logging,
             });
             if (_response.ok) {
-                return { data: undefined, rawResponse: _response.rawResponse };
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
             }
             if (_response.error.reason === "status-code") {
                 switch (_response.error.statusCode) {
@@ -283,6 +350,61 @@ class MailmonClient {
                 }
             }
             return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "GET", "/v1/mailboxes/{mailboxId}/sync-runs");
+        });
+    }
+    /**
+     * @param {Mailmon.GetV1MailboxesByMailboxIdObservabilityRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1MailboxesByMailboxIdObservability({
+     *         mailboxId: "mailboxId"
+     *     })
+     */
+    getV1MailboxesByMailboxIdObservability(request, requestOptions) {
+        return core.HttpResponsePromise.fromPromise(this.__getV1MailboxesByMailboxIdObservability(request, requestOptions));
+    }
+    __getV1MailboxesByMailboxIdObservability(request, requestOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            const { mailboxId } = request;
+            const _authRequest = yield this._options.authProvider.getAuthRequest();
+            const _headers = (0, headers_js_1.mergeHeaders)(_authRequest.headers, (_a = this._options) === null || _a === void 0 ? void 0 : _a.headers, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers);
+            const _response = yield core.fetcher({
+                url: core.url.join((_c = (_b = (yield core.Supplier.get(this._options.baseUrl))) !== null && _b !== void 0 ? _b : (yield core.Supplier.get(this._options.environment))) !== null && _c !== void 0 ? _c : environments.MailmonEnvironment.Production, `v1/mailboxes/${core.url.encodePathParam(mailboxId)}/observability`),
+                method: "GET",
+                headers: _headers,
+                queryString: core.url.queryBuilder().mergeAdditional(requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.queryParams).build(),
+                timeoutMs: ((_f = (_d = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) !== null && _d !== void 0 ? _d : (_e = this._options) === null || _e === void 0 ? void 0 : _e.timeoutInSeconds) !== null && _f !== void 0 ? _f : 60) * 1000,
+                maxRetries: (_g = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries) !== null && _g !== void 0 ? _g : (_h = this._options) === null || _h === void 0 ? void 0 : _h.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+                fetchFn: (_j = this._options) === null || _j === void 0 ? void 0 : _j.fetch,
+                logging: this._options.logging,
+            });
+            if (_response.ok) {
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                switch (_response.error.statusCode) {
+                    case 400:
+                        throw new Mailmon.BadRequestError(_response.error.body, _response.rawResponse);
+                    case 404:
+                        throw new Mailmon.NotFoundError(_response.error.body, _response.rawResponse);
+                    default:
+                        throw new errors.MailmonError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.body,
+                            rawResponse: _response.rawResponse,
+                        });
+                }
+            }
+            return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "GET", "/v1/mailboxes/{mailboxId}/observability");
         });
     }
     /**
@@ -323,7 +445,7 @@ class MailmonClient {
                 logging: this._options.logging,
             });
             if (_response.ok) {
-                return { data: undefined, rawResponse: _response.rawResponse };
+                return { data: _response.body, rawResponse: _response.rawResponse };
             }
             if (_response.error.reason === "status-code") {
                 switch (_response.error.statusCode) {
@@ -343,19 +465,76 @@ class MailmonClient {
         });
     }
     /**
+     * @param {Mailmon.GetV1ReplaysByReplayIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1ReplaysByReplayId({
+     *         replayId: "replayId"
+     *     })
+     */
+    getV1ReplaysByReplayId(request, requestOptions) {
+        return core.HttpResponsePromise.fromPromise(this.__getV1ReplaysByReplayId(request, requestOptions));
+    }
+    __getV1ReplaysByReplayId(request, requestOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            const { replayId } = request;
+            const _authRequest = yield this._options.authProvider.getAuthRequest();
+            const _headers = (0, headers_js_1.mergeHeaders)(_authRequest.headers, (_a = this._options) === null || _a === void 0 ? void 0 : _a.headers, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers);
+            const _response = yield core.fetcher({
+                url: core.url.join((_c = (_b = (yield core.Supplier.get(this._options.baseUrl))) !== null && _b !== void 0 ? _b : (yield core.Supplier.get(this._options.environment))) !== null && _c !== void 0 ? _c : environments.MailmonEnvironment.Production, `v1/replays/${core.url.encodePathParam(replayId)}`),
+                method: "GET",
+                headers: _headers,
+                queryString: core.url.queryBuilder().mergeAdditional(requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.queryParams).build(),
+                timeoutMs: ((_f = (_d = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) !== null && _d !== void 0 ? _d : (_e = this._options) === null || _e === void 0 ? void 0 : _e.timeoutInSeconds) !== null && _f !== void 0 ? _f : 60) * 1000,
+                maxRetries: (_g = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries) !== null && _g !== void 0 ? _g : (_h = this._options) === null || _h === void 0 ? void 0 : _h.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+                fetchFn: (_j = this._options) === null || _j === void 0 ? void 0 : _j.fetch,
+                logging: this._options.logging,
+            });
+            if (_response.ok) {
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                switch (_response.error.statusCode) {
+                    case 400:
+                        throw new Mailmon.BadRequestError(_response.error.body, _response.rawResponse);
+                    case 404:
+                        throw new Mailmon.NotFoundError(_response.error.body, _response.rawResponse);
+                    default:
+                        throw new errors.MailmonError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.body,
+                            rawResponse: _response.rawResponse,
+                        });
+                }
+            }
+            return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "GET", "/v1/replays/{replayId}");
+        });
+    }
+    /**
      * @param {Mailmon.GetV1MessagesRequest} request
      * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link Mailmon.BadRequestError}
      *
      * @example
-     *     await client.getV1Messages()
+     *     await client.getV1Messages({
+     *         mailboxId: "mailboxId"
+     *     })
      */
-    getV1Messages(request = {}, requestOptions) {
+    getV1Messages(request, requestOptions) {
         return core.HttpResponsePromise.fromPromise(this.__getV1Messages(request, requestOptions));
     }
-    __getV1Messages() {
-        return __awaiter(this, arguments, void 0, function* (request = {}, requestOptions) {
+    __getV1Messages(request, requestOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c, _d, _e, _f, _g, _h, _j;
             const { cursor, limit, mailboxId } = request;
             const _queryParams = {
@@ -381,7 +560,7 @@ class MailmonClient {
                 logging: this._options.logging,
             });
             if (_response.ok) {
-                return { data: undefined, rawResponse: _response.rawResponse };
+                return { data: _response.body, rawResponse: _response.rawResponse };
             }
             if (_response.error.reason === "status-code") {
                 switch (_response.error.statusCode) {
@@ -399,19 +578,76 @@ class MailmonClient {
         });
     }
     /**
+     * @param {Mailmon.GetV1MessagesByMessageIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1MessagesByMessageId({
+     *         messageId: "messageId"
+     *     })
+     */
+    getV1MessagesByMessageId(request, requestOptions) {
+        return core.HttpResponsePromise.fromPromise(this.__getV1MessagesByMessageId(request, requestOptions));
+    }
+    __getV1MessagesByMessageId(request, requestOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            const { messageId } = request;
+            const _authRequest = yield this._options.authProvider.getAuthRequest();
+            const _headers = (0, headers_js_1.mergeHeaders)(_authRequest.headers, (_a = this._options) === null || _a === void 0 ? void 0 : _a.headers, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers);
+            const _response = yield core.fetcher({
+                url: core.url.join((_c = (_b = (yield core.Supplier.get(this._options.baseUrl))) !== null && _b !== void 0 ? _b : (yield core.Supplier.get(this._options.environment))) !== null && _c !== void 0 ? _c : environments.MailmonEnvironment.Production, `v1/messages/${core.url.encodePathParam(messageId)}`),
+                method: "GET",
+                headers: _headers,
+                queryString: core.url.queryBuilder().mergeAdditional(requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.queryParams).build(),
+                timeoutMs: ((_f = (_d = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) !== null && _d !== void 0 ? _d : (_e = this._options) === null || _e === void 0 ? void 0 : _e.timeoutInSeconds) !== null && _f !== void 0 ? _f : 60) * 1000,
+                maxRetries: (_g = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries) !== null && _g !== void 0 ? _g : (_h = this._options) === null || _h === void 0 ? void 0 : _h.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+                fetchFn: (_j = this._options) === null || _j === void 0 ? void 0 : _j.fetch,
+                logging: this._options.logging,
+            });
+            if (_response.ok) {
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                switch (_response.error.statusCode) {
+                    case 400:
+                        throw new Mailmon.BadRequestError(_response.error.body, _response.rawResponse);
+                    case 404:
+                        throw new Mailmon.NotFoundError(_response.error.body, _response.rawResponse);
+                    default:
+                        throw new errors.MailmonError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.body,
+                            rawResponse: _response.rawResponse,
+                        });
+                }
+            }
+            return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "GET", "/v1/messages/{messageId}");
+        });
+    }
+    /**
      * @param {Mailmon.GetV1ThreadsRequest} request
      * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link Mailmon.BadRequestError}
      *
      * @example
-     *     await client.getV1Threads()
+     *     await client.getV1Threads({
+     *         mailboxId: "mailboxId"
+     *     })
      */
-    getV1Threads(request = {}, requestOptions) {
+    getV1Threads(request, requestOptions) {
         return core.HttpResponsePromise.fromPromise(this.__getV1Threads(request, requestOptions));
     }
-    __getV1Threads() {
-        return __awaiter(this, arguments, void 0, function* (request = {}, requestOptions) {
+    __getV1Threads(request, requestOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c, _d, _e, _f, _g, _h, _j;
             const { cursor, limit, mailboxId } = request;
             const _queryParams = {
@@ -437,7 +673,7 @@ class MailmonClient {
                 logging: this._options.logging,
             });
             if (_response.ok) {
-                return { data: undefined, rawResponse: _response.rawResponse };
+                return { data: _response.body, rawResponse: _response.rawResponse };
             }
             if (_response.error.reason === "status-code") {
                 switch (_response.error.statusCode) {
@@ -452,6 +688,61 @@ class MailmonClient {
                 }
             }
             return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "GET", "/v1/threads");
+        });
+    }
+    /**
+     * @param {Mailmon.GetV1ThreadsByThreadIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1ThreadsByThreadId({
+     *         threadId: "threadId"
+     *     })
+     */
+    getV1ThreadsByThreadId(request, requestOptions) {
+        return core.HttpResponsePromise.fromPromise(this.__getV1ThreadsByThreadId(request, requestOptions));
+    }
+    __getV1ThreadsByThreadId(request, requestOptions) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            const { threadId } = request;
+            const _authRequest = yield this._options.authProvider.getAuthRequest();
+            const _headers = (0, headers_js_1.mergeHeaders)(_authRequest.headers, (_a = this._options) === null || _a === void 0 ? void 0 : _a.headers, requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.headers);
+            const _response = yield core.fetcher({
+                url: core.url.join((_c = (_b = (yield core.Supplier.get(this._options.baseUrl))) !== null && _b !== void 0 ? _b : (yield core.Supplier.get(this._options.environment))) !== null && _c !== void 0 ? _c : environments.MailmonEnvironment.Production, `v1/threads/${core.url.encodePathParam(threadId)}`),
+                method: "GET",
+                headers: _headers,
+                queryString: core.url.queryBuilder().mergeAdditional(requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.queryParams).build(),
+                timeoutMs: ((_f = (_d = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.timeoutInSeconds) !== null && _d !== void 0 ? _d : (_e = this._options) === null || _e === void 0 ? void 0 : _e.timeoutInSeconds) !== null && _f !== void 0 ? _f : 60) * 1000,
+                maxRetries: (_g = requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.maxRetries) !== null && _g !== void 0 ? _g : (_h = this._options) === null || _h === void 0 ? void 0 : _h.maxRetries,
+                abortSignal: requestOptions === null || requestOptions === void 0 ? void 0 : requestOptions.abortSignal,
+                fetchFn: (_j = this._options) === null || _j === void 0 ? void 0 : _j.fetch,
+                logging: this._options.logging,
+            });
+            if (_response.ok) {
+                return {
+                    data: _response.body,
+                    rawResponse: _response.rawResponse,
+                };
+            }
+            if (_response.error.reason === "status-code") {
+                switch (_response.error.statusCode) {
+                    case 400:
+                        throw new Mailmon.BadRequestError(_response.error.body, _response.rawResponse);
+                    case 404:
+                        throw new Mailmon.NotFoundError(_response.error.body, _response.rawResponse);
+                    default:
+                        throw new errors.MailmonError({
+                            statusCode: _response.error.statusCode,
+                            body: _response.error.body,
+                            rawResponse: _response.rawResponse,
+                        });
+                }
+            }
+            return (0, handleNonStatusCodeError_js_1.handleNonStatusCodeError)(_response.error, _response.rawResponse, "GET", "/v1/threads/{threadId}");
         });
     }
     /**
