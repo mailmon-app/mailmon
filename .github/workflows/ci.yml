@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:
@@ -187,7 +187,7 @@ jobs:
             done
           }
 
-          tofu_with_retry apply -auto-approve -input=false \
+          tofu_with_retry apply -auto-approve -input=false -lock-timeout=10m \
             -target=google_project_iam_member.deployer_pubsub_admin \
             -target=google_project_iam_member.deployer_cloud_tasks_queue_admin \
             -var="project_id=${{ env.GCP_PROJECT_ID }}" \
@@ -226,7 +226,7 @@ jobs:
             done
           }
 
-          tofu_with_retry apply -auto-approve -input=false \
+          tofu_with_retry apply -auto-approve -input=false -lock-timeout=10m \
             -var="project_id=${{ env.GCP_PROJECT_ID }}" \
             -var="github_repository=${{ github.repository }}" \
             -var="deployment_service_account_email=${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}" \

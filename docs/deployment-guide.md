@@ -102,6 +102,23 @@ Relevant outputs include:
 - mailbox sync dispatch Pub/Sub topic and subscription names
 - Secret IDs for runtime configuration
 
+## Stale Terraform state locks
+
+If a GitHub Actions deployment is cancelled while OpenTofu is applying changes,
+the GCS backend can retain `terraform/state/default.tflock`. Confirm there is
+no active deployment run before unlocking state.
+
+From a machine authenticated to the deployment project:
+
+```bash
+cd infra
+tofu init
+tofu force-unlock -force LOCK_ID
+```
+
+Use the lock ID from the failed OpenTofu log. Do not use `-lock=false` for
+normal applies.
+
 ## Operational alerting
 
 The worker emits structured JSON logs for mailbox sync lease-health events:
