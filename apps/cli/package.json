@@ -3,6 +3,12 @@
   "version": "0.0.1",
   "private": false,
   "description": "Mailmon CLI for local development and testing.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mailmon-app/mailmon",
+    "directory": "apps/cli"
+  },
   "bin": {
     "mailmon": "dist/index.mjs"
   },
@@ -11,11 +17,14 @@
   ],
   "type": "module",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "directory": "dist",
+    "linkDirectory": false
   },
   "scripts": {
     "dev": "varlock run -- tsx src/index.ts",
     "build": "tsdown",
+    "postbuild": "node scripts/write-publish-manifest.mjs",
     "start": "varlock run -- node dist/index.mjs",
     "lint": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json .",
     "lint:fix": "oxlint --config ../../.oxlintrc.json --tsconfig ./tsconfig.json --fix .",
