@@ -1,11 +1,12 @@
 import type * as Mailmon from "../../index.mjs";
 /**
  * @example
- *     {}
+ *     {
+ *         mailboxId: "mailboxId"
+ *     }
  */
 export interface GetV1ThreadsRequest {
     cursor?: string;
-    /** a string to be decoded into a number */
-    limit?: string;
-    mailboxId?: Mailmon.NonEmptyString;
+    limit?: number;
+    mailboxId: Mailmon.NonEmptyString;
 }

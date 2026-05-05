@@ -24,7 +24,7 @@ export declare class MailmonClient {
      *         redirectUrl: "redirectUrl"
      *     })
      */
-    postV1MailboxesConnectSessions(request: Mailmon.PostV1MailboxesConnectSessionsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<void>;
+    postV1MailboxesConnectSessions(request: Mailmon.PostV1MailboxesConnectSessionsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.PostV1MailboxesConnectSessionsResponse>;
     private __postV1MailboxesConnectSessions;
     /**
      * @param {Mailmon.PostV1WebhookEndpointsRequest} request
@@ -37,7 +37,7 @@ export declare class MailmonClient {
      *         url: "url"
      *     })
      */
-    postV1WebhookEndpoints(request: Mailmon.PostV1WebhookEndpointsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<void>;
+    postV1WebhookEndpoints(request: Mailmon.PostV1WebhookEndpointsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.PostV1WebhookEndpointsResponse>;
     private __postV1WebhookEndpoints;
     /**
      * @param {Mailmon.PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest} request
@@ -53,8 +53,22 @@ export declare class MailmonClient {
      *         eventTypes: ["message.created"]
      *     })
      */
-    postV1WebhookEndpointsByEndpointIdSubscriptions(request: Mailmon.PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<void>;
+    postV1WebhookEndpointsByEndpointIdSubscriptions(request: Mailmon.PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse>;
     private __postV1WebhookEndpointsByEndpointIdSubscriptions;
+    /**
+     * @param {Mailmon.GetV1MailboxesByMailboxIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1MailboxesByMailboxId({
+     *         mailboxId: "mailboxId"
+     *     })
+     */
+    getV1MailboxesByMailboxId(request: Mailmon.GetV1MailboxesByMailboxIdRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1MailboxesByMailboxIdResponse>;
+    private __getV1MailboxesByMailboxId;
     /**
      * @param {Mailmon.GetV1MailboxesByMailboxIdSyncRunsRequest} request
      * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
@@ -66,8 +80,22 @@ export declare class MailmonClient {
      *         mailboxId: "mailboxId"
      *     })
      */
-    getV1MailboxesByMailboxIdSyncRuns(request: Mailmon.GetV1MailboxesByMailboxIdSyncRunsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<void>;
+    getV1MailboxesByMailboxIdSyncRuns(request: Mailmon.GetV1MailboxesByMailboxIdSyncRunsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1MailboxesByMailboxIdSyncRunsResponse>;
     private __getV1MailboxesByMailboxIdSyncRuns;
+    /**
+     * @param {Mailmon.GetV1MailboxesByMailboxIdObservabilityRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1MailboxesByMailboxIdObservability({
+     *         mailboxId: "mailboxId"
+     *     })
+     */
+    getV1MailboxesByMailboxIdObservability(request: Mailmon.GetV1MailboxesByMailboxIdObservabilityRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1MailboxesByMailboxIdObservabilityResponse>;
+    private __getV1MailboxesByMailboxIdObservability;
     /**
      * @param {Mailmon.PostV1ReplaysRequest} request
      * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
@@ -83,8 +111,22 @@ export declare class MailmonClient {
      *         endTime: "endTime"
      *     })
      */
-    postV1Replays(request: Mailmon.PostV1ReplaysRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<void>;
+    postV1Replays(request: Mailmon.PostV1ReplaysRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.PostV1ReplaysResponse>;
     private __postV1Replays;
+    /**
+     * @param {Mailmon.GetV1ReplaysByReplayIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1ReplaysByReplayId({
+     *         replayId: "replayId"
+     *     })
+     */
+    getV1ReplaysByReplayId(request: Mailmon.GetV1ReplaysByReplayIdRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1ReplaysByReplayIdResponse>;
+    private __getV1ReplaysByReplayId;
     /**
      * @param {Mailmon.GetV1MessagesRequest} request
      * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
@@ -92,10 +134,26 @@ export declare class MailmonClient {
      * @throws {@link Mailmon.BadRequestError}
      *
      * @example
-     *     await client.getV1Messages()
+     *     await client.getV1Messages({
+     *         mailboxId: "mailboxId"
+     *     })
      */
-    getV1Messages(request?: Mailmon.GetV1MessagesRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<void>;
+    getV1Messages(request: Mailmon.GetV1MessagesRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1MessagesResponse>;
     private __getV1Messages;
+    /**
+     * @param {Mailmon.GetV1MessagesByMessageIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1MessagesByMessageId({
+     *         messageId: "messageId"
+     *     })
+     */
+    getV1MessagesByMessageId(request: Mailmon.GetV1MessagesByMessageIdRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1MessagesByMessageIdResponse>;
+    private __getV1MessagesByMessageId;
     /**
      * @param {Mailmon.GetV1ThreadsRequest} request
      * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
@@ -103,10 +161,26 @@ export declare class MailmonClient {
      * @throws {@link Mailmon.BadRequestError}
      *
      * @example
-     *     await client.getV1Threads()
+     *     await client.getV1Threads({
+     *         mailboxId: "mailboxId"
+     *     })
      */
-    getV1Threads(request?: Mailmon.GetV1ThreadsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<void>;
+    getV1Threads(request: Mailmon.GetV1ThreadsRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1ThreadsResponse>;
     private __getV1Threads;
+    /**
+     * @param {Mailmon.GetV1ThreadsByThreadIdRequest} request
+     * @param {MailmonClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link Mailmon.BadRequestError}
+     * @throws {@link Mailmon.NotFoundError}
+     *
+     * @example
+     *     await client.getV1ThreadsByThreadId({
+     *         threadId: "threadId"
+     *     })
+     */
+    getV1ThreadsByThreadId(request: Mailmon.GetV1ThreadsByThreadIdRequest, requestOptions?: MailmonClient.RequestOptions): core.HttpResponsePromise<Mailmon.GetV1ThreadsByThreadIdResponse>;
+    private __getV1ThreadsByThreadId;
     /**
      * Make a passthrough request using the SDK's configured auth, retry, logging, etc.
      * This is useful for making requests to endpoints not yet supported in the SDK.

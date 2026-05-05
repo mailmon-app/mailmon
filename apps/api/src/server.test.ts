@@ -443,7 +443,9 @@ describe("createApp", () => {
     const response = await app.request("/openapi.json");
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
+    const document = await response.json();
+
+    expect(document).toMatchObject({
       openapi: "3.1.0",
       info: {
         title: "Mailmon API",
@@ -451,9 +453,24 @@ describe("createApp", () => {
       },
       paths: {
         "/v1/mailboxes/connect-sessions": expect.any(Object),
+        "/v1/mailboxes/{mailboxId}": expect.any(Object),
+        "/v1/mailboxes/{mailboxId}/observability": expect.any(Object),
         "/v1/messages": expect.any(Object),
+        "/v1/messages/{messageId}": expect.any(Object),
         "/v1/replays": expect.any(Object),
+        "/v1/replays/{replayId}": expect.any(Object),
+        "/v1/threads/{threadId}": expect.any(Object),
       },
+    });
+
+    const connectSessionResponse =
+      document.paths["/v1/mailboxes/connect-sessions"].post.responses["201"].content[
+        "application/json"
+      ].schema;
+
+    expect(connectSessionResponse).toMatchObject({
+      type: "object",
+      required: expect.arrayContaining(["id", "object", "connectUrl", "expiresAt"]),
     });
   });
 

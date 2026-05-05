@@ -43,10 +43,76 @@
         "summary": "Create a mailbox connect session",
         "responses": {
           "201": {
-            "description": "Connect session created"
+            "description": "Connect session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["id", "object", "connectUrl", "expiresAt"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": ["connect_session"]
+                    },
+                    "connectUrl": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -84,10 +150,145 @@
         "summary": "Create a webhook endpoint",
         "responses": {
           "201": {
-            "description": "Webhook endpoint created"
+            "description": "Webhook endpoint created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "object",
+                    "url",
+                    "description",
+                    "deliveryState",
+                    "lastDeliveryAt",
+                    "lastDeliveryError",
+                    "createdAt",
+                    "secret"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": ["webhook_endpoint"]
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "deliveryState": {
+                      "type": "string",
+                      "enum": ["healthy", "degraded", "failing"]
+                    },
+                    "lastDeliveryAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastDeliveryError": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": ["code", "message", "occurredAt", "retryable"],
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "message": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "occurredAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "retryable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "secret": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -125,13 +326,160 @@
         "summary": "Create mailbox-scoped webhook subscriptions",
         "responses": {
           "201": {
-            "description": "Webhook subscriptions created"
+            "description": "Webhook subscriptions created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["object", "data", "nextCursor"],
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": ["list"]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "object",
+                          "webhookEndpointId",
+                          "mailboxId",
+                          "eventTypes",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "object": {
+                            "type": "string",
+                            "enum": ["webhook_endpoint_subscription"]
+                          },
+                          "webhookEndpointId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "mailboxId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "eventTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": ["message.created", "message.updated", "thread.updated"]
+                            }
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "404": {
-            "description": "Mailbox or webhook endpoint not found"
+            "description": "Mailbox or webhook endpoint not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -175,16 +523,404 @@
         ]
       }
     },
+    "/v1/mailboxes/{mailboxId}": {
+      "get": {
+        "operationId": "getV1MailboxesByMailboxId",
+        "summary": "Get a mailbox",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mailboxId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mailbox",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "object",
+                    "provider",
+                    "emailAddress",
+                    "status",
+                    "syncState",
+                    "watchState",
+                    "initializedAt",
+                    "lastSuccessfulSyncAt",
+                    "lastError"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": ["mailbox"]
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": ["gmail"]
+                    },
+                    "emailAddress": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["active", "reconnect_required", "disabled"]
+                    },
+                    "syncState": {
+                      "type": "string",
+                      "enum": ["initializing", "healthy", "lagging", "failed"]
+                    },
+                    "watchState": {
+                      "type": "string",
+                      "enum": ["active", "expiring", "expired", "unhealthy"]
+                    },
+                    "initializedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastSuccessfulSyncAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastError": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": ["code", "message", "occurredAt", "retryable"],
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "message": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "occurredAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "retryable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Mailbox not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/mailboxes/{mailboxId}/sync-runs": {
       "get": {
         "operationId": "getV1MailboxesByMailboxIdSyncRuns",
         "summary": "List mailbox sync runs",
         "responses": {
           "200": {
-            "description": "Mailbox sync runs"
+            "description": "Mailbox sync runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["object", "data", "nextCursor"],
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": ["list"]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "syncRunId",
+                          "mailboxId",
+                          "startedAt",
+                          "completedAt",
+                          "status",
+                          "detail",
+                          "eventsEmitted",
+                          "leaseOwnerId",
+                          "previousCursor",
+                          "nextCursor",
+                          "cursorAdvanced"
+                        ],
+                        "properties": {
+                          "syncRunId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "mailboxId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "startedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "completedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "completed",
+                              "skipped_due_to_active_lease",
+                              "reconnect_required",
+                              "dispatch_retry_exhausted",
+                              "failed_after_lease_acquired",
+                              "lease_lost"
+                            ]
+                          },
+                          "detail": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "eventsEmitted": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "leaseOwnerId": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "previousCursor": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "nextCursor": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "cursorAdvanced": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -199,9 +935,10 @@
             "in": "query",
             "name": "limit",
             "schema": {
-              "type": "string"
-            },
-            "description": "a string to be decoded into a number"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
           },
           {
             "schema": {
@@ -214,19 +951,723 @@
         ]
       }
     },
+    "/v1/mailboxes/{mailboxId}/observability": {
+      "get": {
+        "operationId": "getV1MailboxesByMailboxIdObservability",
+        "summary": "Get mailbox observability",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mailboxId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mailbox observability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "object",
+                    "mailboxId",
+                    "generatedAt",
+                    "lag",
+                    "cursor",
+                    "lease",
+                    "webhookDeliveries",
+                    "latestSyncRun"
+                  ],
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": ["mailbox_observability"]
+                    },
+                    "mailboxId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lag": {
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "syncState",
+                        "watchState",
+                        "lastSuccessfulSyncAt",
+                        "lagSeconds"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["active", "reconnect_required", "disabled"]
+                        },
+                        "syncState": {
+                          "type": "string",
+                          "enum": ["initializing", "healthy", "lagging", "failed"]
+                        },
+                        "watchState": {
+                          "type": "string",
+                          "enum": ["active", "expiring", "expired", "unhealthy"]
+                        },
+                        "lastSuccessfulSyncAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "lagSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "cursor": {
+                      "type": "object",
+                      "required": [
+                        "currentCursor",
+                        "previousCursor",
+                        "nextCursor",
+                        "advanced",
+                        "advancedAt"
+                      ],
+                      "properties": {
+                        "currentCursor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "previousCursor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "nextCursor": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "advanced": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "advancedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "lease": {
+                      "type": "object",
+                      "required": [
+                        "activeLeaseOwner",
+                        "activeLeaseHeartbeatAt",
+                        "activeLeaseExpiresAt",
+                        "contentionCount24h",
+                        "latestContentionAt",
+                        "leaseLossCount24h",
+                        "latestLeaseLossAt"
+                      ],
+                      "properties": {
+                        "activeLeaseOwner": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "activeLeaseHeartbeatAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "activeLeaseExpiresAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "contentionCount24h": {
+                          "type": "integer"
+                        },
+                        "latestContentionAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "leaseLossCount24h": {
+                          "type": "integer"
+                        },
+                        "latestLeaseLossAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "webhookDeliveries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "webhookEndpointId",
+                          "webhookEndpointUrl",
+                          "deliveryState",
+                          "consecutiveFailures",
+                          "pendingDeliveries",
+                          "processingDeliveries",
+                          "failedDeliveries",
+                          "lastDeliveryAt",
+                          "lastDeliveryError"
+                        ],
+                        "properties": {
+                          "webhookEndpointId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "webhookEndpointUrl": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "deliveryState": {
+                            "type": "string",
+                            "enum": ["healthy", "degraded", "failing"]
+                          },
+                          "consecutiveFailures": {
+                            "type": "integer"
+                          },
+                          "pendingDeliveries": {
+                            "type": "integer"
+                          },
+                          "processingDeliveries": {
+                            "type": "integer"
+                          },
+                          "failedDeliveries": {
+                            "type": "integer"
+                          },
+                          "lastDeliveryAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "lastDeliveryError": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "required": ["code", "message", "occurredAt", "retryable"],
+                                "properties": {
+                                  "code": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "message": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "occurredAt": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  "retryable": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "latestSyncRun": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "syncRunId",
+                            "mailboxId",
+                            "startedAt",
+                            "completedAt",
+                            "status",
+                            "detail",
+                            "eventsEmitted",
+                            "leaseOwnerId",
+                            "previousCursor",
+                            "nextCursor",
+                            "cursorAdvanced"
+                          ],
+                          "properties": {
+                            "syncRunId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "mailboxId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "startedAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "completedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "running",
+                                "completed",
+                                "skipped_due_to_active_lease",
+                                "reconnect_required",
+                                "dispatch_retry_exhausted",
+                                "failed_after_lease_acquired",
+                                "lease_lost"
+                              ]
+                            },
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "eventsEmitted": {
+                              "anyOf": [
+                                {
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "leaseOwnerId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previousCursor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "nextCursor": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cursorAdvanced": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Mailbox not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/replays": {
       "post": {
         "operationId": "postV1Replays",
         "summary": "Create a mailbox event replay",
         "responses": {
           "201": {
-            "description": "Replay created"
+            "description": "Replay created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "object",
+                    "status",
+                    "mailboxId",
+                    "webhookEndpointId",
+                    "startTime",
+                    "endTime",
+                    "eventsReplayed",
+                    "createdAt",
+                    "startedAt",
+                    "completedAt",
+                    "lastError"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": ["replay"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["queued", "running", "completed", "failed", "cancelled"]
+                    },
+                    "mailboxId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "webhookEndpointId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "startTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "endTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "eventsReplayed": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "startedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "completedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastError": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "409": {
-            "description": "Overlapping active replay conflict"
+            "description": "Overlapping active replay conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -257,16 +1698,358 @@
         }
       }
     },
+    "/v1/replays/{replayId}": {
+      "get": {
+        "operationId": "getV1ReplaysByReplayId",
+        "summary": "Get a replay",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "replayId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "object",
+                    "status",
+                    "mailboxId",
+                    "webhookEndpointId",
+                    "startTime",
+                    "endTime",
+                    "eventsReplayed",
+                    "createdAt",
+                    "startedAt",
+                    "completedAt",
+                    "lastError"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": ["replay"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["queued", "running", "completed", "failed", "cancelled"]
+                    },
+                    "mailboxId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "webhookEndpointId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "startTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "endTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "eventsReplayed": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "startedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "completedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastError": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Replay not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/messages": {
       "get": {
         "operationId": "getV1Messages",
         "summary": "List mailbox messages",
         "responses": {
           "200": {
-            "description": "Mailbox messages"
+            "description": "Mailbox messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["object", "data", "nextCursor"],
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": ["list"]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "mailboxId",
+                          "threadId",
+                          "providerMessageId",
+                          "subject",
+                          "from",
+                          "snippet",
+                          "receivedAt",
+                          "labelIds"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "mailboxId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "threadId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "providerMessageId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "from": {
+                            "type": "object",
+                            "required": ["name", "email"],
+                            "properties": {
+                              "name": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "email": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "snippet": {
+                            "type": "string"
+                          },
+                          "receivedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "labelIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -281,18 +2064,201 @@
             "in": "query",
             "name": "limit",
             "schema": {
-              "type": "string"
-            },
-            "description": "a string to be decoded into a number"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
           },
           {
             "in": "query",
             "name": "mailboxId",
             "schema": {
               "$ref": "#/components/schemas/NonEmptyString"
-            }
+            },
+            "required": true
           }
         ]
+      }
+    },
+    "/v1/messages/{messageId}": {
+      "get": {
+        "operationId": "getV1MessagesByMessageId",
+        "summary": "Get a message",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "messageId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "mailboxId",
+                    "threadId",
+                    "providerMessageId",
+                    "subject",
+                    "from",
+                    "snippet",
+                    "receivedAt",
+                    "labelIds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "mailboxId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "threadId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "providerMessageId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "from": {
+                      "type": "object",
+                      "required": ["name", "email"],
+                      "properties": {
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "email": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "snippet": {
+                      "type": "string"
+                    },
+                    "receivedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "labelIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Message not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/threads": {
@@ -301,10 +2267,114 @@
         "summary": "List mailbox threads",
         "responses": {
           "200": {
-            "description": "Mailbox threads"
+            "description": "Mailbox threads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["object", "data", "nextCursor"],
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": ["list"]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "object",
+                          "mailboxId",
+                          "providerThreadId",
+                          "subject",
+                          "lastMessageAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "object": {
+                            "type": "string",
+                            "enum": ["thread"]
+                          },
+                          "mailboxId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "providerThreadId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "lastMessageAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request"
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -319,18 +2389,189 @@
             "in": "query",
             "name": "limit",
             "schema": {
-              "type": "string"
-            },
-            "description": "a string to be decoded into a number"
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
           },
           {
             "in": "query",
             "name": "mailboxId",
             "schema": {
               "$ref": "#/components/schemas/NonEmptyString"
-            }
+            },
+            "required": true
           }
         ]
+      }
+    },
+    "/v1/threads/{threadId}": {
+      "get": {
+        "operationId": "getV1ThreadsByThreadId",
+        "summary": "Get a thread",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "object",
+                    "mailboxId",
+                    "providerThreadId",
+                    "subject",
+                    "lastMessageAt",
+                    "messages"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "object": {
+                      "type": "string",
+                      "enum": ["thread"]
+                    },
+                    "mailboxId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "providerThreadId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "lastMessageAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["id", "subject", "receivedAt"],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "receivedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Thread not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "detail": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

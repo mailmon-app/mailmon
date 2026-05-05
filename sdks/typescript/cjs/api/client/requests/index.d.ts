@@ -1,5 +1,10 @@
+export type { GetV1MailboxesByMailboxIdObservabilityRequest } from "./GetV1MailboxesByMailboxIdObservabilityRequest.js";
+export type { GetV1MailboxesByMailboxIdRequest } from "./GetV1MailboxesByMailboxIdRequest.js";
 export type { GetV1MailboxesByMailboxIdSyncRunsRequest } from "./GetV1MailboxesByMailboxIdSyncRunsRequest.js";
+export type { GetV1MessagesByMessageIdRequest } from "./GetV1MessagesByMessageIdRequest.js";
 export type { GetV1MessagesRequest } from "./GetV1MessagesRequest.js";
+export type { GetV1ReplaysByReplayIdRequest } from "./GetV1ReplaysByReplayIdRequest.js";
+export type { GetV1ThreadsByThreadIdRequest } from "./GetV1ThreadsByThreadIdRequest.js";
 export type { GetV1ThreadsRequest } from "./GetV1ThreadsRequest.js";
 export { PostV1MailboxesConnectSessionsRequest } from "./PostV1MailboxesConnectSessionsRequest.js";
 export type { PostV1ReplaysRequest } from "./PostV1ReplaysRequest.js";

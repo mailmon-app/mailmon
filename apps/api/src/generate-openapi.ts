@@ -80,11 +80,14 @@ const preferCamelCaseRequestSchemas = (value: unknown) => {
   }
 
   if (Array.isArray(value.anyOf)) {
+    const includesNullSchema = value.anyOf.some((schema) => {
+      return isJsonObject(schema) && schema.type === "null";
+    });
     const camelCaseSchema = value.anyOf.find((schema) => {
       return isJsonObject(schema) && hasOnlyCamelCaseProperties(schema);
     });
 
-    if (isJsonObject(camelCaseSchema)) {
+    if (!includesNullSchema && isJsonObject(camelCaseSchema)) {
       delete value.anyOf;
       Object.assign(value, camelCaseSchema);
     }
@@ -98,7 +101,7 @@ const preferCamelCaseRequestSchemas = (value: unknown) => {
 const preferCamelCaseQueryParameters = (specs: JsonObject) => {
   const paths = isJsonObject(specs.paths) ? specs.paths : {};
 
-  for (const pathItem of Object.values(paths)) {
+  for (const [path, pathItem] of Object.entries(paths)) {
     if (!isJsonObject(pathItem)) {
       continue;
     }
@@ -108,9 +111,28 @@ const preferCamelCaseQueryParameters = (specs: JsonObject) => {
         continue;
       }
 
-      operation.parameters = operation.parameters.filter((parameter) => {
+      const parameters = operation.parameters.filter((parameter) => {
         return !isJsonObject(parameter) || parameter.name !== "mailbox_id";
       });
+
+      for (const parameter of parameters) {
+        if (!isJsonObject(parameter)) {
+          continue;
+        }
+
+        if (parameter.name === "limit" && isJsonObject(parameter.schema)) {
+          parameter.schema.type = "integer";
+          parameter.schema.minimum = 1;
+          parameter.schema.maximum = 100;
+          delete parameter.description;
+        }
+
+        if ((path === "/v1/messages" || path === "/v1/threads") && parameter.name === "mailboxId") {
+          parameter.required = true;
+        }
+      }
+
+      operation.parameters = parameters;
     }
   }
 };
