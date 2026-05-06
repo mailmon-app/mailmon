@@ -1,0 +1,52 @@
+---
+title: "Event Replays"
+description: "Recover from outages and backfill data using durable events"
+icon: 'backward-step'
+---
+
+One of Mailmon's most powerful features is the Durable Event Log. Because we don't just "push" notifications, but rather persist all canonical state changes to an immutable log, you have the ability to go back in time.
+
+## What is a Replay?
+
+A **Replay** is a deterministic re-delivery of historical events for a specific mailbox over a defined time range. 
+
+Replays are useful for several scenarios:
+- **Disaster Recovery**: Your webhook processing service went down for an extended period, and you missed incoming events.
+- **Data Backfilling**: You added a new feature to your application that requires parsing historical emails, and you need to feed past events through your pipeline.
+- **Local Development**: You want to test your webhook handler locally using real events that happened in production yesterday.
+
+## Creating a Replay Job
+
+You can initiate a replay job via the API. You must specify the mailbox, the destination webhook endpoint, and the time boundary (`startTime` and `endTime`).
+
+<CodeGroup>
+```bash curl
+curl -X POST https://api.mailmon.dev/v1/replays \
+  -H "authorization: Bearer $MAILMON_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{
+    "mailboxId": "mbx_...",
+    "webhookEndpointId": "whe_...",
+    "startTime": "2026-05-04T09:00:00.000Z",
+    "endTime": "2026-05-04T10:00:00.000Z"
+  }'
+```
+
+```typescript typescript
+await client.postV1Replays({
+  mailboxId: "mbx_...",
+  webhookEndpointId: "whe_...",
+  startTime: "2026-05-04T09:00:00.000Z",
+  endTime: "2026-05-04T10:00:00.000Z"
+});
+```
+</CodeGroup>
+
+Once created, Mailmon will asynchronously fetch all events that occurred for that mailbox between `startTime` and `endTime`, and dispatch them to the specified `webhookEndpointId`.
+
+### Things to keep in mind
+
+- Replayed events are identical to the original events. They retain their original `id`, `type`, and `occurredAt` timestamps.
+- Because the event `id` remains the same, your standard idempotency and deduplication logic will handle replayed events seamlessly.
+- Replays process events in chronological order, simulating how they originally occurred.
+- Depending on the time range, a replay can generate a significant volume of webhook traffic. Ensure your endpoint is prepared to handle the load.

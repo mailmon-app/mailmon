@@ -1,0 +1,56 @@
+---
+title: "Authentication"
+description: "Securely authenticate your requests to the Mailmon API"
+icon: 'lock'
+---
+
+The Mailmon API uses API keys to authenticate requests. Your API keys carry many privileges, so be sure to keep them secure! Do not share your secret API keys in publicly accessible areas such as GitHub, client-side code, and so forth.
+
+## Obtaining API Keys
+
+API keys are scoped to a specific **Workspace**. You can generate new API keys using the official Mailmon CLI, which can be installed via npm:
+
+```bash
+npm install -g @mailmon.dev/cli
+```
+
+Once installed, generate a key for your workspace:
+
+```bash
+mailmon admin keys create --workspace-id <workspace-id>
+```
+
+When you generate a key, you will only see the full secret string once. We store only a secure hash of the key and its prefix.
+
+## Using API Keys
+
+Authentication to the API is performed via HTTP Bearer Auth. Provide your API key as the bearer token in the `Authorization` header.
+
+```http
+Authorization: Bearer <your_api_key>
+```
+
+If you are using the official TypeScript SDK, you provide the API key when initializing the client:
+
+```typescript
+import { MailmonClient } from "@mailmon.dev/sdk";
+
+const client = new MailmonClient({
+  token: "mm_live_...",
+});
+```
+
+All API requests must be made over HTTPS (except when testing locally via `http://127.0.0.1:3000`). Calls made over plain HTTP in production will fail. API requests without authentication will also fail.
+
+## Test Mode vs. Live Mode
+
+Mailmon API keys have distinct prefixes to indicate their environment scope:
+
+- **Live Keys** (`mm_live_...`): Used for production environments. Actions performed with these keys affect real data and send real webhooks.
+- **Test Keys** (`mm_test_...`): Used for sandboxes, automated tests, and local development. Actions performed with test keys do not impact your production data.
+
+## API Key Security
+
+If you believe an API key has been compromised, you should revoke it immediately. Once revoked, the key is permanently disabled and any API calls made using it will return an HTTP 401 Unauthorized error. 
+
+We recommend rotating your API keys periodically as part of standard security practices.

@@ -1,0 +1,58 @@
+---
+title: "Core Concepts"
+description: "Understand the fundamental building blocks of Mailmon"
+icon: 'layer-group'
+---
+
+Understanding Mailmon's core concepts will help you build robust integrations and understand our design principles. Mailmon is built around a few central primitives that govern how syncs happen and events are emitted.
+
+## Mailboxes
+
+The **Mailbox** is the fundamental unit of work in Mailmon. It represents a single connected Gmail account. Unlike some APIs that treat users or accounts as the top-level entity, Mailmon ties all sync state, cursors, and operations directly to a specific mailbox.
+
+### Mailbox Status
+
+A mailbox's overall operational health is indicated by its `status`:
+
+- `active`: The mailbox is connected and functioning normally.
+- `reconnect_required`: The mailbox requires user intervention (e.g., their OAuth token was revoked, or the password changed). You must prompt the user to re-authenticate.
+- `disabled`: The mailbox has been manually turned off.
+
+### Sync State
+
+The `sync_state` tells you the current condition of our internal synchronization engine for this mailbox:
+
+- `initializing`: The mailbox is currently performing its first full initial sync to build the baseline state.
+- `healthy`: Incremental syncs are running correctly and successfully.
+- `lagging`: The mailbox is experiencing temporary delays or rate limits, but is expected to recover automatically.
+- `failed`: Sync has repeatedly failed. Check the `lastError` field for more context.
+
+### Watch State
+
+The `watch_state` reflects our internal push notification subscription with Gmail:
+
+- `active`: Push notifications are correctly arriving.
+- `expiring`: The watch subscription is nearing expiration and will be renewed automatically.
+- `expired` / `unhealthy`: The watch subscription has lapsed or is failing to renew.
+
+## Connect Sessions
+
+A **Connect Session** is a secure, short-lived resource used to authorize end users via Google OAuth. 
+
+When you want to onboard a new mailbox, you create a connect session via the API. This returns a `connectUrl` where you redirect your user. After they complete the OAuth consent screen, Mailmon automatically creates the Mailbox resource, registers the necessary Gmail push notifications, and begins the initial sync—before returning the user back to your `redirectUrl`.
+
+## Events and Deliveries
+
+A **Mailbox Event** is an immutable record of a durable change that occurred in a mailbox (such as a new message arriving, or a thread being updated).
+
+Unlike raw Gmail push notifications, Mailmon events are only emitted **after** the canonical state of the mailbox has been durably committed to our database. This means:
+
+1. **You never get duplicate events** for the same change.
+2. **You never lose events** even if your webhook endpoint goes down (they are stored in our Durable Event Log).
+3. **You can replay events** at any time.
+
+When an event is ready, Mailmon attempts to send it to your registered Webhook Endpoints. This is called a **Webhook Delivery**. Delivery is guaranteed *at-least-once*, meaning you should always deduplicate events by their `id` on your end.
+
+## Replays
+
+Because events are durable, Mailmon supports **Replays**. You can instruct Mailmon to take a historical time window for a specific mailbox and re-deliver all the events that occurred within that window to your webhook endpoints. This is invaluable for recovering from application outages or backfilling data into a newly created environment.

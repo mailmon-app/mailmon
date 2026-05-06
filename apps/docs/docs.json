@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "maple",
-  "name": "mailmon",
+  "name": "Mailmon",
   "colors": {
     "primary": "#16A34A",
     "light": "#07C983",
@@ -15,32 +15,11 @@
         "groups": [
           {
             "group": "Getting started",
-            "pages": ["index", "quickstart", "development"]
+            "pages": ["index", "quickstart", "guides/core-concepts"]
           },
           {
-            "group": "Customization",
-            "pages": ["essentials/settings", "essentials/navigation"]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/components",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "Agent ready",
-            "pages": [
-              "agent-ready/prompt",
-              "agent-ready/visibility",
-              "agent-ready/contextual",
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
-            ]
+            "group": "Integration",
+            "pages": ["guides/authentication", "guides/webhooks", "guides/replays"]
           }
         ]
       },
@@ -52,57 +31,55 @@
             "pages": ["api-reference/introduction"]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Mailboxes",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api-reference/mailboxes/create-connect-session",
+              "api-reference/mailboxes/get",
+              "api-reference/mailboxes/get-sync-runs",
+              "api-reference/mailboxes/get-observability"
             ]
+          },
+          {
+            "group": "Messages",
+            "pages": ["api-reference/messages/list", "api-reference/messages/get"]
+          },
+          {
+            "group": "Threads",
+            "pages": ["api-reference/threads/list", "api-reference/threads/get"]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "api-reference/webhooks/create-endpoint",
+              "api-reference/webhooks/create-subscription"
+            ]
+          },
+          {
+            "group": "Replays",
+            "pages": ["api-reference/replays/create", "api-reference/replays/get"]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
+    ]
   },
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
+    "links": [],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "label": "GitHub",
+      "href": "https://github.com/mailmon-app/mailmon"
     }
   },
   "contextual": {
-    "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "cursor", "vscode"]
+    "options": ["copy", "view", "chatgpt", "claude", "perplexity", "cursor", "vscode"]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/mailmon-app/mailmon"
     }
   }
 }

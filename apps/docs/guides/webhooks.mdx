@@ -1,0 +1,83 @@
+---
+title: "Webhooks"
+description: "Receive real-time updates when mailbox data changes"
+icon: 'satellite-dish'
+---
+
+Mailmon uses webhooks to notify your application when events happen in your connected mailboxes. Instead of continuously polling the API for new messages, you provide Mailmon with a URL, and we send a POST request to that URL whenever a subscribed event occurs.
+
+## Event Types
+
+Mailmon currently emits the following events:
+
+- `message.created`: Triggered when a new email arrives or a draft is created.
+- `message.updated`: Triggered when a message's state changes (e.g., labels are added or removed, such as marking as read).
+- `thread.updated`: Triggered when a thread's state changes.
+
+## Payload Structure
+
+A typical webhook payload contains the event metadata and a `data` object with the specific resource details.
+
+```json
+{
+  "id": "evt_...",
+  "type": "message.created",
+  "schemaVersion": 1,
+  "occurredAt": "2026-05-04T10:00:00.000Z",
+  "workspaceId": "wsp_...",
+  "tenantExternalId": "tenant_demo",
+  "mailboxId": "mbx_...",
+  "data": {
+    "messageId": "msg_...",
+    "threadId": "thr_...",
+    "providerMessageId": "195f8c...",
+    "providerThreadId": "195f8b...",
+    "subject": "Hello",
+    "snippet": "Email snippet...",
+    "receivedAt": "2026-05-04T09:59:00.000Z",
+    "labelIds": ["INBOX", "UNREAD"]
+  }
+}
+```
+
+## Delivery Guarantees
+
+Mailmon guarantees **at-least-once delivery** for all webhook events. 
+
+If your server does not respond with a `2xx` HTTP status code (for example, if it times out, returns a `500 Internal Server Error`, or the network connection fails), Mailmon will automatically retry delivering the event using an exponential backoff schedule.
+
+Because delivery is at-least-once, it is possible for your endpoint to receive the same event multiple times (for example, if your server processed the event but failed to return a `200 OK` in time). **You must deduplicate events** on your end using the event `id` field.
+
+## Securing Your Webhooks
+
+To ensure that webhook requests are actually coming from Mailmon and have not been tampered with, every webhook request includes a signature. 
+
+Mailmon includes the following headers in every webhook request:
+
+- `x-mailmon-delivery-id`: The unique ID of this delivery attempt.
+- `x-mailmon-event-id`: The ID of the event being delivered.
+- `x-mailmon-attempt`: The attempt number (starts at 1).
+- `x-mailmon-signature`: The signature used to verify the payload.
+
+### Verifying the Signature
+
+The `x-mailmon-signature` header contains the timestamp and the signature itself, formatted like this:
+
+```text
+t=<timestamp>,v1=<hex_hmac>
+```
+
+To verify the signature:
+
+1. **Extract the timestamp and signature** from the header.
+2. **Prepare the signed payload** string by concatenating the timestamp (as a string), a dot (`.`), and the raw JSON request body.
+   ```text
+   <timestamp>.<raw_body>
+   ```
+3. **Compute the HMAC** of the signed payload using the SHA-256 hash function and your endpoint's signing secret as the key.
+4. **Compare your computed signature** with the `v1` signature provided in the header. They must match exactly.
+5. **Check the timestamp** to prevent replay attacks. We recommend rejecting payloads where the timestamp is older than 5 minutes.
+
+<Tip>
+When using the `@mailmon.dev/sdk`, you can use the built-in webhook verification utility to perform this check automatically.
+</Tip>

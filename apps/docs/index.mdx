@@ -1,133 +1,48 @@
 ---
 title: "Introduction"
-description: "Welcome to the new home for your documentation"
-icon: 'star'
+description: "The reliable event system on top of Gmail."
+icon: 'book-open'
 ---
 
-## Setting up
+Most Gmail integrations fail in production because of duplicate push notifications, missed changes from bad cursor handling, invalid or expired Gmail history cursors, revoked OAuth tokens, and webhook endpoints going down. 
 
-Get your documentation site up and running in minutes.
+Mailmon solves these issues by treating email sync as a distributed systems problem, providing a robust infrastructure to keep your application in perfect sync with your users' mailboxes.
+
+## What is Mailmon?
+
+Mailmon is a Gmail-first sync API that provides correct mailbox state, durable events, and replayable webhooks. Instead of building your own polling loops and Gmail push listeners, you use Mailmon to handle the complexity of the Gmail API.
+
+<CardGroup cols={2}>
+  <Card title="Canonical State" icon="database">
+    We maintain a perfectly synced canonical state of messages and threads in your users' mailboxes.
+  </Card>
+  <Card title="Durable Event Log" icon="list-ol">
+    Every change is recorded in a durable event log, guaranteeing you never miss an update.
+  </Card>
+  <Card title="Reliable Webhooks" icon="satellite-dish">
+    At-least-once webhook delivery with automatic retries if your endpoints go down.
+  </Card>
+  <Card title="Event Replay" icon="backward-step">
+    Need to backfill data or recover from an outage? Replay historical events on demand.
+  </Card>
+</CardGroup>
+
+## Core Concepts
+
+Understanding these core concepts will help you integrate Mailmon effectively:
+
+- **Mailboxes**: The unit of work in Mailmon. Each mailbox represents a connected Gmail account. Mailmon automatically handles cursor tracking and sync leases behind the scenes.
+- **Connect Sessions**: Secure, ephemeral sessions used to authenticate users via Google OAuth and connect their mailboxes to your workspace.
+- **Events**: Immutable records of changes (e.g., `message.created`, `thread.updated`) stored in our durable event log.
+- **Webhook Endpoints**: Your application's HTTP endpoints that subscribe to Mailmon events. 
+
+## Next Steps
 
 <Card
-  title="Start here"
+  title="Quickstart Guide"
   icon="rocket"
   href="/quickstart"
   horizontal
 >
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Make your content agent ready
-
-Make your docs work for humans and AI agents alike.
-
-<Columns cols={2}>
-  <Card
-    title="Prompt component"
-    icon="robot"
-    href="/agent-ready/prompt"
-  >
-    Embed shareable AI prompts readers can copy or open in Cursor.
-  </Card>
-  <Card
-    title="Visibility"
-    icon="eye"
-    href="/agent-ready/visibility"
-  >
-    Show different content to humans and agents reading your docs.
-  </Card>
-  <Card
-    title="Contextual menu"
-    icon="bolt"
-    href="/agent-ready/contextual"
-  >
-    Give readers one-click access to Claude, ChatGPT, Cursor, and more.
-  </Card>
-  <Card
-    title="AI coding tools"
-    icon="wand-magic-sparkles"
-    href="/ai-tools/claude-code"
-  >
-    Set up Claude Code, Cursor, or Windsurf with Mintlify's skill.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
+  Learn how to integrate Mailmon into your application in under 5 minutes.
 </Card>
