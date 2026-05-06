@@ -34,13 +34,14 @@ The key question is not "can we read email?" — it's:
 
 ## Status
 
-Mailmon is production-ready for email sync workloads. It implements:
+Mailmon is **alpha stage software**. The core email sync workloads are production-ready. It implements:
 
 - Gmail OAuth, credential encryption, and secure token storage
 - Initial and incremental sync with durable history cursors
 - Canonical message/thread state with lease-based concurrency control
 - Durable event logs with at-least-once webhook delivery
 - Local development mode and GCP cloud runtime
+- TypeScript SDK for programmatic access
 - CLI tools for operators: sync, credential audit, event replay, and control jobs
 
 ## Core Design Principles
@@ -60,6 +61,7 @@ Mailmon is production-ready for email sync workloads. It implements:
 | Provider        | Gmail                                                           |
 | Sync model      | Canonical state + durable event log with at-least-once webhooks |
 | API             | HTTP with workspace-scoped API keys                             |
+| SDK             | TypeScript                                                      |
 | Persistence     | PostgreSQL (Drizzle ORM)                                        |
 | Async transport | Pub/Sub (sync dispatch) + Cloud Tasks (webhook delivery)        |
 | Local dev       | Full feature parity via local adapters, no emulators required   |
@@ -225,6 +227,9 @@ flowchart TD
 │   ├── queue/      # Local dispatch, Pub/Sub dispatch, Cloud Tasks scheduling
 │   └── config/     # Runtime configuration
 │
+├── sdks/           # Programmatically generated client SDKs
+│   └── typescript/ # TypeScript SDK for the Mailmon API
+│
 ├── infra/          # Terraform-managed GCP infrastructure
 ├── plans/          # Architecture and implementation plans
 └── docker-compose.yml
@@ -232,16 +237,42 @@ flowchart TD
 
 ## API examples
 
-All public API examples require a workspace API key:
+The Mailmon API can be accessed via HTTP requests or using the official TypeScript SDK.
+
+### Install the TypeScript SDK
+
+```bash
+npm install @mailmon.dev/sdk
+# or pnpm, yarn
+```
+
+### Authentication
+
+All public API examples require a workspace API key.
+
+**Using curl:**
 
 ```bash
 export MAILMON_API_KEY=mm_test_...
+```
+
+**Using the TypeScript SDK:**
+
+```typescript
+import { MailmonClient } from "@mailmon.dev/sdk";
+
+const client = new MailmonClient({
+  token: "mm_test_...",
+  // environment: "http://127.0.0.1:3000", // For local development
+});
 ```
 
 > [!TIP]
 > Webhook events include an `id` field. Consumers must deduplicate by event ID—delivery is at-least-once, not exactly-once.
 
 ### Create a Gmail connect session
+
+**Using curl:**
 
 ```bash
 curl -X POST http://127.0.0.1:3000/v1/mailboxes/connect-sessions \
@@ -253,6 +284,17 @@ curl -X POST http://127.0.0.1:3000/v1/mailboxes/connect-sessions \
     "mailboxExternalId": "primary",
     "redirectUrl": "http://localhost:3000/connected"
   }'
+```
+
+**Using the TypeScript SDK:**
+
+```typescript
+const response = await client.postV1MailboxesConnectSessions({
+  provider: "gmail",
+  tenantExternalId: "tenant_demo",
+  mailboxExternalId: "primary",
+  redirectUrl: "http://localhost:3000/connected",
+});
 ```
 
 Example response:
@@ -270,9 +312,19 @@ Send the user to `connectUrl`. After OAuth succeeds, Mailmon creates the mailbox
 
 ### Get mailbox state
 
+**Using curl:**
+
 ```bash
 curl http://127.0.0.1:3000/v1/mailboxes/mbx_... \
   -H "authorization: Bearer $MAILMON_API_KEY"
+```
+
+**Using the TypeScript SDK:**
+
+```typescript
+const response = await client.getV1MailboxesByMailboxId({
+  mailboxId: "mbx_...",
+});
 ```
 
 Example response:
@@ -310,6 +362,8 @@ curl "http://127.0.0.1:3000/v1/mailboxes/mbx_.../observability" \
 
 ### Webhook endpoints and subscriptions
 
+**Using curl:**
+
 ```bash
 # Create endpoint
 curl -X POST http://127.0.0.1:3000/v1/webhook-endpoints \
@@ -324,7 +378,23 @@ curl -X POST http://127.0.0.1:3000/v1/webhook-endpoints/whe_.../subscriptions \
   -d '{"mailboxIds": ["mbx_..."], "eventTypes": ["message.created"]}'
 ```
 
+**Using the TypeScript SDK:**
+
+```typescript
+const endpoint = await client.postV1WebhookEndpoints({
+  url: "https://example.com/webhooks/mailmon",
+});
+
+await client.postV1WebhookEndpointsByEndpointIdSubscriptions({
+  endpointId: endpoint.id,
+  mailboxIds: ["mbx_..."],
+  eventTypes: ["message.created"],
+});
+```
+
 ### Replay events
+
+**Using curl:**
 
 ```bash
 # Create replay job
@@ -337,6 +407,17 @@ curl -X POST http://127.0.0.1:3000/v1/replays \
     "startTime": "2026-05-04T09:00:00.000Z",
     "endTime": "2026-05-04T10:00:00.000Z"
   }'
+```
+
+**Using the TypeScript SDK:**
+
+```typescript
+await client.postV1Replays({
+  mailboxId: "mbx_...",
+  webhookEndpointId: "whe_...",
+  startTime: "2026-05-04T09:00:00.000Z",
+  endTime: "2026-05-04T10:00:00.000Z",
+});
 ```
 
 ## Webhooks
