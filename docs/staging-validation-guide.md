@@ -63,7 +63,24 @@ To run the CLI commands locally against the staging database, you must use the [
 - **Staging API URL:** (`$API_URL`)
 - **Staging Worker URL:** (`$WORKER_URL`)
 - **GCP Project Access:** `gcloud` CLI authenticated and configured for the staging project (`mailmon-dev-494511`).
+- **Gmail API Enabled:** the staging GCP project must have `gmail.googleapis.com` enabled:
+  ```bash
+  gcloud services list --enabled \
+    --filter='config.name:gmail.googleapis.com' \
+    --format='value(config.name)'
+  ```
+  If this prints nothing, run:
+  ```bash
+  gcloud services enable gmail.googleapis.com
+  ```
+- **Google OAuth Redirect URI:** the OAuth client used by `MAILMON_GMAIL_OAUTH_CLIENT_ID` must list the staging API callback as an authorized redirect URI:
+  ```bash
+  printf "%s/oauth/gmail/callback\n" "${API_URL%/}"
+  ```
+  For Cloud Run staging this will look like `https://<api-service>.a.run.app/oauth/gmail/callback`.
 - **Webhook Receiver:** A publicly accessible URL to receive webhooks (e.g., `https://webhook.site/your-unique-id`).
+
+If Google shows `Error 400: redirect_uri_mismatch`, update the OAuth client in Google Cloud Console with the exact callback URI above, then create a fresh connect session. The `redirectUrl` in the connect-session request is the final customer redirect after Mailmon completes OAuth; it is not the Google OAuth callback.
 
 ### Provision Workspace and API Key
 
@@ -156,11 +173,15 @@ You need a connected Mailbox to generate events. Use the API to create a connect
    curl -s -X POST "$API_URL/v1/webhook-endpoints/$ENDPOINT_ID/subscriptions" \
      -H "Authorization: Bearer $MAILMON_API_KEY" \
      -H "Content-Type: application/json" \
-     -d "{\"mailboxId\": \"$MAILBOX_ID\"}"
+     -d "{
+       \"mailboxIds\": [\"$MAILBOX_ID\"],
+       \"eventTypes\": [\"message.created\", \"message.updated\", \"thread.updated\"]
+     }"
    ```
 
 3. **Trigger a Mailbox Event:**
    Send an email to the test Gmail account you just connected to trigger a new message event.
+   Subscription creation does not enqueue a delivery by itself, and initial sync events that occurred before the subscription was created are not delivered to the new endpoint.
 
 4. **Observe Cloud Tasks:**
    Check the GCP Cloud Tasks queue to see if a delivery task was scheduled and executed.
