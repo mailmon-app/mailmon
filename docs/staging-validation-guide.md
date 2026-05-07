@@ -29,16 +29,33 @@ cd ..
 
 _(Alternatively, you can find these URLs in the GCP Cloud Run console)._
 
-**2. Database Connection String:**
-The deployment pipeline stores the `DATABASE_URL` in GCP Secret Manager. Retrieve it using `gcloud`:
+**2. Database Connection String (via Cloud SQL Proxy):**
+The deployment pipeline stores the `DATABASE_URL` in GCP Secret Manager, but that connection string is designed for Cloud Run (`/cloudsql/...`) and will fail with `connect ENOENT` if used from your local machine.
 
-```bash
-# Get the secret name from OpenTofu
-SECRET_NAME=$(cd infra/ && tofu output -raw database_url_secret_id)
+To run the CLI commands locally against the staging database, you must use the [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/sql-proxy).
 
-# Fetch the secret value
-export DATABASE_URL=$(gcloud secrets versions access latest --secret="$SECRET_NAME")
-```
+1. Get the connection name from OpenTofu:
+   ```bash
+   cd infra/
+   export INSTANCE_CONNECTION_NAME=$(tofu output -raw cloud_sql_connection_name)
+   cd ..
+   ```
+2. In a separate terminal tab, start the proxy:
+   ```bash
+   cloud-sql-proxy $INSTANCE_CONNECTION_NAME --port 5433
+   ```
+3. Get the database connection string from Secret Manager and adapt it for the proxy:
+
+   ```bash
+   # Get the secret name from OpenTofu
+   SECRET_NAME=$(cd infra/ && tofu output -raw database_url_secret_id)
+
+   # Fetch the secret value (which has the Cloud Run unix socket path)
+   CLOUD_RUN_DB_URL=$(gcloud secrets versions access latest --secret="$SECRET_NAME")
+
+   # Modify it to connect to the local proxy port (5433) and strip the unix socket
+   export DATABASE_URL=$(echo "$CLOUD_RUN_DB_URL" | sed 's|?host=.*||' | sed 's|@localhost/|@localhost:5433/|')
+   ```
 
 ### Requirements
 
@@ -56,13 +73,13 @@ Since self-serve workspace management is not yet available in the API, use the O
    Run the CLI from your local Mailmon project root, pointing it to the staging database:
 
    ```bash
-   DATABASE_URL="<your-staging-database-url>" pnpm --filter @mailmon/cli dev -- admin workspace create --workspace-id ws_staging_test
+   DATABASE_URL=$DATABASE_URL pnpm --filter @mailmon.dev/cli dev -- admin workspace create --workspace-id ws_staging_test
    ```
 
 2. **Create an API Key:**
    Generate an API key for the new workspace:
    ```bash
-   DATABASE_URL="<your-staging-database-url>" pnpm --filter @mailmon/cli dev -- admin keys create --workspace-id ws_staging_test --prefix mm_test_
+   DATABASE_URL=$DATABASE_URL pnpm --filter @mailmon.dev/cli dev -- admin keys create --workspace-id ws_staging_test --prefix mm_test_
    ```
    **Save the raw API key output**, as it will not be displayed again. Export it to your terminal:
    ```bash
