@@ -17,6 +17,7 @@ import {
   type MailboxSyncRunInspectionResource,
 } from "@mailmon/core";
 import { Hono } from "hono";
+import type { HonoRequest } from "hono";
 import { describeRoute, openAPIRouteHandler, type GenerateSpecOptions } from "hono-openapi";
 import { HTTPException } from "hono/http-exception";
 
@@ -46,8 +47,6 @@ import {
   invalidRequest,
 } from "./http/parsers.js";
 import { mailboxListQueryDetail, subscriptionBodyDetail, validate } from "./http/validation.js";
-
-import type { HonoRequest } from "hono";
 
 const getRequestOrigin = (req: HonoRequest) => {
   const forwardedProto = req.header("x-forwarded-proto");
