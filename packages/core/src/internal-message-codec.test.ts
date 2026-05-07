@@ -93,6 +93,24 @@ describe("decodeGmailPushNotificationPubSubEnvelope", () => {
     });
   });
 
+  it("normalizes numeric Gmail history ids from live Pub/Sub notifications", () => {
+    expect(
+      decodeGmailPushNotificationPubSubEnvelope(
+        pubSubEnvelope({
+          emailAddress: "demo@mailmon.dev",
+          historyId: 5088,
+        }),
+      ),
+    ).toEqual({
+      value: {
+        emailAddress: "demo@mailmon.dev",
+        historyId: "5088",
+        messageId: "pubsub_msg_123",
+        subscription: "projects/mailmon-staging/subscriptions/mailbox-sync-dispatch-worker",
+      },
+    });
+  });
+
   it("rejects malformed Gmail Push Notification data", () => {
     expect(
       decodeGmailPushNotificationPubSubEnvelope(

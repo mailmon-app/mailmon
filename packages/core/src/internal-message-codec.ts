@@ -20,8 +20,12 @@ export type InternalMessageDecodeResult<T> =
 
 const GmailPushNotificationDataSchema = Schema.Struct({
   emailAddress: Schema.NonEmptyString,
-  historyId: Schema.NonEmptyString,
+  historyId: Schema.Union(Schema.NonEmptyString, Schema.Number),
 });
+
+const normalizeGmailHistoryId = (historyId: string | number) => {
+  return typeof historyId === "number" ? String(historyId) : historyId;
+};
 
 const encodeJsonString = (value: unknown) => {
   return Schema.encodeUnknownSync(Schema.parseJson())(value);
@@ -214,7 +218,7 @@ export const decodeGmailPushNotificationPubSubEnvelope = (
   return {
     value: {
       emailAddress: notificationData.emailAddress,
-      historyId: notificationData.historyId,
+      historyId: normalizeGmailHistoryId(notificationData.historyId),
       messageId:
         typeof envelope.value.message.messageId === "string" &&
         envelope.value.message.messageId.length > 0
