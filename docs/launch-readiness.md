@@ -425,12 +425,15 @@ This section translates the current repo state into launch language.
 - local webhook delivery runtime with retries, endpoint health, and startup recovery of pending/in-flight deliveries
 - mailbox observability routes for sync runs and current operational state via `GET /v1/mailboxes/{mailbox_id}/sync-runs` and `GET /v1/mailboxes/{mailbox_id}/observability`
 - staging/production retry-exhaustion handling for mailbox sync dispatch and webhook delivery: Pub/Sub dead-letters exhausted mailbox sync dispatches into `/internal/sync-dead-letter`, while exhausted webhook deliveries are persisted as `webhook_delivery_retry_exhausted` and surfaced through structured logs, log-based metrics, and optional Monitoring alerts
+- live staging validation of Cloud Tasks-backed webhook delivery, including startup recovery of pending durable deliveries and successful OIDC dispatch to `/internal/webhook-deliveries`
+- live staging validation of the Gmail push/watch production path, including Pub/Sub OIDC intake at `/internal/gmail-push`, mailbox sync dispatch to `/internal/sync`, fresh Mailbox Event emission, and customer webhook delivery
 - durable Replay resources with create/get API routes, overlap conflict handling, empty-range completion, deterministic Mailbox Event selection, and scheduled re-delivery with stable `event.id` values
 
 ### 6.2 Immediate Launch Blockers
 
-- live staging validation of webhook deliveries through Cloud Tasks
-- live staging validation of Gmail push/watch production path
+- self-serve Workspace and API key management is still manual/operator-driven
+- official OpenAPI source of truth and public SDK release are not complete
+- public troubleshooting, production docs, and support runbooks are not launch-ready
 
 ### 6.3 Likely Public-Launch Blockers
 
@@ -463,7 +466,7 @@ It is the recommended product-facing launch sequence.
 
 - complete production delivery runtime
 - close critical security gaps
-- close Gmail push/watch production gaps
+- keep the validated Gmail push/watch and Cloud Tasks webhook paths covered by repeatable staging checks
 - add enough observability and support runbooks for external users
 - publish production integration docs
 
@@ -509,10 +512,10 @@ Use this as the final go/no-go list.
 ### Runtime
 
 - [x] webhook deliveries work locally
-- [ ] webhook deliveries work in staging and production
+- [x] webhook deliveries work in staging with production topology
 - [x] endpoint health works
 - [x] delivery retries work
-- [ ] Gmail push/watch production path works
+- [x] Gmail push/watch production path works in staging
 - [x] repair/resync path exists for invalid cursors
 
 ### Security
