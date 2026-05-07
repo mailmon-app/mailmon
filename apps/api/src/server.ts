@@ -47,8 +47,15 @@ import {
 } from "./http/parsers.js";
 import { mailboxListQueryDetail, subscriptionBodyDetail, validate } from "./http/validation.js";
 
-const getRequestOrigin = (requestUrl: string) => {
-  return new URL(requestUrl).origin;
+import type { HonoRequest } from "hono";
+
+const getRequestOrigin = (req: HonoRequest) => {
+  const forwardedProto = req.header("x-forwarded-proto");
+  const forwardedHost = req.header("x-forwarded-host") || req.header("host");
+  if (forwardedProto && forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+  return new URL(req.url).origin;
 };
 
 const toSyncRunsResponse = (response: {
@@ -657,7 +664,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
         createMailboxConnectSession(
           auth.workspace.workspaceId,
           request,
-          getRequestOrigin(context.req.url),
+          getRequestOrigin(context.req),
         ),
       );
 
@@ -1089,7 +1096,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
 
     const completion = await runProblemEffect(
       runtime,
-      completeGmailMailboxConnectSession(connectSessionId, code, getRequestOrigin(context.req.url)),
+      completeGmailMailboxConnectSession(connectSessionId, code, getRequestOrigin(context.req)),
     );
 
     if (completion.tag === "failure") {
@@ -1113,7 +1120,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
       runtime,
       getGmailMailboxConnectAuthorizationUrl(
         context.req.param("connectSessionId"),
-        getRequestOrigin(context.req.url),
+        getRequestOrigin(context.req),
       ),
     );
 
