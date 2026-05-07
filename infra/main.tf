@@ -381,6 +381,12 @@ resource "google_cloud_tasks_queue_iam_member" "worker_webhook_delivery_enqueuer
   member   = google_service_account.worker.member
 }
 
+resource "google_service_account_iam_member" "worker_tasks_service_account_user" {
+  service_account_id = google_service_account.tasks.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = google_service_account.worker.member
+}
+
 resource "google_cloud_run_v2_service" "api" {
   depends_on = [
     google_project_iam_member.api_cloud_sql_client,
