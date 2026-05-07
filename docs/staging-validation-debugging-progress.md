@@ -1,21 +1,23 @@
 # Staging Validation Debugging Progress
 
-Captured on 2026-05-07 during manual staging validation for project `mailmon-dev-494511`.
+Captured on 2026-05-07 during manual staging validation for the staging GCP project.
 
 This is a debugging log for the staging validation run. It records what was observed, what was fixed, and what remains to validate. It is not a roadmap or replacement for `plans/mailmon-gmail-sync-infrastructure.md`.
 
 ## Current State
 
-- Staging API URL: `https://mailmon-api-nsi5aiqucq-uc.a.run.app`
-- Staging worker URL: `https://mailmon-worker-nsi5aiqucq-uc.a.run.app`
-- Connected Mailbox: `mbx_4c681d1a-a4db-40bc-b281-859f73b3e5b5`
-- Webhook Endpoint: `whe_7b92f861-5f80-4a21-8525-116a110abeeb`
-- Webhook Subscription: `whsub_c968b867-c00b-4b5d-8ae2-69a25b7d1dbf`
+- Staging API URL: `<staging-api-url>`
+- Staging worker URL: `<staging-worker-url>`
+- Connected Mailbox: `<mailbox-id>`
+- Webhook Endpoint: `<webhook-endpoint-id>`
+- Webhook Receiver URL: `<webhook-receiver-url>`
+- Webhook Subscription: `<webhook-subscription-id>`
 - Mailbox watch is active.
 - Gmail Push Notifications are reaching the worker.
 - Mailbox sync dispatch now succeeds after the Gmail push decoder fix.
 - Latest observed successful sync: `2026-05-07T06:14:55.386Z`.
-- Current remaining blocker: existing webhook delivery rows are pending because worker startup recovery ran before the Cloud Tasks OIDC `actAs` IAM grant was available.
+- Existing pending webhook deliveries have now recovered after redeploy.
+- Current remaining validation: completed. Fresh Gmail push/watch and Cloud Tasks webhook delivery are both validated in staging.
 
 Latest observability snapshot showed:
 
@@ -41,8 +43,8 @@ Error 400: redirect_uri_mismatch
 Observed hosted connect redirect from the API:
 
 ```text
-redirect_uri=https://mailmon-api-nsi5aiqucq-uc.a.run.app/oauth/gmail/callback
-client_id=906120705385-550lai74pkhqukmcrc6tmd1fsm7piqd0.apps.googleusercontent.com
+redirect_uri=<staging-api-url>/oauth/gmail/callback
+client_id=<google-oauth-client-id>
 ```
 
 Cause:
@@ -64,7 +66,7 @@ https://example.com/callback?code=gmail_profile_fetch_failed&detail=Fetching+the
 
 Cause:
 
-- `gmail.googleapis.com` was not enabled in project `mailmon-dev-494511`.
+- `gmail.googleapis.com` was not enabled in the staging GCP project.
 
 Resolution:
 
@@ -76,7 +78,7 @@ After enabling Gmail API and creating a fresh connect session, mailbox connectio
 
 ```text
 created=true
-mailbox_id=mbx_4c681d1a-a4db-40bc-b281-859f73b3e5b5
+mailbox_id=<mailbox-id>
 status=success
 ```
 
@@ -149,7 +151,7 @@ Live decoded Gmail payload:
 
 ```json
 {
-  "emailAddress": "mailmon.dev@gmail.com",
+  "emailAddress": "<connected-gmail-address>",
   "historyId": 5088
 }
 ```
@@ -196,12 +198,12 @@ Current observation:
 - Worker environment includes the expected GCP scheduler settings:
 
 ```text
-GCP_PROJECT_ID=mailmon-dev-494511
+GCP_PROJECT_ID=<staging-project-id>
 GCP_REGION=us-central1
 MAILMON_GCP_WEBHOOK_DELIVERY_QUEUE_ID=mailmon-webhook-deliveries
-MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL=mailmon-tasks@mailmon-dev-494511.iam.gserviceaccount.com
-MAILMON_GCP_TASKS_AUDIENCE=https://mailmon-worker-nsi5aiqucq-uc.a.run.app
-MAILMON_WORKER_BASE_URL=https://mailmon-worker-nsi5aiqucq-uc.a.run.app
+MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL=<tasks-oidc-service-account>
+MAILMON_GCP_TASKS_AUDIENCE=<staging-worker-url>
+MAILMON_WORKER_BASE_URL=<staging-worker-url>
 ```
 
 Likely cause:
@@ -214,9 +216,9 @@ Infra fix:
 - `infra/main.tf` includes `google_service_account_iam_member.worker_tasks_service_account_user`, granting:
 
 ```text
-member: serviceAccount:mailmon-worker@mailmon-dev-494511.iam.gserviceaccount.com
+member: serviceAccount:<worker-service-account>
 role: roles/iam.serviceAccountUser
-service account: mailmon-tasks@mailmon-dev-494511.iam.gserviceaccount.com
+service account: <tasks-oidc-service-account>
 ```
 
 Local validation:
@@ -237,18 +239,18 @@ Post-apply observation:
 
 This means the IAM fix alone has not yet proven delivery scheduling. The remaining question is whether worker startup recovery actually ran after redeploy.
 
-Follow-up log inspection confirmed that worker startup recovery did run on revision `mailmon-worker-00029-qjg` and failed before the IAM grant was effective:
+Follow-up log inspection confirmed that worker startup recovery did run on the worker revision deployed before IAM propagation and failed before the IAM grant was effective:
 
 ```text
-2026-05-07T06:41:31.435081Z failed to recover durable webhook deliveries after worker startup (FiberFailure) Error: 7 PERMISSION_DENIED: The principal (user or service account) lacks IAM permission "iam.serviceAccounts.actAs" for the resource "mailmon-tasks@mailmon-dev-494511.iam.gserviceaccount.com" (or the resource may not exist).
+2026-05-07T06:41:31.435081Z failed to recover durable webhook deliveries after worker startup (FiberFailure) Error: 7 PERMISSION_DENIED: The principal (user or service account) lacks IAM permission "iam.serviceAccounts.actAs" for the task OIDC service account (or the resource may not exist).
 ```
 
 Current live IAM checks show the required grants are now present:
 
 ```text
-mailmon-worker has roles/cloudtasks.enqueuer on the mailmon-webhook-deliveries queue.
-mailmon-worker has roles/iam.serviceAccountUser on mailmon-tasks.
-Cloud Tasks service agent has roles/iam.serviceAccountTokenCreator on mailmon-tasks.
+The worker service account has roles/cloudtasks.enqueuer on the webhook delivery queue.
+The worker service account has roles/iam.serviceAccountUser on the task OIDC service account.
+The Cloud Tasks service agent has roles/iam.serviceAccountTokenCreator on the task OIDC service account.
 ```
 
 The remaining pending deliveries did not recover because the recovery path is one-shot at worker startup. A new worker revision or instance start after IAM propagation should re-run recovery. To prevent the same race in future Terraform applies, `infra/main.tf` now makes the worker Cloud Run service depend on `google_service_account_iam_member.worker_tasks_service_account_user`.
@@ -258,7 +260,7 @@ The remaining pending deliveries did not recover because the recovery path is on
 Cloud Run worker URL:
 
 ```text
-https://mailmon-worker-nsi5aiqucq-uc.a.run.app
+<staging-worker-url>
 ```
 
 Direct health check attempts with a user-account identity token returned Google Frontend HTML `404`.
@@ -280,7 +282,7 @@ gcloud run services proxy mailmon-worker \
 The proxy reported:
 
 ```text
-http://127.0.0.1:8081 proxies to https://mailmon-worker-nsi5aiqucq-uc.a.run.app
+http://127.0.0.1:8081 proxies to <staging-worker-url>
 ```
 
 But:
@@ -306,7 +308,7 @@ Published a synthetic Gmail Push Notification to the existing Gmail push topic:
 TOPIC=$(tofu output -raw gmail_pubsub_topic_name)
 
 gcloud pubsub topics publish "$TOPIC" \
-  --message='{"emailAddress":"mailmon.dev@gmail.com","historyId":5126}'
+  --message='{"emailAddress":"<connected-gmail-address>","historyId":5126}'
 ```
 
 Publish succeeded:
@@ -344,9 +346,89 @@ Interpretation:
 - Because `eventsEmitted` was `0`, this did not exercise active webhook delivery scheduling.
 - The old `pendingDeliveries: 7` remain unrecovered, so startup recovery for existing durable deliveries is still unproven.
 
+### 9. Post-Deploy Webhook Recovery Confirmation
+
+After deploying the Terraform dependency fix, Cloud Run created worker revision:
+
+```text
+<worker-revision-after-fix>
+created: 2026-05-07T17:43:26.482954Z
+traffic: 100%
+```
+
+Startup recovery then succeeded:
+
+```text
+2026-05-07T17:43:54.890309Z worker listening on http://0.0.0.0:8080 using gcp async transport
+2026-05-07T17:43:55.885579Z recovered 7 durable webhook deliveries for retry scheduling
+```
+
+Cloud Tasks immediately invoked the worker delivery endpoint for the recovered deliveries:
+
+```text
+2026-05-07T17:43:55.503150Z /internal/webhook-deliveries 200
+2026-05-07T17:43:56.477244Z /internal/webhook-deliveries 200
+2026-05-07T17:43:57.461667Z /internal/webhook-deliveries 200
+2026-05-07T17:43:58.480470Z /internal/webhook-deliveries 200
+2026-05-07T17:43:59.481355Z /internal/webhook-deliveries 200
+2026-05-07T17:44:00.474195Z /internal/webhook-deliveries 200
+2026-05-07T17:44:01.479165Z /internal/webhook-deliveries 200
+```
+
+No worker `ERROR` logs were observed for the new revision after deploy.
+
+Webhook receiver confirmation:
+
+```text
+The webhook.site receiver showed the recovered POST requests.
+```
+
+Interpretation:
+
+- The `iam.serviceAccounts.actAs` blocker is resolved.
+- Worker startup recovery re-armed the seven durable pending Webhook Deliveries.
+- Cloud Tasks OIDC dispatch to `/internal/webhook-deliveries` is working.
+- The external receiver accepted the recovered POSTs.
+- The remaining work is API observability confirmation and a fresh post-recovery Mailbox Event.
+
+### 10. Fresh Gmail Event End-To-End Confirmation
+
+After sending a brand-new email to the connected Gmail mailbox, the live production path completed:
+
+```text
+2026-05-07T18:28:12.484272Z /internal/gmail-push          202
+2026-05-07T18:28:13.248905Z /internal/sync                200
+2026-05-07T18:28:13.961193Z /internal/webhook-deliveries  200
+2026-05-07T18:28:14.948859Z /internal/webhook-deliveries  200
+```
+
+Mailbox observability confirmed the endpoint remained healthy:
+
+```text
+lastSuccessfulSyncAt: 2026-05-07T18:29:22.758Z
+currentCursor: 5205
+pendingDeliveries: 0
+processingDeliveries: 0
+failedDeliveries: 0
+lastDeliveryAt: 2026-05-07T18:28:15.104Z
+deliveryState: healthy
+lastDeliveryError: null
+```
+
+The later synthetic wake-up at `2026-05-07T18:29:22Z` also reached `/internal/gmail-push` and `/internal/sync`, but emitted no new events because there was no additional Gmail history beyond cursor `5205`.
+
+Interpretation:
+
+- Gmail Push Notifications are reaching the worker.
+- Pub/Sub OIDC invocation of `/internal/gmail-push` is working.
+- Mailbox sync dispatch to `/internal/sync` is working.
+- Fresh Mailbox Events are scheduled through Cloud Tasks.
+- Cloud Tasks OIDC invocation of `/internal/webhook-deliveries` is working.
+- The customer webhook receiver receives POST payloads and the endpoint remains healthy.
+
 ## Next Steps
 
-First, start a fresh worker revision or instance after the IAM grant is present so startup recovery can re-arm the existing `pending` deliveries. Then trigger a real Gmail event, preferably by sending a brand-new email to the connected test mailbox. A synthetic Gmail push can prove dispatch liveness, but it cannot validate webhook delivery unless the sync emits at least one Mailbox Event.
+No staging blocker remains from this validation thread. Keep the commands below as regression checks for future deployments.
 
 After the real event, verify sync and webhook delivery:
 

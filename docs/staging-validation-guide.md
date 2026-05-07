@@ -166,6 +166,27 @@ You need a connected Mailbox to generate events. Use the API to create a connect
    export ENDPOINT_ID="<the-endpoint-id>"
    ```
 
+   Also save the receiver URL. If you lose it later, recover it from the staging database:
+
+   ```bash
+   pnpm --filter @mailmon/db exec tsx -e '
+   import postgres from "postgres";
+   void (async () => {
+     const sql = postgres(process.env.DATABASE_URL!, { ssl: false });
+     try {
+       const rows = await sql`
+         select id, url, delivery_state, last_delivery_at
+         from webhook_endpoints
+         where id = ${process.env.ENDPOINT_ID!}
+       `;
+       console.log(JSON.stringify(rows, null, 2));
+     } finally {
+       await sql.end();
+     }
+   })();
+   '
+   ```
+
 2. **Subscribe to Mailbox Events:**
    Link the webhook endpoint to the mailbox you connected.
 
@@ -190,15 +211,36 @@ You need a connected Mailbox to generate events. Use the API to create a connect
    gcloud tasks queues describe mailmon-webhook-deliveries --location <your-gcp-region>
    ```
 
+   `gcloud tasks list` may show `0` tasks even when the system is healthy because tasks can be created and consumed quickly. Treat worker logs, receiver requests, and mailbox observability as stronger validation signals.
+
 5. **Verify Delivery at Receiver:**
    Check your webhook receiver site (`webhook.site`). You should see an incoming HTTP POST request containing the `message.created` Mailbox Event JSON payload.
 
 6. **Verify Worker Logs:**
    In the GCP Logs Explorer, query the worker service logs to confirm the delivery request arrived from Cloud Tasks with a `200 OK`.
+
+   ```bash
+   export SINCE="$(date -u -d '10 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')"
+
+   gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"mailmon-worker\" AND timestamp>=\"$SINCE\" AND httpRequest.requestUrl=~\"/internal/webhook-deliveries\"" \
+     --limit=100 \
+     --format='table(timestamp,severity,httpRequest.status,httpRequest.requestUrl,textPayload,jsonPayload.message,jsonPayload.code,jsonPayload.detail)'
+   ```
+
+7. **Verify Mailbox Observability:**
+
+   ```bash
+   curl -s -X GET "$API_URL/v1/mailboxes/$MAILBOX_ID/observability" \
+     -H "Authorization: Bearer $MAILMON_API_KEY" | jq
+   ```
+
+   Expected delivery state:
+
    ```text
-   resource.type="cloud_run_revision"
-   resource.labels.service_name="mailmon-worker"
-   httpRequest.requestUrl=~"/internal/webhook-deliveries"
+   webhookDeliveries[0].deliveryState: healthy
+   webhookDeliveries[0].pendingDeliveries: 0
+   webhookDeliveries[0].failedDeliveries: 0
+   webhookDeliveries[0].lastDeliveryAt: non-null and after the test event
    ```
 
 ---
@@ -245,9 +287,62 @@ You need a connected Mailbox to generate events. Use the API to create a connect
 
 6. **Verify State Update:**
    If you marked a message as read, fetch the message via the Mailmon API to confirm the labels list no longer contains `UNREAD`.
+
    ```bash
    curl -s -X GET "$API_URL/v1/messages?mailboxId=$MAILBOX_ID" \
      -H "Authorization: Bearer $MAILMON_API_KEY"
+   ```
+
+7. **Verify Full Fresh-Event Path:**
+   For a stronger end-to-end check, send a brand-new email to the connected Gmail mailbox. A real Gmail state change must exist before webhook delivery can occur.
+
+   Then query the worker logs:
+
+   ```bash
+   export SINCE="$(date -u -d '10 minutes ago' '+%Y-%m-%dT%H:%M:%SZ')"
+
+   gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"mailmon-worker\" AND timestamp>=\"$SINCE\" AND (httpRequest.requestUrl=~\"/internal/gmail-push\" OR httpRequest.requestUrl=~\"/internal/sync\" OR httpRequest.requestUrl=~\"/internal/webhook-deliveries\")" \
+     --limit=100 \
+     --format='table(timestamp,severity,httpRequest.status,httpRequest.requestUrl,textPayload,jsonPayload.message,jsonPayload.code,jsonPayload.detail)'
+   ```
+
+   Expected sequence:
+
+   ```text
+   /internal/gmail-push          202
+   /internal/sync                200
+   /internal/webhook-deliveries  200
+   ```
+
+   If Gmail push does not arrive on its own, publish a synthetic wake-up after the real Gmail change exists:
+
+   ```bash
+   CURRENT_CURSOR="$(curl -s "$API_URL/v1/mailboxes/$MAILBOX_ID/observability" \
+     -H "Authorization: Bearer $MAILMON_API_KEY" | jq -r '.cursor.currentCursor')"
+
+   NEXT_HISTORY_ID=$((CURRENT_CURSOR + 1))
+
+   gcloud pubsub topics publish projects/mailmon-dev-494511/topics/gmail-push \
+     --message="{\"emailAddress\":\"<connected-gmail-address>\",\"historyId\":$NEXT_HISTORY_ID}"
+   ```
+
+   Synthetic Pub/Sub messages are only wake-ups. If no real Gmail history exists beyond the stored cursor, `/internal/gmail-push` and `/internal/sync` can succeed while `latestSyncRun.eventsEmitted` remains `0`, the cursor does not advance, and no webhook delivery is scheduled. That is expected for duplicate wake-ups.
+
+   After the run, check observability:
+
+   ```bash
+   curl -s -X GET "$API_URL/v1/mailboxes/$MAILBOX_ID/observability" \
+     -H "Authorization: Bearer $MAILMON_API_KEY" | jq
+   ```
+
+   Expected after a fresh Mailbox Event:
+
+   ```text
+   latestSyncRun.eventsEmitted: greater than 0
+   cursor.currentCursor: advanced to the latest Gmail cursor
+   webhookDeliveries[0].lastDeliveryAt: updated after the test event
+   webhookDeliveries[0].pendingDeliveries: 0
+   webhookDeliveries[0].deliveryState: healthy
    ```
 
 ### Troubleshooting Auth Failures
@@ -257,3 +352,26 @@ If you encounter `401 Unauthorized` or `403 Forbidden` errors on the internal wo
 - Confirm the Worker's `MAILMON_ASYNC_TRANSPORT_MODE` environment variable is exactly `gcp`.
 - Ensure the Service Account attached to the Cloud Tasks Queue or Pub/Sub Push Subscription matches the expected OIDC audience configured in the worker.
 - Verify the Push Subscriptions and Cloud Tasks are explicitly configured to include an OIDC token in their requests.
+
+### Troubleshooting Webhook Delivery Scheduling
+
+If `pendingDeliveries` is non-zero but no `/internal/webhook-deliveries` calls appear:
+
+- Confirm the worker service account can enqueue to the Cloud Tasks queue.
+- Confirm the worker service account has `roles/iam.serviceAccountUser` on the service account used in the Cloud Tasks OIDC token.
+- Confirm the Cloud Tasks service agent has `roles/iam.serviceAccountTokenCreator` on that same OIDC service account.
+- Deploy or restart a worker revision after IAM propagation. Startup recovery for durable pending/in-flight Webhook Deliveries runs when the worker starts.
+
+Useful checks:
+
+```bash
+gcloud tasks queues get-iam-policy mailmon-webhook-deliveries \
+  --location=us-central1
+
+gcloud iam service-accounts get-iam-policy \
+  mailmon-tasks@mailmon-dev-494511.iam.gserviceaccount.com
+
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="mailmon-worker" AND (textPayload:"recovered" OR textPayload:"failed to recover durable webhook deliveries" OR httpRequest.requestUrl=~"/internal/webhook-deliveries")' \
+  --limit=100 \
+  --format='table(timestamp,severity,httpRequest.status,httpRequest.requestUrl,textPayload,jsonPayload.message,jsonPayload.code,jsonPayload.detail)'
+```
