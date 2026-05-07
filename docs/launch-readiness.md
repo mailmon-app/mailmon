@@ -281,7 +281,7 @@ Open decision:
 
 ### 5.4 Webhook Delivery
 
-This is the main launch-critical area still missing from the current implementation.
+This is a launch-critical area that must remain polished and continuously validated.
 
 Must have:
 
@@ -411,6 +411,17 @@ Should have:
 
 This section translates the current repo state into launch language.
 
+Current reassessment as of 2026-05-08:
+
+- Internal preview: 90-95% ready
+- Private beta: 70-75% ready
+- Public launch: 50-55% ready
+
+The backend product core is now strong enough to support real design-partner use.
+The remaining public-launch work is mostly launch polish: self-serve onboarding, API contract
+stability, docs accuracy, SDK ergonomics, security posture, support operations, and repeatable
+release validation.
+
 ### 6.1 Already Strong
 
 - Gmail connect flow
@@ -428,20 +439,27 @@ This section translates the current repo state into launch language.
 - live staging validation of Cloud Tasks-backed webhook delivery, including startup recovery of pending durable deliveries and successful OIDC dispatch to `/internal/webhook-deliveries`
 - live staging validation of the Gmail push/watch production path, including Pub/Sub OIDC intake at `/internal/gmail-push`, mailbox sync dispatch to `/internal/sync`, fresh Mailbox Event emission, and customer webhook delivery
 - durable Replay resources with create/get API routes, overlap conflict handling, empty-range completion, deterministic Mailbox Event selection, and scheduled re-delivery with stable `event.id` values
+- generated OpenAPI output, Fern SDK checks, and a published TypeScript SDK package
+- Mintlify docs now include a real introduction, Quickstart, authentication guide, webhook guide, Replay guide, API patterns guide, errors guide, and generated route reference pages
 
 ### 6.2 Immediate Launch Blockers
 
 - self-serve Workspace and API key management is still manual/operator-driven
-- official OpenAPI source of truth and public SDK release are not complete
-- public troubleshooting, production docs, and support runbooks are not launch-ready
+- API and PRD contracts are not fully settled: Connect Session examples still use snake_case, Replay examples still use a `destination` object and `202 Accepted`, while the actual public API and generated OpenAPI use camelCase fields, flat `webhookEndpointId`, and `201 Created`
+- the PRD still promises normalized Label state, but the public API exposes message `labelIds` rather than a coherent Label resource
+- the docs currently claim a TypeScript SDK webhook verification helper, but the generated SDK does not expose that helper yet
+- public troubleshooting, production docs, backup/restore guidance, and support runbooks are not launch-ready
+- production trust gaps remain: webhook signing secrets are stored as plain database text, deployer IAM is broad, alert policies are optional and disabled by default, and production backup/incident workflows are not yet documented
 
 ### 6.3 Likely Public-Launch Blockers
 
 - self-serve Workspace and API key management
-- official OpenAPI source of truth
-- official SDK
+- API contract stability and versioning policy
+- coherent Label scope decision
+- SDK webhook helpers and typed event ergonomics
 - polished troubleshooting and production docs
-- support workflows, alerting, and operator runbooks
+- support workflows, alerting, backup/restore, incident response, and operator runbooks
+- least-privilege IAM and protected/rotatable webhook secrets
 
 ### 6.4 Things That Can Be Deferred Until After Early Beta
 
@@ -456,27 +474,193 @@ This section translates the current repo state into launch language.
 This is not a replacement for the engineering plan.
 It is the recommended product-facing launch sequence.
 
-### 7.1 Bar For Internal Preview
+### 7.1 Phase A: Contract Freeze And Scope Truth
 
-- complete local listen/forward flow
-- ship a full quickstart
-- validate the full loop end-to-end with the team
+Goal:
 
-### 7.2 Bar For Private Beta
+- make the public promise match the API, SDK, docs, and PRD exactly
 
-- complete production delivery runtime
-- close critical security gaps
-- keep the validated Gmail push/watch and Cloud Tasks webhook paths covered by repeatable staging checks
-- add enough observability and support runbooks for external users
-- publish production integration docs
+Why this comes first:
 
-### 7.3 Bar For Public Launch
+- downstream docs, SDKs, examples, tests, and support material will churn until the v1 surface is stable
 
-- settle v1 scope precisely
-- ship OpenAPI as a contract source of truth
-- ship TypeScript SDK
-- ship Replay if it remains in the public promise
-- provide self-serve onboarding or a clearly productized onboarding path
+Required work:
+
+- choose one public JSON naming convention for v1 and apply it consistently across PRD examples, OpenAPI, docs, SDK examples, and API parsers
+- settle Connect Session request and response field names
+- settle Replay creation shape: either keep the implemented flat `webhookEndpointId` contract or move the API to the PRD `destination` object
+- settle Replay create status code: either document `201 Created` everywhere or change the API to `202 Accepted`
+- decide Label scope for v1:
+  - if Labels are in scope, add a coherent Label resource/read surface and docs
+  - if Labels are not in scope, change the PRD and docs to say message `labelIds` are exposed but Label resources are deferred
+- document the stable `v1` versioning and deprecation policy
+- make `apps/docs/api-reference/openapi.json` the generated source used by docs and SDK checks, with a formatting-stable generation path
+
+Exit criteria:
+
+- PRD examples, generated OpenAPI, TypeScript SDK types, README examples, and Mintlify examples all describe the same API
+- every public route has a stable operation, request shape, response shape, problem shape, and status code
+- the public promise no longer includes unimplemented Label behavior
+
+### 7.2 Phase B: First-Webhook Developer Journey
+
+Goal:
+
+- a new developer can reach first successful Webhook Delivery in under 30 minutes without founder assistance
+
+Required work:
+
+- replace the current operator-only Workspace and API Key path with either:
+  - a minimal self-serve control plane, or
+  - a productized private-beta onboarding flow with explicit request/approval/credential delivery steps
+- support API Key creation, revocation, rotation, and one-time raw key display
+- expose separate Test Key and Live Key behavior if environments differ
+- publish a complete Quickstart that starts from no account and ends at a verified Webhook Delivery
+- add a copy-paste sample receiver that:
+  - receives Mailbox Events
+  - verifies webhook signatures
+  - deduplicates by Mailbox Event ID
+  - returns the right status codes
+- add a local webhook testing guide using `mailmon listen` and Replay into localhost
+- add screenshots or command transcripts for the happy path from Workspace creation to first event
+
+Exit criteria:
+
+- one fresh developer can complete the documented flow against staging without direct help
+- the flow creates or obtains a Workspace, creates an API Key, connects a Mailbox, registers a Webhook Endpoint, creates a Subscription, receives a signed Mailbox Event, verifies the signature, and confirms Canonical Mailbox State through the API
+- the docs include an explicit fallback path when Gmail OAuth, webhook delivery, or API auth fails
+
+### 7.3 Phase C: SDK And Webhook Ergonomics
+
+Goal:
+
+- the official TypeScript SDK feels safe to use for the core integration loop
+
+Required work:
+
+- add typed Mailbox Event models for `message.created`, `message.updated`, and `thread.updated`
+- add a webhook signature verification helper that matches the actual delivery signing algorithm
+- add timestamp tolerance validation and constant-time signature comparison
+- add SDK README examples for:
+  - Connect Session creation
+  - Webhook Endpoint creation
+  - Subscription creation
+  - message/thread reads
+  - Replay creation and status polling
+  - webhook signature verification
+- add pagination helpers or a documented pagination pattern over `nextCursor`
+- expose typed Problem Envelope handling or document how SDK errors map to Problem Envelopes
+- add SDK tests for the webhook helper and error ergonomics
+
+Exit criteria:
+
+- the docs no longer mention SDK APIs that do not exist
+- a user can implement the documented Quickstart with the SDK without dropping to raw `fetch`
+- webhook signature verification has unit tests and at least one framework-neutral example
+
+### 7.4 Phase D: Production Trust And Security
+
+Goal:
+
+- production use feels trustworthy to a security-conscious beta customer
+
+Required work:
+
+- protect webhook signing secrets at rest:
+  - encrypt before persistence, or
+  - store only a KMS/Secret Manager reference with controlled retrieval
+- add webhook secret rotation:
+  - create new secret
+  - overlap old and new verification windows
+  - retire old secret
+  - audit rotations
+- replace broad deployer IAM with least-privilege roles for Cloud Run, Artifact Registry, Secret Manager, Cloud SQL, Pub/Sub, Cloud Tasks, Cloud Scheduler, Logging, Monitoring, and resource-level IAM updates
+- make operational alerts enabled by default for production
+- add dependency and container scanning in CI or document the equivalent release gate
+- document data retention for mailbox state, Mailbox Events, Webhook Deliveries, Sync Runs, Replays, and logs
+- document credential access auditability for API Keys, Gmail refresh tokens, and webhook signing secrets
+
+Exit criteria:
+
+- no launch-critical secret is stored as plaintext application data
+- production IAM avoids project-wide `roles/editor` and project IAM admin except for a tightly scoped bootstrap path
+- production alerting is on by default or blocked by an explicit launch decision
+- a security reviewer can trace API Key, Gmail credential, and webhook secret lifecycles end to end
+
+### 7.5 Phase E: Observability, Support, And Recovery
+
+Goal:
+
+- a customer or operator can diagnose common failures without reading source code
+
+Required work:
+
+- publish troubleshooting docs for:
+  - revoked Gmail token
+  - expired Gmail watch
+  - invalid Gmail history cursor
+  - lagging Mailbox
+  - duplicate Webhook Deliveries
+  - customer endpoint `5xx`
+  - customer endpoint `4xx`
+  - Replay conflict
+  - API authentication failure
+- publish an operator runbook for:
+  - reading Mailbox observability
+  - reading recent Sync Runs
+  - finding retry-exhausted Webhook Deliveries
+  - replaying a time range
+  - recovering stuck syncs
+  - handling dead-lettered mailbox dispatch
+  - rotating Gmail credential encryption keys
+- add or document dashboards for:
+  - sync lag
+  - failed Sync Runs
+  - reconnect-required Mailboxes
+  - Webhook Delivery failure rate
+  - retry-exhausted deliveries
+  - Cloud Tasks backlog
+  - Pub/Sub dead letters
+- add backup and restore procedure for Cloud SQL and critical secrets
+- define support severity levels, escalation path, and response expectations
+
+Exit criteria:
+
+- every known failure class in this document has a documented detection signal and remediation path
+- an operator can move from Workspace/Mailbox ID to relevant Sync Runs, Last Error, Mailbox Events, Webhook Deliveries, and Replay status
+- backup restore has been tested at least once in staging
+
+### 7.6 Phase F: Repeatable Staging Validation And Release Readiness
+
+Goal:
+
+- the launch process is repeatable, not a one-time manual proof
+
+Required work:
+
+- convert the staging validation guide into a repeatable checklist with recorded evidence fields
+- keep the Cloud Tasks Webhook Delivery path and Gmail push/watch path validated before each beta/public release
+- add a pre-release checklist covering:
+  - migrations
+  - OpenAPI generation
+  - SDK generation/checks
+  - docs build
+  - Terraform validation
+  - staging smoke test
+  - rollback plan
+  - known issues
+- define release channels:
+  - internal preview
+  - private beta
+  - public launch
+- define canary or staged rollout procedure for production
+- publish changelog/deprecation policy before public launch
+
+Exit criteria:
+
+- every release candidate has a recorded pass/fail validation record
+- rollback steps are documented and tested for API/worker deploys and database migration failures
+- public docs and SDK version match the deployed API version
 
 ## 8. Launch Checklist
 
@@ -494,20 +678,27 @@ Use this as the final go/no-go list.
 - [ ] Problem Envelopes are documented and consistent
 - [ ] Pagination semantics are documented and tested
 - [ ] API versioning and deprecation policy are published
+- [ ] PRD, OpenAPI, SDK, README, and docs examples all use the same request/response field names
+- [ ] Replay creation shape and status code are consistent everywhere
+- [ ] Label scope is either implemented or explicitly deferred
 
 ### Docs
 
-- [ ] Quickstart exists
-- [ ] API reference exists
-- [ ] webhook guide exists
+- [x] Quickstart exists
+- [x] API reference exists
+- [x] webhook guide exists
 - [ ] troubleshooting guide exists
 - [ ] production guide exists
+- [ ] local webhook receiver example exists
+- [ ] support escalation path is documented
 
 ### SDK
 
-- [ ] OpenAPI source of truth exists
-- [ ] official TypeScript SDK exists
+- [x] OpenAPI generation and Fern checks exist
+- [x] official TypeScript SDK package exists
 - [x] webhook verification helper exists
+- [ ] typed Mailbox Event models exist
+- [ ] pagination and Problem Envelope ergonomics are documented
 
 ### Runtime
 
@@ -521,9 +712,11 @@ Use this as the final go/no-go list.
 ### Security
 
 - [x] refresh tokens are encrypted before persistence
-- [ ] API keys can be created and rotated safely
+- [ ] API keys can be created, revoked, and rotated safely through a customer-facing or productized onboarding flow
 - [ ] webhook secrets are protected and rotatable
 - [ ] IAM and environment boundaries are production-safe
+- [ ] data retention policy is published
+- [ ] credential auditability is documented
 
 ### Operations
 
@@ -534,34 +727,66 @@ Use this as the final go/no-go list.
 - [x] webhook delivery retry-exhaustion handling exists
 - [ ] backup and restore plan exists
 - [ ] incident response runbook exists
+- [ ] staging validation is repeatable and recorded for every release candidate
+- [ ] rollback process is documented and tested
 
 ### Customer Experience
 
 - [ ] a new developer can reach first webhook delivery in under 30 minutes
 - [ ] failure states are diagnosable without contacting support
 - [ ] the support path is explicit when self-service fails
+- [ ] private-beta onboarding can be completed without manual database edits
+- [ ] public launch onboarding is self-serve or explicitly productized
 
-## 9. Decision Rules
+## 9. Usability Bar
+
+The product is usable for private beta when all of the following are true:
+
+- a developer can complete the documented first-webhook flow in staging
+- support can provision or approve access without direct database edits
+- the webhook integration path includes working signature verification examples
+- common broken states have documented diagnosis and recovery steps
+- operators have alerts and runbooks for failed syncs, retry-exhausted deliveries, dead letters, and reconnect-required Mailboxes
+- API/SDK/docs examples are internally consistent even if the product is still manually onboarded
+
+The product is usable for public launch when all private-beta criteria are true and:
+
+- onboarding is self-serve or deliberately productized
+- API Keys can be created, revoked, and rotated through the public product surface
+- production IAM and secret handling pass a focused security review
+- backup/restore and incident response are documented and tested
+- SDK and docs are versioned against the deployed API
+- a new developer can evaluate, integrate, and recover from common failures without bespoke support
+
+## 10. Decision Rules
 
 Use these rules to avoid fuzzy launch decisions.
 
 - Do not call the product launched if durable events exist but durable delivery does not.
 - Do not call the product production-ready if refresh tokens are not encrypted.
 - Do not call the product self-serve if Workspace and API key provisioning are manual back-office steps.
+- Do not call the API stable while PRD examples, OpenAPI, SDK examples, and route parsers disagree.
 - Do not market Replay until Replay is real.
+- Do not market normalized Labels until a coherent Label model is either implemented or explicitly deferred.
+- Do not document SDK helpers that are not exported by the released SDK.
 - Do not widen public scope beyond what docs, SDKs, and support can explain clearly.
 
-## 10. Summary
+## 11. Summary
 
-Mailmon is close to being a real product, but not close enough to launch publicly just because the sync engine is working.
+Mailmon is now close to a credible private beta, but it is not public-launch ready.
+The core system is real: Gmail connectivity, Mailbox creation, Initial Sync, Incremental Sync,
+cursor safety, lease recovery, Canonical Mailbox State reads, durable Mailbox Events, Webhook
+Delivery, Replay, staging GCP paths, observability routes, CLI tools, OpenAPI generation, and the
+TypeScript SDK all exist.
 
-The product will feel finished when:
+The product becomes launchable when the remaining work shifts from "backend works" to "developer
+product is trustworthy":
 
-- the first integration is fast
-- the production behavior is trustworthy
-- the docs explain the system clearly
-- the webhook runtime is real
-- the recovery story is real
-- the customer does not need a founder to decode failures
+- the first integration is fast and self-explanatory
+- the public contract is stable and consistent everywhere
+- the SDK does what the docs say it does
+- the production security posture is defensible
+- operators can diagnose and recover failures from documented runbooks
+- customers do not need a founder to decode failures
 
 That is the launch bar.
