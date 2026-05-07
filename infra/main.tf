@@ -522,6 +522,7 @@ resource "google_cloud_run_v2_service" "worker" {
   depends_on = [
     google_cloud_tasks_queue_iam_member.worker_webhook_delivery_enqueuer,
     google_project_iam_member.worker_cloud_sql_client,
+    google_service_account_iam_member.worker_tasks_service_account_user,
     google_secret_manager_secret_iam_member.worker_database_url,
     google_secret_manager_secret_iam_member.worker_gmail_oauth_client_id,
     google_secret_manager_secret_iam_member.worker_gmail_oauth_client_secret,
