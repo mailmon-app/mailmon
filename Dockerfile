@@ -2,10 +2,12 @@
 
 # Base stage for shared configuration
 FROM node:22-alpine AS base
+ARG PNPM_VERSION=10.32.1
+ARG TURBO_VERSION=2.9.6
 ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
-RUN pnpm add -g turbo@^2
+ENV PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+RUN pnpm add -g turbo@${TURBO_VERSION}
 
 # Prune stage to extract only necessary workspace files
 FROM base AS pruner
@@ -39,10 +41,12 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 # Re-enable corepack
-RUN corepack enable
+ARG PNPM_VERSION=10.32.1
+ARG TURBO_VERSION=2.9.6
 ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN pnpm add -g turbo@^2
+ENV PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+RUN pnpm add -g turbo@${TURBO_VERSION}
 
 # Set production environment
 ENV NODE_ENV=production
@@ -71,4 +75,4 @@ USER nodejs
 # Use the app name to start the specific filtered app from the workspace root
 ARG APP_NAME
 ENV APP_NAME=${APP_NAME}
-CMD pnpm --filter=${APP_NAME} start
+CMD ["sh", "-c", "exec pnpm --filter=${APP_NAME} start"]
