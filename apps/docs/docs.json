@@ -19,7 +19,13 @@
           },
           {
             "group": "Integration",
-            "pages": ["guides/authentication", "guides/webhooks", "guides/replays"]
+            "pages": [
+              "guides/authentication",
+              "guides/webhooks",
+              "guides/replays",
+              "guides/api-patterns",
+              "guides/errors"
+            ]
           }
         ]
       },

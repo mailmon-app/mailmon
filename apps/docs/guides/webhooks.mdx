@@ -81,3 +81,45 @@ To verify the signature:
 <Tip>
 When using the `@mailmon.dev/sdk`, you can use the built-in webhook verification utility to perform this check automatically.
 </Tip>
+
+```typescript
+import { MailmonClient } from "@mailmon.dev/sdk";
+
+const client = new MailmonClient({ token: process.env.MAILMON_API_KEY });
+
+// In your webhook handler (e.g., Express)
+app.post("/webhooks/mailmon", express.raw({ type: "application/json" }), (req, res) => {
+  const signature = req.headers["x-mailmon-signature"];
+  const secret = process.env.MAILMON_WEBHOOK_SECRET;
+
+  try {
+    const event = client.webhooks.constructEvent(req.body, signature, secret);
+    console.log("Verified event:", event.type);
+    res.status(200).send();
+  } catch (err) {
+    res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+});
+```
+
+## Testing Webhooks Locally
+
+When developing locally, your application is typically not accessible from the public internet. To receive webhooks from Mailmon on your local machine, you have two options:
+
+### 1. Using the Mailmon CLI
+
+The Mailmon CLI can forward events from your Mailmon workspace directly to your local server.
+
+```bash
+# Forward webhooks to a local port
+mailmon webhooks listen --forward-to http://localhost:3000/webhooks/mailmon
+```
+
+### 2. Using a Tunneling Service
+
+Alternatively, you can use a tunneling service like [ngrok](https://ngrok.com/) to expose your local server to the internet.
+
+```bash
+ngrok http 3000
+```
+Then, register the provided ngrok URL as a Webhook Endpoint in your Mailmon workspace.

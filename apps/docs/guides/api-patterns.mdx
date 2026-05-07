@@ -1,0 +1,59 @@
+---
+title: "API Patterns"
+description: "Common patterns for Pagination and Rate Limiting in the Mailmon API"
+icon: 'layer-group'
+---
+
+## Pagination
+
+Mailmon uses **cursor-based pagination** for all list endpoints (such as fetching Messages or Threads). This ensures that you don't miss items or see duplicates if data is added or removed while you are paginating.
+
+### Requesting a List
+
+When you make a request to a list endpoint, you can provide an optional `limit` parameter to specify the maximum number of items to return (default is 50, maximum is 100).
+
+```typescript
+const response = await client.getV1Messages({
+  mailboxId: "mbx_...",
+  limit: 50
+});
+```
+
+### Navigating Pages
+
+The response will contain a `data` array with your items, and a `meta` object with pagination details.
+
+```json
+{
+  "data": [
+    // ... items ...
+  ],
+  "meta": {
+    "nextCursor": "curs_123abc...",
+    "hasMore": true
+  }
+}
+```
+
+To fetch the next page, pass the `nextCursor` value as the `cursor` parameter in your subsequent request:
+
+```typescript
+const nextPageResponse = await client.getV1Messages({
+  mailboxId: "mbx_...",
+  limit: 50,
+  cursor: response.meta.nextCursor
+});
+```
+
+Keep fetching until `hasMore` is `false` or `nextCursor` is `null`.
+
+## Rate Limits
+
+The Mailmon API applies rate limits to ensure stability and fair use. When you exceed the limit, the API will return a `429 Too Many Requests` status code.
+
+We include standard rate limit headers in every response:
+- `x-ratelimit-limit`: The maximum number of requests allowed in the current window.
+- `x-ratelimit-remaining`: The number of requests remaining in the current window.
+- `x-ratelimit-reset`: The time (in epoch seconds) when the rate limit window resets.
+
+We recommend implementing exponential backoff in your application to handle `429` responses gracefully. The official `@mailmon.dev/sdk` handles rate limit retries automatically by default.
