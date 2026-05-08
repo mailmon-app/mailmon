@@ -2,6 +2,7 @@ import * as Mailmon from "./api/index.mjs";
 import type { BaseClientOptions, BaseRequestOptions } from "./BaseClient.mjs";
 import { type NormalizedClientOptionsWithAuth } from "./BaseClient.mjs";
 import * as core from "./core/index.mjs";
+import * as webhooks from "./webhooks.mjs";
 export declare namespace MailmonClient {
     type Options = BaseClientOptions;
     interface RequestOptions extends BaseRequestOptions {
@@ -9,6 +10,7 @@ export declare namespace MailmonClient {
 }
 export declare class MailmonClient {
     protected readonly _options: NormalizedClientOptionsWithAuth<MailmonClient.Options>;
+    readonly webhooks: typeof webhooks;
     constructor(options: MailmonClient.Options);
     /**
      * @param {Mailmon.PostV1MailboxesConnectSessionsRequest} request

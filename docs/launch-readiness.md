@@ -504,7 +504,7 @@ Use this as the final go/no-go list.
 
 - [ ] OpenAPI source of truth exists
 - [ ] official TypeScript SDK exists
-- [ ] webhook verification helper exists
+- [x] webhook verification helper exists
 
 ### Runtime
 

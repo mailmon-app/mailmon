@@ -12,6 +12,7 @@ The Mailmon TypeScript library provides convenient access to the Mailmon APIs fr
 - [Request and Response Types](#request-and-response-types)
 - [Exception Handling](#exception-handling)
 - [Advanced](#advanced)
+  - [Webhook Signature Verification](#webhook-signature-verification)
   - [Additional Headers](#additional-headers)
   - [Additional Query String Parameters](#additional-query-string-parameters)
   - [Retries](#retries)
@@ -89,6 +90,29 @@ try {
 ```
 
 ## Advanced
+
+### Webhook Signature Verification
+
+Use this helper on your server with the raw request body and the endpoint signing secret returned when the
+Webhook Endpoint was created.
+
+```typescript
+import { webhooks } from "@mailmon.dev/sdk";
+
+const signature = request.headers["x-mailmon-signature"];
+const secret = process.env.MAILMON_WEBHOOK_SECRET;
+
+if (typeof signature !== "string" || secret === undefined) {
+  throw new Error("Missing webhook signature or secret.");
+}
+
+const event = webhooks.constructEvent(rawRequestBody, signature, secret);
+```
+
+`constructEvent` verifies the `t=<timestamp>,v1=<hex_hmac>` header with HMAC-SHA256, enforces a default
+5 minute timestamp tolerance, and returns the parsed Mailbox Event JSON. Use
+`webhooks.verifySignature` when you only need signature validation; it returns `true` or throws
+`MailmonWebhookSignatureError`.
 
 ### Additional Headers
 

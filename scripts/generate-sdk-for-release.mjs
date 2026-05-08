@@ -42,6 +42,7 @@ try {
 
 await run("pnpm", ["openapi:generate"]);
 await run("fern", ["generate", "--group", "ts-sdk", "--local", "--force"]);
+await run("node", ["scripts/apply-sdk-customizations.mjs"]);
 
 if (changelog !== undefined) {
   await mkdir(dirname(changelogPath), { recursive: true });
