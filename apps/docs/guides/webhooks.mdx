@@ -1,7 +1,7 @@
 ---
 title: "Webhooks"
 description: "Receive real-time updates when mailbox data changes"
-icon: 'satellite-dish'
+icon: "satellite-dish"
 ---
 
 Mailmon uses webhooks to notify your application when events happen in your connected mailboxes. Instead of continuously polling the API for new messages, you provide Mailmon with a URL, and we send a POST request to that URL whenever a subscribed event occurs.
@@ -42,7 +42,7 @@ A typical webhook payload contains the event metadata and a `data` object with t
 
 ## Delivery Guarantees
 
-Mailmon guarantees **at-least-once delivery** for all webhook events. 
+Mailmon guarantees **at-least-once delivery** for all webhook events.
 
 If your server does not respond with a `2xx` HTTP status code (for example, if it times out, returns a `500 Internal Server Error`, or the network connection fails), Mailmon will automatically retry delivering the event using an exponential backoff schedule.
 
@@ -50,7 +50,7 @@ Because delivery is at-least-once, it is possible for your endpoint to receive t
 
 ## Securing Your Webhooks
 
-To ensure that webhook requests are actually coming from Mailmon and have not been tampered with, every webhook request includes a signature. 
+To ensure that webhook requests are actually coming from Mailmon and have not been tampered with, every webhook request includes a signature.
 
 Mailmon includes the following headers in every webhook request:
 
@@ -79,13 +79,12 @@ To verify the signature:
 5. **Check the timestamp** to prevent replay attacks. We recommend rejecting payloads where the timestamp is older than 5 minutes.
 
 <Tip>
-When using the `@mailmon.dev/sdk`, you can use the built-in webhook verification utility to perform this check automatically.
+  When using the `@mailmon.dev/sdk`, you can use the built-in webhook verification utility to
+  perform this check automatically.
 </Tip>
 
 ```typescript
-import { MailmonClient } from "@mailmon.dev/sdk";
-
-const client = new MailmonClient({ token: process.env.MAILMON_API_KEY });
+import { webhooks } from "@mailmon.dev/sdk";
 
 // In your webhook handler (e.g., Express)
 app.post("/webhooks/mailmon", express.raw({ type: "application/json" }), (req, res) => {
@@ -93,11 +92,16 @@ app.post("/webhooks/mailmon", express.raw({ type: "application/json" }), (req, r
   const secret = process.env.MAILMON_WEBHOOK_SECRET;
 
   try {
-    const event = client.webhooks.constructEvent(req.body, signature, secret);
+    if (typeof signature !== "string" || secret === undefined) {
+      throw new Error("Missing webhook signature or secret.");
+    }
+
+    const event = webhooks.constructEvent(req.body, signature, secret);
     console.log("Verified event:", event.type);
     res.status(200).send();
   } catch (err) {
-    res.status(400).send(`Webhook Error: ${err.message}`);
+    const message = err instanceof Error ? err.message : "Invalid webhook.";
+    res.status(400).send(`Webhook Error: ${message}`);
   }
 });
 ```
@@ -122,4 +126,5 @@ Alternatively, you can use a tunneling service like [ngrok](https://ngrok.com/) 
 ```bash
 ngrok http 3000
 ```
+
 Then, register the provided ngrok URL as a Webhook Endpoint in your Mailmon workspace.

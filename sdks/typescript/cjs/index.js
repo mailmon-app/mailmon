@@ -36,8 +36,9 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MailmonTimeoutError = exports.MailmonError = exports.MailmonEnvironment = exports.MailmonClient = exports.Mailmon = void 0;
+exports.MailmonWebhookSignatureError = exports.MailmonTimeoutError = exports.MailmonError = exports.MailmonEnvironment = exports.MailmonClient = exports.webhooks = exports.Mailmon = void 0;
 exports.Mailmon = __importStar(require("./api/index.js"));
+exports.webhooks = __importStar(require("./webhooks.js"));
 var Client_js_1 = require("./Client.js");
 Object.defineProperty(exports, "MailmonClient", { enumerable: true, get: function () { return Client_js_1.MailmonClient; } });
 var environments_js_1 = require("./environments.js");
@@ -45,4 +46,6 @@ Object.defineProperty(exports, "MailmonEnvironment", { enumerable: true, get: fu
 var index_js_1 = require("./errors/index.js");
 Object.defineProperty(exports, "MailmonError", { enumerable: true, get: function () { return index_js_1.MailmonError; } });
 Object.defineProperty(exports, "MailmonTimeoutError", { enumerable: true, get: function () { return index_js_1.MailmonTimeoutError; } });
+var webhooks_js_1 = require("./webhooks.js");
+Object.defineProperty(exports, "MailmonWebhookSignatureError", { enumerable: true, get: function () { return webhooks_js_1.MailmonWebhookSignatureError; } });
 __exportStar(require("./exports.js"), exports);
