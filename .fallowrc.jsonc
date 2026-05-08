@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "ignorePatterns": [
+    "sdks/typescript/**",
+    "**/*.d.ts",
+    "**/*.d.mts",
+    "**/.turbo/**",
+    "**/dist/**",
+    "**/coverage/**"
+  ],
+  "dynamicallyLoaded": [
+    "apps/docs/docs.json",
+    "apps/docs/**/*.mdx",
+    "apps/docs/**/*.svg",
+    "apps/docs/images/**",
+    "apps/docs/logo/**"
+  ],
+  "ignoreDependencies": [
+    // Mintlify CLI/runtime content is not statically imported by docs pages.
+    "mint",
+    // Docs examples import the published SDK; the docs workspace does not execute it.
+    "@mailmon.dev/sdk",
+    // Varlock loads this plugin from .env.schema comments at runtime.
+    "@varlock/google-secret-manager-plugin",
+    // hono-openapi wires this validator integration indirectly.
+    "@hono/standard-validator"
+  ],
+  "rules": {
+    "unresolved-imports": "error",
+    "unlisted-dependencies": "error",
+    "unused-files": "warn",
+    "unused-exports": "warn",
+    "unused-types": "warn",
+    "unused-dependencies": "warn",
+    "unused-class-members": "warn",
+    "duplicate-exports": "warn"
+  },
+  "duplicates": {
+    "mode": "mild",
+    "minTokens": 80,
+    "minLines": 10,
+    "threshold": 0,
+    "ignore": ["apps/docs/**", "sdks/typescript/**"],
+    "ignoreImports": true
+  },
+  "health": {
+    "maxCyclomatic": 20,
+    "maxCognitive": 15,
+    "maxCrap": 30,
+    "ignore": ["apps/docs/**", "sdks/typescript/**"]
+  },
+  "audit": {
+    "gate": "new-only"
+  }
+}

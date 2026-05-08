@@ -11,6 +11,7 @@ import {
 } from "@mailmon/core";
 import { Effect, Layer, Option, Ref } from "effect";
 
+/** @public */
 export const defaultBootstrapMailbox: MailboxResource = {
   id: "mbx_demo",
   object: "mailbox",
@@ -24,6 +25,7 @@ export const defaultBootstrapMailbox: MailboxResource = {
   lastError: null,
 };
 
+/** @public */
 export const createBootstrapMailboxCatalogLayer = (
   mailboxes: ReadonlyArray<MailboxResource> = [defaultBootstrapMailbox],
 ) =>
@@ -32,6 +34,7 @@ export const createBootstrapMailboxCatalogLayer = (
       Effect.succeed(Option.fromNullable(mailboxes.find((mailbox) => mailbox.id === mailboxId))),
   });
 
+/** @public */
 export const createBootstrapSyncRunStoreLayer = Layer.effect(
   SyncRunStore,
   Effect.gen(function* () {
@@ -51,6 +54,7 @@ export const createBootstrapSyncRunStoreLayer = Layer.effect(
   }),
 );
 
+/** @public */
 export const createBootstrapMailboxStateStoreLayer = Layer.succeed(MailboxStateStore, {
   getMailboxCursor: () => Effect.succeed(null),
   applySyncResult: ({ eventsEmitted }) =>
@@ -63,6 +67,7 @@ export const createBootstrapMailboxStateStoreLayer = Layer.succeed(MailboxStateS
     }),
 });
 
+/** @public */
 export const createBootstrapWebhookDeliveryStoreLayer = Layer.succeed(WebhookDeliveryStore, {
   createWebhookDeliveriesForMailboxEvents: (mailboxEventIds) =>
     Effect.succeed(
@@ -83,6 +88,7 @@ export const createBootstrapWebhookDeliveryStoreLayer = Layer.succeed(WebhookDel
   completeWebhookDeliveryAttempt: () => Effect.succeed(true),
 });
 
+/** @public */
 export const createBootstrapWebhookDeliverySchedulerLayer = Layer.succeed(
   WebhookDeliveryScheduler,
   {
@@ -95,6 +101,7 @@ interface BootstrapMailboxLease {
   readonly expiresAt: string;
 }
 
+/** @public */
 export const createBootstrapMailboxSyncCoordinatorLayer = Layer.effect(
   MailboxSyncCoordinator,
   Effect.gen(function* () {

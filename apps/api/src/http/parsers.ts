@@ -2,7 +2,7 @@ import { type ProblemDetails } from "@mailmon/core";
 import { Schema } from "effect";
 
 export const DEFAULT_LIST_LIMIT = 50;
-export const MAX_LIST_LIMIT = 100;
+const MAX_LIST_LIMIT = 100;
 export const INVALID_JSON_DETAIL = "Body must be valid JSON.";
 export const INVALID_LIMIT_DETAIL = `Query parameter limit must be an integer between 1 and ${MAX_LIST_LIMIT}.`;
 export const MISSING_MAILBOX_QUERY_DETAIL = "Query must include mailboxId or mailbox_id.";
@@ -48,7 +48,7 @@ export const CreateWebhookEndpointBodySchema = Schema.Struct({
   description: Schema.optional(Schema.NullOr(NonEmptyString)),
 });
 
-export const WebhookEventTypeBodySchema = Schema.Literal(
+const WebhookEventTypeBodySchema = Schema.Literal(
   "message.created",
   "message.updated",
   "thread.updated",

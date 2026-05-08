@@ -328,7 +328,7 @@ const getWorkerHttpProcessors = (runtime: WorkerHttpServerRuntime) => {
   return runtime.runPromise(WorkerHttpProcessors);
 };
 
-export const createWorkerApp = (
+const createWorkerApp = (
   options: Pick<WorkerHttpRuntimeOptions, "asyncTransportMode" | "internalAuth">,
   runtime: WorkerHttpServerRuntime,
 ) => {

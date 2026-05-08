@@ -3166,7 +3166,7 @@ export const createMailboxStateStoreLayer = Layer.effect(
   }),
 );
 
-export const createMailboxSyncDispatchExhaustionStoreLayer = Layer.effect(
+const createMailboxSyncDispatchExhaustionStoreLayer = Layer.effect(
   MailboxSyncDispatchExhaustionStore,
   Effect.gen(function* () {
     const database = yield* MailmonDatabase;

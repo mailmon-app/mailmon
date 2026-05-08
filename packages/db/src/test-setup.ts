@@ -12,6 +12,7 @@ export interface IsolatedDatabase {
 
 const DEFAULT_DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://mailmon:mailmon@localhost:5432/mailmon";
+// fallow-ignore-next-line unresolved-import
 const migrationDirectory = new URL("../drizzle/", import.meta.url);
 const templateDatabaseName = "mailmon_test_template";
 const templateReadyMarkerTable = "mailmon_test_template_ready";
