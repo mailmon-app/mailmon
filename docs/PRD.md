@@ -76,7 +76,8 @@ Expose normalized:
 
 - messages
 - threads
-- labels
+
+Labels are deferred as first-class v1 resources. Message and event payloads expose provider label IDs as `labelIds` so customers can observe Gmail label state without Mailmon promising a normalized Label API in v1.
 
 ### D. Event System
 
@@ -108,6 +109,7 @@ With:
 
 - AI features
 - semantic signals (requires_reply etc.)
+- first-class Label resources and Label APIs
 - inbox UI
 - multi-provider (Outlook/IMAP)
 - autonomous actions
@@ -188,7 +190,7 @@ Customer
 
 ### message_labels
 
-- label state
+- provider label ID state used to populate message `labelIds`; not exposed as a first-class v1 Label resource
 
 ### sync_runs
 
@@ -307,9 +309,9 @@ Content-Type: application/json
 
 {
   "provider": "gmail",
-  "tenant_external_id": "cust_123",
-  "mailbox_external_id": "user_456",
-  "redirect_url": "https://app.example.com/settings/integrations/gmail/callback"
+  "tenantExternalId": "cust_123",
+  "mailboxExternalId": "user_456",
+  "redirectUrl": "https://app.example.com/settings/integrations/gmail/callback"
 }
 ```
 
@@ -319,12 +321,12 @@ Content-Type: application/json
 {
   "id": "mcs_123",
   "object": "connect_session",
-  "connect_url": "https://connect.mailmon.dev/oauth/gmail/mcs_123",
-  "expires_at": "2026-03-24T10:00:00Z"
+  "connectUrl": "https://connect.mailmon.dev/oauth/gmail/mcs_123",
+  "expiresAt": "2026-03-24T10:00:00Z"
 }
 ```
 
-Developer sends the user to `connect_url`.
+Developer sends the user to `connectUrl`.
 
 After successful OAuth, Mailmon creates the mailbox resource and starts initial sync.
 
@@ -357,7 +359,7 @@ This forces mailbox identity to stay unique and avoids ambiguous duplicate state
 #### Fetch mailbox status
 
 ```http
-GET /v1/mailboxes/{mailbox_id}
+GET /v1/mailboxes/{mailboxId}
 Authorization: Bearer <mailmon_api_key>
 ```
 
@@ -368,13 +370,13 @@ Authorization: Bearer <mailmon_api_key>
   "id": "mbx_123",
   "object": "mailbox",
   "provider": "gmail",
-  "email_address": "user@gmail.com",
+  "emailAddress": "user@gmail.com",
   "status": "active",
-  "sync_state": "healthy",
-  "watch_state": "active",
-  "initialized_at": "2026-03-23T10:05:00Z",
-  "last_successful_sync_at": "2026-03-23T10:06:10Z",
-  "last_error": null
+  "syncState": "healthy",
+  "watchState": "active",
+  "initializedAt": "2026-03-23T10:05:00Z",
+  "lastSuccessfulSyncAt": "2026-03-23T10:06:10Z",
+  "lastError": null
 }
 ```
 
@@ -386,14 +388,14 @@ Authorization: Bearer <mailmon_api_key>
 - `reconnect_required`
 - `disabled`
 
-`sync_state`:
+`syncState`:
 
 - `initializing`
 - `healthy`
 - `lagging`
 - `failed`
 
-`watch_state`:
+`watchState`:
 
 - `active`
 - `expiring`
@@ -411,12 +413,12 @@ Example:
 {
   "id": "mbx_123",
   "status": "reconnect_required",
-  "sync_state": "failed",
-  "watch_state": "expired",
-  "last_error": {
+  "syncState": "failed",
+  "watchState": "expired",
+  "lastError": {
     "code": "gmail_auth_revoked",
     "message": "The Gmail refresh token could not be refreshed.",
-    "occurred_at": "2026-03-23T10:20:00Z",
+    "occurredAt": "2026-03-23T10:20:00Z",
     "retryable": false
   }
 }
@@ -447,7 +449,7 @@ Content-Type: application/json
   "object": "webhook_endpoint",
   "url": "https://app.example.com/webhooks/mailmon",
   "secret": "whsec_...",
-  "created_at": "2026-03-23T10:10:00Z"
+  "createdAt": "2026-03-23T10:10:00Z"
 }
 ```
 
@@ -456,17 +458,17 @@ The secret is shown once and used by the customer to verify webhook signatures.
 #### Update webhook subscriptions
 
 ```http
-POST /v1/webhook-endpoints/{endpoint_id}/subscriptions
+POST /v1/webhook-endpoints/{endpointId}/subscriptions
 Authorization: Bearer <mailmon_api_key>
 Content-Type: application/json
 
 {
-  "event_types": [
+  "eventTypes": [
     "message.created",
     "message.updated",
     "thread.updated"
   ],
-  "mailbox_ids": ["mbx_123"]
+  "mailboxIds": ["mbx_123"]
 }
 ```
 
@@ -477,9 +479,9 @@ They are represented on the webhook endpoint resource and in delivery logs.
 
 Example endpoint health fields:
 
-- `delivery_state`: `healthy | degraded | failing`
-- `last_delivery_at`
-- `last_delivery_error`
+- `deliveryState`: `healthy | degraded | failing`
+- `lastDeliveryAt`
+- `lastDeliveryError`
 
 ---
 
@@ -671,20 +673,17 @@ Authorization: Bearer <mailmon_api_key>
 Content-Type: application/json
 
 {
-  "mailbox_id": "mbx_123",
-  "start_time": "2026-02-21T00:00:00Z",
-  "end_time": "2026-03-23T00:00:00Z",
-  "destination": {
-    "type": "webhook_endpoint",
-    "webhook_endpoint_id": "whe_123"
-  }
+  "mailboxId": "mbx_123",
+  "webhookEndpointId": "whe_123",
+  "startTime": "2026-02-21T00:00:00Z",
+  "endTime": "2026-03-23T00:00:00Z"
 }
 ```
 
 #### Success response
 
 ```http
-202 Accepted
+201 Created
 ```
 
 ```json
@@ -692,9 +691,15 @@ Content-Type: application/json
   "id": "rpl_123",
   "object": "replay",
   "status": "queued",
-  "mailbox_id": "mbx_123",
-  "start_time": "2026-02-21T00:00:00Z",
-  "end_time": "2026-03-23T00:00:00Z"
+  "mailboxId": "mbx_123",
+  "webhookEndpointId": "whe_123",
+  "startTime": "2026-02-21T00:00:00Z",
+  "endTime": "2026-03-23T00:00:00Z",
+  "eventsReplayed": null,
+  "createdAt": "2026-03-23T10:00:00Z",
+  "startedAt": null,
+  "completedAt": null,
+  "lastError": null
 }
 ```
 
@@ -718,9 +723,17 @@ Example terminal replay state:
 ```json
 {
   "id": "rpl_123",
+  "object": "replay",
   "status": "completed",
-  "mailbox_id": "mbx_123",
-  "events_replayed": 0
+  "mailboxId": "mbx_123",
+  "webhookEndpointId": "whe_123",
+  "startTime": "2026-02-21T00:00:00Z",
+  "endTime": "2026-03-23T00:00:00Z",
+  "eventsReplayed": 0,
+  "createdAt": "2026-03-23T10:00:00Z",
+  "startedAt": "2026-03-23T10:00:01Z",
+  "completedAt": "2026-03-23T10:00:02Z",
+  "lastError": null
 }
 ```
 
@@ -749,7 +762,7 @@ If a replay for the same mailbox, destination, and overlapping time range is alr
 #### Get replay status
 
 ```http
-GET /v1/replays/{replay_id}
+GET /v1/replays/{replayId}
 Authorization: Bearer <mailmon_api_key>
 ```
 
@@ -856,7 +869,7 @@ A request like `GET /v1/mailboxes/{id}` should still return `200` even if the ma
 - `403 Forbidden` — workspace does not own resource
 - `404 Not Found` — resource absent in workspace scope
 - `409 Conflict` — duplicate connect or replay conflict
-- `422 Unprocessable Entity` — semantically invalid request (example: end_time before start_time)
+- `422 Unprocessable Entity` — semantically invalid request (example: `endTime` before `startTime`)
 - `429 Too Many Requests` — Mailmon API rate limit exceeded
 - `500 Internal Server Error` — unexpected Mailmon failure
 - `503 Service Unavailable` — temporary Mailmon outage or degraded control plane
@@ -891,12 +904,12 @@ Example mailbox state:
 ```json
 {
   "id": "mbx_123",
-  "sync_state": "lagging",
-  "last_error": {
+  "syncState": "lagging",
+  "lastError": {
     "code": "gmail_rate_limited",
     "message": "Gmail temporarily rate-limited sync operations for this mailbox.",
     "retryable": true,
-    "occurred_at": "2026-03-23T10:30:00Z"
+    "occurredAt": "2026-03-23T10:30:00Z"
   }
 }
 ```
@@ -905,7 +918,7 @@ Example mailbox state:
 
 #### Invalid range
 
-If `end_time <= start_time`:
+If `endTime <= startTime`:
 
 ```http
 422 Unprocessable Entity
