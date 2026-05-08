@@ -447,7 +447,6 @@ release validation.
 - self-serve Workspace and API key management is still manual/operator-driven
 - API and PRD contracts are not fully settled: Connect Session examples still use snake_case, Replay examples still use a `destination` object and `202 Accepted`, while the actual public API and generated OpenAPI use camelCase fields, flat `webhookEndpointId`, and `201 Created`
 - the PRD still promises normalized Label state, but the public API exposes message `labelIds` rather than a coherent Label resource
-- the docs currently claim a TypeScript SDK webhook verification helper, but the generated SDK does not expose that helper yet
 - public troubleshooting, production docs, backup/restore guidance, and support runbooks are not launch-ready
 - production trust gaps remain: webhook signing secrets are stored as plain database text, deployer IAM is broad, alert policies are optional and disabled by default, and production backup/incident workflows are not yet documented
 
