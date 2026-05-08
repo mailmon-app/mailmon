@@ -1,5 +1,11 @@
 # @mailmon.dev/sdk
 
+## 0.0.3
+
+### Patch Changes
+
+- b3ee57a: Add webhook signature verification helpers and expose them from the SDK.
+
 ## 0.0.2
 
 ### Patch Changes
