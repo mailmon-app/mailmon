@@ -33,6 +33,8 @@ pnpm sdk:generate:remote
 
 - `apps/api/src/generate-openapi.ts` builds the Hono app, generates the OpenAPI document, normalizes it for Fern, and writes `apps/docs/api-reference/openapi.json`.
 - `fern/generators.yml` points Fern at that OpenAPI file and configures the local TypeScript SDK output.
+- `sdks/typescript/.fernignore` protects custom SDK helper files from Fern regeneration.
+- `scripts/apply-sdk-customizations.mjs` reapplies the custom TypeScript SDK export wiring and README section after Fern generation.
 - `fern/fern.config.json` pins Fern to the locally installed CLI by using `"version": "*"`.
 
 ## Compatibility Notes

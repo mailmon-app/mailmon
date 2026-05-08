@@ -26,9 +26,11 @@ import * as core from "./core/index.mjs";
 import * as environments from "./environments.mjs";
 import { handleNonStatusCodeError } from "./errors/handleNonStatusCodeError.mjs";
 import * as errors from "./errors/index.mjs";
+import * as webhooks from "./webhooks.mjs";
 export class MailmonClient {
     constructor(options) {
         this._options = normalizeClientOptionsWithAuth(options);
+        this.webhooks = webhooks;
     }
     /**
      * @param {Mailmon.PostV1MailboxesConnectSessionsRequest} request

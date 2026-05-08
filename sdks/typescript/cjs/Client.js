@@ -62,9 +62,11 @@ const core = __importStar(require("./core/index.js"));
 const environments = __importStar(require("./environments.js"));
 const handleNonStatusCodeError_js_1 = require("./errors/handleNonStatusCodeError.js");
 const errors = __importStar(require("./errors/index.js"));
+const webhooks = __importStar(require("./webhooks.js"));
 class MailmonClient {
     constructor(options) {
         this._options = (0, BaseClient_js_1.normalizeClientOptionsWithAuth)(options);
+        this.webhooks = webhooks;
     }
     /**
      * @param {Mailmon.PostV1MailboxesConnectSessionsRequest} request
