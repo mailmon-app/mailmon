@@ -19,5 +19,8 @@
   "dependencies": {
     "@mailmon/core": "workspace:*",
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
   }
 }

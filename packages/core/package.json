@@ -18,5 +18,8 @@
   },
   "dependencies": {
     "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
   }
 }

@@ -27,5 +27,8 @@
     "google-auth-library": "catalog:",
     "hono": "^4.12.15",
     "varlock": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
   }
 }
