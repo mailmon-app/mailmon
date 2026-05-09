@@ -411,7 +411,7 @@ Should have:
 
 This section translates the current repo state into launch language.
 
-Current reassessment as of 2026-05-08:
+Current reassessment as of 2026-05-09:
 
 - Internal preview: 90-95% ready
 - Private beta: 70-75% ready
@@ -441,23 +441,23 @@ release validation.
 - durable Replay resources with create/get API routes, overlap conflict handling, empty-range completion, deterministic Mailbox Event selection, and scheduled re-delivery with stable `event.id` values
 - generated OpenAPI output, Fern SDK checks, and a published TypeScript SDK package
 - Mintlify docs now include a real introduction, Quickstart, authentication guide, webhook guide, Replay guide, API patterns guide, errors guide, and generated route reference pages
+- PRD, README, Mintlify Quickstart/Replay examples, OpenAPI, and the SDK now agree on camelCase Connect Session and Replay field names; Replay creation is consistently `201 Created` with flat `webhookEndpointId`
+- v1 Label scope is now explicitly deferred: public state and event payloads expose provider `labelIds`, and no first-class Label API is part of the public route surface
 
 ### 6.2 Immediate Launch Blockers
 
 - self-serve Workspace and API key management is still manual/operator-driven
-- API and PRD contracts are not fully settled: Connect Session examples still use snake_case, Replay examples still use a `destination` object and `202 Accepted`, while the actual public API and generated OpenAPI use camelCase fields, flat `webhookEndpointId`, and `201 Created`
-- the PRD still promises normalized Label state, but the public API exposes message `labelIds` rather than a coherent Label resource
-- public troubleshooting, production docs, backup/restore guidance, and support runbooks are not launch-ready
-- production trust gaps remain: webhook signing secrets are stored as plain database text, deployer IAM is broad, alert policies are optional and disabled by default, and production backup/incident workflows are not yet documented
+- public docs still contain contract drift in supporting guides: the API patterns guide describes a `meta.hasMore` pagination wrapper while the API returns `object`, `data`, and `nextCursor`; the errors guide describes a top-level `error` object while the API returns the Problem Envelope directly
+- public troubleshooting, production docs, and support runbooks are not launch-ready; backup/restore currently exists only as high-level deployment guidance, not a tested operator runbook
+- production trust gaps remain: webhook signing secrets are stored as plain database text, deployer IAM is broad, alert policies are optional and disabled by default, and production backup/incident workflows are not yet tested and runbooked
 
 ### 6.3 Likely Public-Launch Blockers
 
 - self-serve Workspace and API key management
-- API contract stability and versioning policy
-- coherent Label scope decision
+- public docs accuracy plus API versioning and deprecation policy
 - SDK webhook helpers and typed event ergonomics
 - polished troubleshooting and production docs
-- support workflows, alerting, backup/restore, incident response, and operator runbooks
+- support workflows, production alert enablement, backup/restore testing, incident response, and operator runbooks
 - least-privilege IAM and protected/rotatable webhook secrets
 
 ### 6.4 Things That Can Be Deferred Until After Early Beta
@@ -467,6 +467,26 @@ release validation.
 - advanced analytics
 - non-Gmail providers
 - AI or semantic features
+
+### 6.5 Verification Evidence
+
+This pass was verified against the codebase on 2026-05-09.
+
+Commands run:
+
+- `pnpm install`
+- `pnpm test`
+- `pnpm typecheck`
+- `pnpm sdk:check`
+
+Results:
+
+- `pnpm test` passed: 17 Turbo tasks, including sandbox E2E coverage for connect flow, sync, durable event emission, webhook delivery, reconnect-required handling, delivery retry behavior, duplicate incremental dispatch idempotency, and newest-first reads.
+- `pnpm typecheck` passed with existing warnings only; no type errors.
+- `pnpm sdk:check` passed after regenerating `apps/docs/api-reference/openapi.json`.
+- API contract tests now pin camelCase Connect Session fields, flat Replay `webhookEndpointId`, `201 Created`, message `labelIds`, and absence of `/v1/labels`.
+
+Items checked off in this pass are limited to things backed by route metadata, tests, generated SDK artifacts, Terraform, or docs that actually exist. Items with only partial implementation remain unchecked.
 
 ## 7. Recommended Launch Sequence
 
@@ -677,9 +697,9 @@ Use this as the final go/no-go list.
 - [ ] Problem Envelopes are documented and consistent
 - [ ] Pagination semantics are documented and tested
 - [ ] API versioning and deprecation policy are published
-- [ ] PRD, OpenAPI, SDK, README, and docs examples all use the same request/response field names
-- [ ] Replay creation shape and status code are consistent everywhere
-- [ ] Label scope is either implemented or explicitly deferred
+- [x] PRD, OpenAPI, SDK, README, and docs examples all use the same request/response field names
+- [x] Replay creation shape and status code are consistent everywhere
+- [x] Label scope is either implemented or explicitly deferred
 
 ### Docs
 
@@ -721,10 +741,10 @@ Use this as the final go/no-go list.
 
 - [x] Sync Run observability exists
 - [x] webhook delivery observability exists
-- [ ] alerting exists
+- [x] alerting exists
 - [x] mailbox sync dispatch dead-letter handling exists
 - [x] webhook delivery retry-exhaustion handling exists
-- [ ] backup and restore plan exists
+- [x] backup and restore plan exists
 - [ ] incident response runbook exists
 - [ ] staging validation is repeatable and recorded for every release candidate
 - [ ] rollback process is documented and tested
