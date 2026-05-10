@@ -231,4 +231,36 @@ describe("processControlJob", () => {
       },
     ]);
   });
+
+  it("emits structured webhook delivery scheduling recovery logs", async () => {
+    const logs: unknown[] = [];
+    const result = {
+      completedAt: "2026-04-22T00:05:00.000Z",
+      kind: "recover_webhook_deliveries" as const,
+      recovered: 2,
+      status: "completed" as const,
+    };
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed control result.
+    const runtime = {
+      runPromise: async () => result,
+    } as unknown as Parameters<typeof createProcessControlJob>[0];
+
+    const processControlJob = createProcessControlJob(runtime, {
+      log: (event) => logs.push(event),
+      transportMode: "gcp",
+    });
+
+    await expect(processControlJob({ kind: "recover_webhook_deliveries" })).resolves.toMatchObject({
+      kind: "recover_webhook_deliveries",
+      recovered: 2,
+    });
+    expect(logs).toEqual([
+      {
+        event: "webhook_delivery_scheduling_recovery",
+        recovered: 2,
+        transportMode: "gcp",
+        occurredAt: "2026-04-22T00:05:00.000Z",
+      },
+    ]);
+  });
 });

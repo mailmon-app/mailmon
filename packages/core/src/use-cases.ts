@@ -18,12 +18,14 @@ import type {
   ProcessWebhookDeliveryResult,
   RecoveredStuckMailboxSyncExecution,
   RecoverStuckMailboxSyncExecutionsResult,
+  RecoverWebhookDeliverySchedulingResult,
   RepairMailboxesResult,
   RenewMailboxWatchesResult,
   StoredConnectSession,
   WebhookDeliverySendFailure,
   WebhookEventType,
 } from "./contracts.js";
+import { scheduleWebhookDeliveryRequests } from "./mailbox-event-delivery-scheduling.js";
 export { scheduleMailboxEventDeliveries } from "./mailbox-event-delivery-scheduling.js";
 export { runMailboxSync } from "./mailbox-sync-execution.js";
 import {
@@ -657,7 +659,6 @@ export const dispatchReplays = (
 export const recoverWebhookDeliveryScheduling = (recoveredAt = new Date().toISOString()) =>
   Effect.gen(function* () {
     const webhookDeliveryStore = yield* WebhookDeliveryStore;
-    const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
     const deliveryRequests =
       yield* webhookDeliveryStore.listWebhookDeliveryRecoverySchedules(recoveredAt);
 
@@ -665,13 +666,24 @@ export const recoverWebhookDeliveryScheduling = (recoveredAt = new Date().toISOS
       return [] as const;
     }
 
-    yield* Effect.forEach(
-      deliveryRequests,
-      (request) => webhookDeliveryScheduler.scheduleWebhookDelivery(request),
-      { discard: true },
-    );
+    return yield* scheduleWebhookDeliveryRequests(deliveryRequests);
+  });
 
-    return deliveryRequests;
+export const recoverWebhookDeliverySchedulingControlJob = (
+  options: Readonly<{
+    recoveredAt?: string;
+  }> = {},
+) =>
+  Effect.gen(function* () {
+    const recoveredAt = options.recoveredAt ?? new Date().toISOString();
+    const deliveryRequests = yield* recoverWebhookDeliveryScheduling(recoveredAt);
+
+    return {
+      completedAt: recoveredAt,
+      kind: "recover_webhook_deliveries",
+      recovered: deliveryRequests.length,
+      status: "completed",
+    } satisfies RecoverWebhookDeliverySchedulingResult;
   });
 
 const classifyWebhookDeliveryFailure = (
@@ -841,12 +853,17 @@ const finalizeWebhookDelivery = (
     }
 
     if (completion.state === "pending") {
-      const webhookDeliveryScheduler = yield* WebhookDeliveryScheduler;
-
-      yield* webhookDeliveryScheduler.scheduleWebhookDelivery({
-        deliveryId: completion.deliveryId,
-        notBefore: completion.nextAttemptAt ?? completion.completedAt,
-      });
+      yield* scheduleWebhookDeliveryRequests(
+        [
+          {
+            deliveryId: completion.deliveryId,
+            notBefore: completion.nextAttemptAt ?? completion.completedAt,
+          },
+        ],
+        {
+          continueOnSchedulingFailure: true,
+        },
+      );
     }
 
     return result;
@@ -1153,6 +1170,13 @@ export function runControlJob(
   MailboxExecutionRecoveryStore | MailboxSyncDispatcher
 >;
 export function runControlJob(
+  request: Readonly<{ kind: "recover_webhook_deliveries" }>,
+): Effect.Effect<
+  RecoverWebhookDeliverySchedulingResult,
+  never,
+  WebhookDeliveryScheduler | WebhookDeliveryStore
+>;
+export function runControlJob(
   request: Readonly<{ kind: "dispatch_replays" }>,
 ): Effect.Effect<
   DispatchReplaysResult,
@@ -1205,6 +1229,8 @@ export function runControlJob(
       return repairMailboxes();
     case "recover_stuck_syncs":
       return recoverStuckMailboxSyncExecutions();
+    case "recover_webhook_deliveries":
+      return recoverWebhookDeliverySchedulingControlJob();
   }
 
   return Effect.succeed({

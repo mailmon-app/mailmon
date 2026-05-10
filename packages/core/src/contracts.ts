@@ -48,6 +48,7 @@ export const ControlJobKindSchema = Schema.Literal(
   "dispatch_replays",
   "repair_mailboxes",
   "recover_stuck_syncs",
+  "recover_webhook_deliveries",
   "cleanup",
 );
 export const MailboxSyncJobDataSchema = Schema.Struct({
@@ -636,6 +637,13 @@ export interface RecoverStuckMailboxSyncExecutionsResult {
   readonly status: "completed";
 }
 
+export interface RecoverWebhookDeliverySchedulingResult {
+  readonly completedAt: string;
+  readonly kind: "recover_webhook_deliveries";
+  readonly recovered: number;
+  readonly status: "completed";
+}
+
 export interface DispatchReplaysResult {
   readonly completedAt: string;
   readonly dispatched: number;
@@ -650,7 +658,11 @@ export interface NoopControlJobResult {
   readonly completedAt: string;
   readonly kind: Exclude<
     ControlJobKind,
-    "renew_watches" | "repair_mailboxes" | "recover_stuck_syncs" | "dispatch_replays"
+    | "renew_watches"
+    | "repair_mailboxes"
+    | "recover_stuck_syncs"
+    | "recover_webhook_deliveries"
+    | "dispatch_replays"
   >;
   readonly status: "noop";
 }
@@ -660,4 +672,5 @@ export type ControlJobRunResult =
   | RenewMailboxWatchesResult
   | RepairMailboxesResult
   | RecoverStuckMailboxSyncExecutionsResult
+  | RecoverWebhookDeliverySchedulingResult
   | NoopControlJobResult;

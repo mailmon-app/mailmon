@@ -60,6 +60,15 @@ const defaultProcessControlJob = async (request: ControlJobDispatchRequest) => {
     };
   }
 
+  if (request.kind === "recover_webhook_deliveries") {
+    return {
+      completedAt: "2026-03-25T00:00:00.000Z",
+      kind: request.kind,
+      recovered: 0,
+      status: "completed" as const,
+    };
+  }
+
   if (request.kind === "dispatch_replays") {
     return {
       completedAt: "2026-03-25T00:00:00.000Z",
@@ -858,21 +867,28 @@ describe("startWorkerHttpRuntime", () => {
                   skippedReconnectRequired: 0,
                   status: "completed" as const,
                 }
-              : request.kind === "dispatch_replays"
+              : request.kind === "recover_webhook_deliveries"
                 ? {
                     completedAt: "2026-03-25T00:00:00.000Z",
-                    dispatched: 0,
-                    eventsReplayed: 0,
-                    failed: 0,
                     kind: request.kind,
-                    scanned: 0,
+                    recovered: 0,
                     status: "completed" as const,
                   }
-                : {
-                    completedAt: "2026-03-25T00:00:00.000Z",
-                    kind: request.kind,
-                    status: "noop" as const,
-                  },
+                : request.kind === "dispatch_replays"
+                  ? {
+                      completedAt: "2026-03-25T00:00:00.000Z",
+                      dispatched: 0,
+                      eventsReplayed: 0,
+                      failed: 0,
+                      kind: request.kind,
+                      scanned: 0,
+                      status: "completed" as const,
+                    }
+                  : {
+                      completedAt: "2026-03-25T00:00:00.000Z",
+                      kind: request.kind,
+                      status: "noop" as const,
+                    },
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
         syncRunId: "sr_sync",
@@ -973,6 +989,60 @@ describe("startWorkerHttpRuntime", () => {
       status: "completed",
     });
     expect(controlJobs).toEqual([{ kind: "recover_stuck_syncs" }]);
+  });
+
+  it("accepts webhook delivery recovery control jobs", async () => {
+    const controlJobs: ControlJobDispatchRequest[] = [];
+    const runtime = await startWorkerHttpRuntime({
+      asyncTransportMode: workerEnvFixture.asyncTransportMode,
+      host: workerEnvFixture.host,
+      port: workerEnvFixture.port,
+      processGmailPushNotification: defaultProcessGmailPushNotification,
+      processControlJob: async (request) => {
+        controlJobs.push(request);
+
+        return {
+          completedAt: "2026-03-25T00:00:00.000Z",
+          kind: "recover_webhook_deliveries",
+          recovered: 2,
+          status: "completed",
+        };
+      },
+      processSyncJob: async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-03-25T00:00:00.000Z",
+        status: "completed",
+        completedAt: "2026-03-25T00:00:01.000Z",
+        eventsEmitted: 2,
+        nextCursor: "hist_456",
+      }),
+      processWebhookDelivery: async ({ deliveryId }) => ({
+        deliveryId,
+        status: "delivered",
+        attemptCount: 1,
+        nextAttemptAt: null,
+      }),
+    });
+    activeRuntimeClosers.push(runtime.close);
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/control-jobs`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        kind: "recover_webhook_deliveries",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      kind: "recover_webhook_deliveries",
+      recovered: 2,
+      status: "completed",
+    });
+    expect(controlJobs).toEqual([{ kind: "recover_webhook_deliveries" }]);
   });
 
   it("rejects invalid webhook delivery payloads", async () => {

@@ -43,6 +43,7 @@ describe("phase 8 operator helpers", () => {
   it("parses supported control job kinds", () => {
     expect(parseControlJobKind("renew_watches")).toBe("renew_watches");
     expect(parseControlJobKind("recover_stuck_syncs")).toBe("recover_stuck_syncs");
+    expect(parseControlJobKind("recover_webhook_deliveries")).toBe("recover_webhook_deliveries");
     expect(() => parseControlJobKind("daily_report")).toThrow(/Control job kind must be/);
   });
 

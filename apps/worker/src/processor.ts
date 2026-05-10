@@ -8,6 +8,7 @@ import {
   type ProblemDetails,
   type ProcessWebhookDeliveryResult,
   type RecoverStuckMailboxSyncExecutionsResult,
+  type RecoverWebhookDeliverySchedulingResult,
   type SyncMailboxResult,
   type WebhookDeliveryScheduleRequest,
   ingestGmailPushNotification,
@@ -65,6 +66,12 @@ type MailboxSyncOperationalLogEvent =
       readonly event: "webhook_delivery_retry_exhausted";
       readonly deliveryId: string;
       readonly attemptCount: number | null;
+      readonly transportMode: WorkerTransportMode;
+      readonly occurredAt: string;
+    }
+  | {
+      readonly event: "webhook_delivery_scheduling_recovery";
+      readonly recovered: number;
       readonly transportMode: WorkerTransportMode;
       readonly occurredAt: string;
     };
@@ -143,6 +150,22 @@ const logRecoveredStuckSyncExecutions = (
       occurredAt: result.completedAt,
     });
   }
+};
+
+const logRecoveredWebhookDeliveryScheduling = (
+  result: RecoverWebhookDeliverySchedulingResult,
+  options: ReturnType<typeof getOperationalLogOptions>,
+) => {
+  if (result.recovered === 0) {
+    return;
+  }
+
+  options.log({
+    event: "webhook_delivery_scheduling_recovery",
+    recovered: result.recovered,
+    transportMode: options.transportMode,
+    occurredAt: result.completedAt,
+  });
 };
 
 type SyncProcessorRuntime = WorkerProcessorRuntime<
@@ -243,6 +266,10 @@ export const createProcessControlJob = (
 
     if (result.kind === "recover_stuck_syncs") {
       logRecoveredStuckSyncExecutions(result, operationalLogOptions);
+    }
+
+    if (result.kind === "recover_webhook_deliveries") {
+      logRecoveredWebhookDeliveryScheduling(result, operationalLogOptions);
     }
 
     return result;

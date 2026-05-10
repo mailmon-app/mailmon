@@ -148,6 +148,11 @@ describe("decodeControlJobDispatchRequest", () => {
         kind: "recover_stuck_syncs",
       },
     });
+    expect(decodeControlJobDispatchRequest({ kind: "recover_webhook_deliveries" })).toEqual({
+      value: {
+        kind: "recover_webhook_deliveries",
+      },
+    });
   });
 
   it("rejects unsupported control job payloads", () => {

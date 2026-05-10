@@ -92,6 +92,7 @@ const controlJobKinds = [
   "dispatch_replays",
   "repair_mailboxes",
   "recover_stuck_syncs",
+  "recover_webhook_deliveries",
   "cleanup",
 ] as const satisfies ReadonlyArray<ControlJobKind>;
 
