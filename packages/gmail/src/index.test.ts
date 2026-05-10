@@ -335,6 +335,15 @@ describe("createHttpGmailSyncProviderLayer", () => {
         });
       }
 
+      if (url.pathname === "/gmail/v1/users/me/history") {
+        expect(url.searchParams.get("startHistoryId")).toBe("hist_bootstrap");
+
+        return new Response(JSON.stringify({ historyId: "hist_bootstrap" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
       if (url.pathname === "/gmail/v1/users/me/messages/gmail_msg_1") {
         return new Response(
           JSON.stringify({
@@ -412,6 +421,151 @@ describe("createHttpGmailSyncProviderLayer", () => {
       eventsEmitted: 1,
       nextCursor: "hist_bootstrap",
     });
+  });
+
+  it("runs initial sync catch-up from the pre-baseline history boundary", async () => {
+    const requests: Array<string> = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+      requests.push(url.pathname);
+
+      if (url.pathname === "/token") {
+        return new Response(JSON.stringify({ access_token: "access-token" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/profile") {
+        return new Response(
+          JSON.stringify({
+            emailAddress: mailboxFixture.emailAddress,
+            historyId: "hist_before_full",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/messages") {
+        return new Response(JSON.stringify({ messages: [{ id: "gmail_msg_1" }] }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/history") {
+        expect(url.searchParams.get("startHistoryId")).toBe("hist_before_full");
+
+        return new Response(
+          JSON.stringify({
+            history: [
+              {
+                messagesAdded: [{ message: { id: "gmail_msg_2" } }],
+              },
+            ],
+            historyId: "hist_after_catchup",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/messages/gmail_msg_1") {
+        return new Response(
+          JSON.stringify({
+            id: "gmail_msg_1",
+            internalDate: String(Date.parse("2026-03-29T09:30:00.000Z")),
+            labelIds: ["INBOX"],
+            payload: {
+              headers: [
+                { name: "From", value: "Mailmon <hello@mailmon.dev>" },
+                { name: "Subject", value: "Welcome to Mailmon" },
+              ],
+            },
+            snippet: "Baseline message",
+            threadId: "gmail_thread_1",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/messages/gmail_msg_2") {
+        return new Response(
+          JSON.stringify({
+            id: "gmail_msg_2",
+            internalDate: String(Date.parse("2026-03-29T09:31:00.000Z")),
+            labelIds: ["INBOX", "UNREAD"],
+            payload: {
+              headers: [
+                { name: "From", value: "Mailmon <hello@mailmon.dev>" },
+                { name: "Subject", value: "Race-safe update" },
+              ],
+            },
+            snippet: "Catch-up message",
+            threadId: "gmail_thread_1",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const provider = yield* MailboxSyncProvider;
+
+        return yield* provider.syncMailbox({
+          mailbox: mailboxFixture,
+          cursor: null,
+        });
+      }).pipe(
+        Effect.provide(
+          createHttpGmailSyncProviderLayer({
+            apiBaseUrl: "http://gmail.mock/gmail/v1",
+            fetchImpl,
+            oauthClientId: "client-id",
+            oauthClientSecret: "client-secret",
+            oauthTokenUrl: "http://gmail.mock/token",
+          }).pipe(Layer.provide(credentialStoreLayer)),
+        ),
+      ),
+    );
+
+    expect(requests).toEqual([
+      "/token",
+      "/gmail/v1/users/me/profile",
+      "/gmail/v1/users/me/messages",
+      "/gmail/v1/users/me/messages/gmail_msg_1",
+      "/gmail/v1/users/me/history",
+      "/gmail/v1/users/me/messages/gmail_msg_2",
+    ]);
+    expect(result.snapshot.deletedProviderMessageIds).toEqual([]);
+    expect(result.snapshot.messages.map((message) => message.providerMessageId)).toEqual([
+      "gmail_msg_1",
+      "gmail_msg_2",
+    ]);
+    expect(result.snapshot.threads).toEqual([
+      {
+        id: "thr_mbx_123_gmail_thread_1",
+        providerThreadId: "gmail_thread_1",
+        subject: "Race-safe update",
+        lastMessageAt: "2026-03-29T09:31:00.000Z",
+      },
+    ]);
+    expect(result.eventsEmitted).toBe(2);
+    expect(result.nextCursor).toBe("hist_after_catchup");
   });
 
   it("performs an incremental sync using Gmail history and deletions", async () => {

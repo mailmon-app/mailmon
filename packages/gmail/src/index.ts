@@ -913,6 +913,31 @@ const toSyncSnapshot = (
   };
 };
 
+const mergeInitialSyncMessages = (
+  baselineMessages: ReadonlyArray<GmailMessageResponse>,
+  catchUp: Readonly<{
+    deletedMessageIds: ReadonlyArray<string>;
+    messages: ReadonlyArray<GmailMessageResponse>;
+  }>,
+) => {
+  const deletedMessageIds = new Set(catchUp.deletedMessageIds);
+  const messagesById = new Map<string, GmailMessageResponse>();
+
+  for (const message of baselineMessages) {
+    if (!deletedMessageIds.has(message.id)) {
+      messagesById.set(message.id, message);
+    }
+  }
+
+  for (const message of catchUp.messages) {
+    if (!deletedMessageIds.has(message.id)) {
+      messagesById.set(message.id, message);
+    }
+  }
+
+  return [...messagesById.values()];
+};
+
 const createStubSyncResult = (request: MailboxSyncRequest): MailboxProviderSyncResult => {
   const { cursor, mailbox } = request;
   const threadId = `thr_${mailbox.id}_bootstrap`;
@@ -1752,21 +1777,25 @@ export const createHttpGmailSyncProviderLayer = (config: GmailSyncProviderConfig
                 });
 
                 if (cursor === null) {
-                  const [profile, messages] = await Promise.all([
-                    gmailApi.getProfile({
-                      accessToken,
-                      mailboxId: mailbox.id,
-                    }),
-                    gmailApi.listAllMessages({
-                      accessToken,
-                      mailboxId: mailbox.id,
-                    }),
-                  ]);
+                  const profile = await gmailApi.getProfile({
+                    accessToken,
+                    mailboxId: mailbox.id,
+                  });
+                  const baselineMessages = await gmailApi.listAllMessages({
+                    accessToken,
+                    mailboxId: mailbox.id,
+                  });
+                  const catchUp = await gmailApi.listHistoryDelta({
+                    accessToken,
+                    cursor: profile.historyId,
+                    mailboxId: mailbox.id,
+                  });
+                  const messages = mergeInitialSyncMessages(baselineMessages, catchUp);
 
                   return {
-                    eventsEmitted: messages.length,
-                    nextCursor: profile.historyId,
-                    snapshot: toSyncSnapshot(mailbox.id, messages, []),
+                    eventsEmitted: messages.length + catchUp.deletedMessageIds.length,
+                    nextCursor: catchUp.nextCursor,
+                    snapshot: toSyncSnapshot(mailbox.id, messages, catchUp.deletedMessageIds),
                   } satisfies MailboxProviderSyncResult;
                 }
 
