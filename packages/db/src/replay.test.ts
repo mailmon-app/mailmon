@@ -8,6 +8,7 @@ import {
 import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { asc, eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
+import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 
 import { createCorePersistenceLayer, createDb, schema } from "./index.js";
@@ -189,6 +190,150 @@ describe("Replay persistence", () => {
 
       expect(conflict.code).toBe("replay_conflict");
       expect(conflict.status).toBe(409);
+    });
+  });
+
+  it("keeps overlapping active Replays single-flight under concurrent inserts", async () => {
+    await withIsolatedDatabasePromise(async ({ connectionString }) => {
+      await seedReplayFixture(connectionString);
+
+      const clientA = postgres(connectionString, { max: 1 });
+      const clientB = postgres(connectionString, { max: 1 });
+      const inspect = postgres(connectionString, { max: 1 });
+
+      let selected = 0;
+      let releaseSelected!: () => void;
+      let releaseInserts!: () => void;
+      const bothSelected = new Promise<void>((resolve) => {
+        releaseSelected = resolve;
+      });
+      const insertGate = new Promise<void>((resolve) => {
+        releaseInserts = resolve;
+      });
+
+      const insertOverlappingReplay = (client: postgres.Sql, replayId: string) =>
+        client.begin(async (transaction) => {
+          const conflicts = await transaction<{ id: string }[]>`
+            SELECT id
+            FROM replays
+            WHERE workspace_id = ${workspaceId}
+              AND mailbox_id = ${mailboxId}
+              AND webhook_endpoint_id = ${webhookEndpointId}
+              AND status IN ('queued', 'running')
+              AND start_time <= ${replayEndTime}
+              AND end_time >= ${replayStartTime}
+            ORDER BY created_at ASC, id ASC
+            LIMIT 1
+          `;
+          expect(conflicts).toHaveLength(0);
+
+          selected += 1;
+          if (selected === 2) {
+            releaseSelected();
+          }
+
+          await insertGate;
+
+          await transaction`
+            INSERT INTO replays (
+              id, workspace_id, mailbox_id, webhook_endpoint_id, status,
+              start_time, end_time, events_replayed, last_error, started_at,
+              completed_at, created_at, updated_at
+            ) VALUES (
+              ${replayId}, ${workspaceId}, ${mailboxId}, ${webhookEndpointId}, 'queued',
+              ${replayStartTime}, ${replayEndTime}, NULL, NULL, NULL, NULL, NOW(), NOW()
+            )
+          `;
+        });
+
+      try {
+        const resultA = insertOverlappingReplay(clientA, "rpl_concurrent_a");
+        const resultB = insertOverlappingReplay(clientB, "rpl_concurrent_b");
+
+        await bothSelected;
+        releaseInserts();
+
+        const results = await Promise.allSettled([resultA, resultB]);
+        const fulfilled = results.filter((result) => result.status === "fulfilled");
+        const rejected = results.filter(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+
+        expect(fulfilled).toHaveLength(1);
+        expect(rejected).toHaveLength(1);
+        const [rejection] = rejected;
+        if (rejection === undefined) {
+          throw new Error("Expected one rejected concurrent Replay insert.");
+        }
+
+        const rejectedReason: unknown = rejection.reason;
+        if (
+          typeof rejectedReason !== "object" ||
+          rejectedReason === null ||
+          !("code" in rejectedReason) ||
+          typeof rejectedReason.code !== "string"
+        ) {
+          throw new Error("Expected concurrent Replay insert to fail with a Postgres error.");
+        }
+
+        const rejectedCode = rejectedReason.code;
+        expect(["23P01", "40P01"]).toContain(rejectedCode);
+        if (rejectedCode === "23P01") {
+          const constraintName =
+            "constraint_name" in rejectedReason &&
+            typeof rejectedReason.constraint_name === "string"
+              ? rejectedReason.constraint_name
+              : undefined;
+
+          expect(constraintName).toBe("replays_active_overlap_excl");
+        }
+
+        const persisted = await inspect<{ id: string }[]>`
+          SELECT id
+          FROM replays
+          WHERE mailbox_id = ${mailboxId}
+          ORDER BY id
+        `;
+        expect(persisted).toHaveLength(1);
+      } finally {
+        await Promise.all([clientA.end(), clientB.end(), inspect.end()]);
+      }
+    });
+  });
+
+  it("returns replay_conflict for concurrent overlapping Replay creates", async () => {
+    await withIsolatedDatabasePromise(async ({ connectionString }) => {
+      await seedReplayFixture(connectionString);
+
+      const attempts = await Promise.all([
+        Effect.runPromise(
+          createReplay(workspaceId, {
+            mailboxId,
+            webhookEndpointId,
+            startTime: replayStartTime,
+            endTime: replayEndTime,
+          }).pipe(Effect.either, Effect.provide(runtimeLayer(connectionString))),
+        ),
+        Effect.runPromise(
+          createReplay(workspaceId, {
+            mailboxId,
+            webhookEndpointId,
+            startTime: "2026-04-10T10:20:00.000Z",
+            endTime: "2026-04-10T10:45:00.000Z",
+          }).pipe(Effect.either, Effect.provide(runtimeLayer(connectionString))),
+        ),
+      ]);
+
+      expect(attempts.filter((attempt) => attempt._tag === "Right")).toHaveLength(1);
+      expect(attempts.filter((attempt) => attempt._tag === "Left")).toEqual([
+        expect.objectContaining({
+          _tag: "Left",
+          left: expect.objectContaining({
+            code: "replay_conflict",
+            status: 409,
+          }),
+        }),
+      ]);
     });
   });
 

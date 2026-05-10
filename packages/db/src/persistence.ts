@@ -272,6 +272,52 @@ const isProblemDetails = (
   );
 };
 
+type PostgresErrorShape = Readonly<{
+  code: string;
+  constraint_name?: string;
+}>;
+
+const replayActiveOverlapConstraintName = "replays_active_overlap_excl";
+const exclusionViolationSqlState = "23P01";
+const deadlockDetectedSqlState = "40P01";
+
+const findPostgresError = (error: unknown): PostgresErrorShape | null => {
+  let current = error;
+  const seen = new Set<unknown>();
+
+  while (typeof current === "object" && current !== null && !seen.has(current)) {
+    seen.add(current);
+
+    if ("code" in current && typeof current.code === "string") {
+      const constraintName =
+        "constraint_name" in current && typeof current.constraint_name === "string"
+          ? current.constraint_name
+          : undefined;
+
+      return constraintName === undefined
+        ? { code: current.code }
+        : { code: current.code, constraint_name: constraintName };
+    }
+
+    current = "cause" in current ? current.cause : null;
+  }
+
+  return null;
+};
+
+const isReplayActiveOverlapConstraintViolation = (error: unknown) => {
+  const postgresError = findPostgresError(error);
+
+  return (
+    postgresError?.code === exclusionViolationSqlState &&
+    postgresError.constraint_name === replayActiveOverlapConstraintName
+  );
+};
+
+const isPostgresDeadlockDetected = (error: unknown) => {
+  return findPostgresError(error)?.code === deadlockDetectedSqlState;
+};
+
 const toMailboxProvider = (provider: string): MailboxResource["provider"] => {
   switch (provider) {
     case "gmail":
@@ -2105,8 +2151,8 @@ export const createReplayStoreLayer = Layer.effect(
             const endTime = toDate(params.endTime);
             const createdAt = toDate(params.createdAt);
 
-            return database.db.transaction(async (transaction) => {
-              const [conflict] = await transaction
+            const findCommittedConflict = async () => {
+              const [conflict] = await database.db
                 .select({
                   id: replays.id,
                 })
@@ -2124,35 +2170,96 @@ export const createReplayStoreLayer = Layer.effect(
                 .orderBy(asc(replays.createdAt), asc(replays.id))
                 .limit(1);
 
-              if (conflict !== undefined) {
-                throw replayConflict(params.mailboxId, params.webhookEndpointId, conflict.id);
+              return conflict;
+            };
+
+            const findCommittedConflictAfterRace = async () => {
+              for (const delayMilliseconds of [0, 10, 25, 50]) {
+                if (delayMilliseconds > 0) {
+                  await new Promise((resolve) => setTimeout(resolve, delayMilliseconds));
+                }
+
+                const conflict = await findCommittedConflict();
+                if (conflict !== undefined) {
+                  return conflict;
+                }
               }
 
-              const [createdReplay] = await transaction
-                .insert(replays)
-                .values({
-                  id: params.id,
-                  workspaceId: params.workspaceId,
-                  mailboxId: params.mailboxId,
-                  webhookEndpointId: params.webhookEndpointId,
-                  status: "queued",
-                  startTime,
-                  endTime,
-                  eventsReplayed: null,
-                  lastError: null,
-                  startedAt: null,
-                  completedAt: null,
-                  createdAt,
-                  updatedAt: createdAt,
-                })
-                .returning();
+              return undefined;
+            };
 
-              if (createdReplay === undefined) {
-                throw new Error(`Replay ${params.id} could not be created.`);
+            try {
+              return await database.db.transaction(async (transaction) => {
+                const [conflict] = await transaction
+                  .select({
+                    id: replays.id,
+                  })
+                  .from(replays)
+                  .where(
+                    and(
+                      eq(replays.workspaceId, params.workspaceId),
+                      eq(replays.mailboxId, params.mailboxId),
+                      eq(replays.webhookEndpointId, params.webhookEndpointId),
+                      inArray(replays.status, ["queued", "running"]),
+                      lte(replays.startTime, endTime),
+                      gte(replays.endTime, startTime),
+                    ),
+                  )
+                  .orderBy(asc(replays.createdAt), asc(replays.id))
+                  .limit(1);
+
+                if (conflict !== undefined) {
+                  throw replayConflict(params.mailboxId, params.webhookEndpointId, conflict.id);
+                }
+
+                const [createdReplay] = await transaction
+                  .insert(replays)
+                  .values({
+                    id: params.id,
+                    workspaceId: params.workspaceId,
+                    mailboxId: params.mailboxId,
+                    webhookEndpointId: params.webhookEndpointId,
+                    status: "queued",
+                    startTime,
+                    endTime,
+                    eventsReplayed: null,
+                    lastError: null,
+                    startedAt: null,
+                    completedAt: null,
+                    createdAt,
+                    updatedAt: createdAt,
+                  })
+                  .returning();
+
+                if (createdReplay === undefined) {
+                  throw new Error(`Replay ${params.id} could not be created.`);
+                }
+
+                return toReplayResource(createdReplay);
+              });
+            } catch (error) {
+              if (
+                isReplayActiveOverlapConstraintViolation(error) ||
+                isPostgresDeadlockDetected(error)
+              ) {
+                const conflict = isPostgresDeadlockDetected(error)
+                  ? await findCommittedConflictAfterRace()
+                  : await findCommittedConflict();
+                if (
+                  conflict !== undefined ||
+                  isReplayActiveOverlapConstraintViolation(error) ||
+                  isPostgresDeadlockDetected(error)
+                ) {
+                  throw replayConflict(
+                    params.mailboxId,
+                    params.webhookEndpointId,
+                    conflict?.id ?? params.id,
+                  );
+                }
               }
 
-              return toReplayResource(createdReplay);
-            });
+              throw error;
+            }
           },
           catch: (error) =>
             isProblemDetails(error)
