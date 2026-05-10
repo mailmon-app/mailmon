@@ -86,6 +86,8 @@ describe("gmail mailbox credentials", () => {
             refreshToken: "refresh-token-plaintext",
           });
 
+          expect(completed.mailbox.watchState).toBe("expired");
+
           const credential = yield* credentialStore.getGmailMailboxCredential(completed.mailbox.id);
 
           expect(credential).not.toBeNull();

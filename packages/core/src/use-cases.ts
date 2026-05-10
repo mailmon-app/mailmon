@@ -890,6 +890,32 @@ export const runWebhookDelivery = (deliveryId: string) =>
 const isMailboxWatchExpired = (watchExpiresAt: string | null, observedAt: string): boolean =>
   watchExpiresAt !== null && Date.parse(watchExpiresAt) <= Date.parse(observedAt);
 
+const parseGmailHistoryId = (historyId: string): bigint | null => {
+  if (!/^\d+$/.test(historyId)) {
+    return null;
+  }
+
+  return BigInt(historyId);
+};
+
+const isWatchHistoryAheadOfMailboxCursor = (
+  mailboxCursor: string | null,
+  watchHistoryId: string,
+): boolean => {
+  if (mailboxCursor === null) {
+    return true;
+  }
+
+  const parsedMailboxCursor = parseGmailHistoryId(mailboxCursor);
+  const parsedWatchHistoryId = parseGmailHistoryId(watchHistoryId);
+
+  if (parsedMailboxCursor !== null && parsedWatchHistoryId !== null) {
+    return parsedWatchHistoryId > parsedMailboxCursor;
+  }
+
+  return watchHistoryId !== mailboxCursor;
+};
+
 export const renewExpiringMailboxWatches = (
   options: Readonly<{
     limit?: number;
@@ -903,6 +929,7 @@ export const renewExpiringMailboxWatches = (
     const limit = options.limit ?? DEFAULT_GMAIL_WATCH_RENEWAL_BATCH_SIZE;
     const mailboxWatchStore = yield* MailboxWatchStore;
     const mailboxWatchProvider = yield* MailboxWatchProvider;
+    const dispatcher = yield* MailboxSyncDispatcher;
     const targets = yield* mailboxWatchStore.listMailboxWatchesNeedingRenewal({
       limit,
       observedAt,
@@ -912,7 +939,9 @@ export const renewExpiringMailboxWatches = (
     const outcomes = yield* Effect.forEach(
       targets,
       (target) => {
-        const expired = isMailboxWatchExpired(target.watchExpiresAt, observedAt);
+        const expired =
+          target.mailbox.watchState === "expired" ||
+          isMailboxWatchExpired(target.watchExpiresAt, observedAt);
 
         return mailboxWatchStore
           .markMailboxWatchRenewalStarted({
@@ -926,12 +955,20 @@ export const renewExpiringMailboxWatches = (
               }),
             ),
             Effect.flatMap((renewal) =>
-              mailboxWatchStore.completeMailboxWatchRenewal({
-                historyId: renewal.historyId,
-                mailboxId: target.mailbox.id,
-                renewedAt: observedAt,
-                watchExpiresAt: renewal.watchExpiresAt,
-              }),
+              mailboxWatchStore
+                .completeMailboxWatchRenewal({
+                  historyId: renewal.historyId,
+                  mailboxId: target.mailbox.id,
+                  renewedAt: observedAt,
+                  watchExpiresAt: renewal.watchExpiresAt,
+                })
+                .pipe(
+                  Effect.zipRight(
+                    expired || isWatchHistoryAheadOfMailboxCursor(target.cursor, renewal.historyId)
+                      ? dispatcher.dispatchMailboxSync(target.mailbox.id)
+                      : Effect.void,
+                  ),
+                ),
             ),
             Effect.as({
               expired,

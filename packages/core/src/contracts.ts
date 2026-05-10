@@ -493,6 +493,7 @@ export interface MailboxProviderSyncResult {
 }
 
 export interface MailboxWatchRenewalTarget {
+  readonly cursor: string | null;
   readonly mailbox: MailboxResource;
   readonly watchExpiresAt: string | null;
 }

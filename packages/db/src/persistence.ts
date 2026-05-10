@@ -410,6 +410,7 @@ const toMailboxResource = (row: MailboxRow): MailboxResource => {
 
 const toMailboxWatchRenewalTarget = (row: MailboxRow): MailboxWatchRenewalTarget => {
   return {
+    cursor: row.cursor,
     mailbox: toMailboxResource(row),
     watchExpiresAt: toIsoString(row.watchExpirationAt),
   };
@@ -2807,7 +2808,7 @@ export const createMailboxConnectSessionStoreLayer = Layer.effect(
                     emailAddress: normalizedEmailAddress,
                     status: "active",
                     syncState: "initializing",
-                    watchState: "active",
+                    watchState: "expired",
                     createdAt,
                     updatedAt: createdAt,
                   })

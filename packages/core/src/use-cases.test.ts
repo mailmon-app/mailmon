@@ -1365,10 +1365,12 @@ describe("renewExpiringMailboxWatches", () => {
       }> = [];
       const observedAt = "2026-04-22T00:00:00.000Z";
       const expiringMailbox = {
+        cursor: "hist_mbx_demo",
         mailbox: mailboxFixture,
         watchExpiresAt: "2026-04-22T12:00:00.000Z",
       };
       const expiredMailbox = {
+        cursor: "hist_mbx_expired",
         mailbox: {
           ...mailboxFixture,
           id: "mbx_expired",
@@ -1403,6 +1405,9 @@ describe("renewExpiringMailboxWatches", () => {
                   historyId: `hist_${mailbox.id}`,
                   watchExpiresAt: "2026-04-28T00:00:00.000Z",
                 }),
+            }),
+            Layer.succeed(MailboxSyncDispatcher, {
+              dispatchMailboxSync: () => Effect.void,
             }),
           ),
         ),
@@ -1445,6 +1450,103 @@ describe("renewExpiringMailboxWatches", () => {
     }),
   );
 
+  it.effect("dispatches catch-up sync when watch renewal reveals a history gap", () =>
+    Effect.gen(function* () {
+      const catchUpDispatchedMailboxIds: string[] = [];
+      const observedAt = "2026-04-22T00:00:00.000Z";
+      const expiredMailbox = {
+        cursor: "100",
+        mailbox: {
+          ...mailboxFixture,
+          id: "mbx_expired_gap",
+          watchState: "expired" as const,
+        },
+        watchExpiresAt: "2026-04-21T23:59:00.000Z",
+      };
+
+      yield* renewExpiringMailboxWatches({
+        limit: 10,
+        observedAt,
+        renewalWindowMs: 24 * 60 * 60_000,
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(MailboxWatchStore, {
+              listMailboxWatchesNeedingRenewal: () => Effect.succeed([expiredMailbox]),
+              markMailboxWatchRenewalStarted: () => Effect.void,
+              completeMailboxWatchRenewal: () => Effect.void,
+              failMailboxWatchRenewal: () => Effect.void,
+            }),
+            Layer.succeed(MailboxWatchProvider, {
+              renewMailboxWatch: () =>
+                Effect.succeed({
+                  historyId: "125",
+                  watchExpiresAt: "2026-04-28T00:00:00.000Z",
+                }),
+            }),
+            Layer.succeed(MailboxSyncDispatcher, {
+              dispatchMailboxSync: (mailboxId: string) =>
+                Effect.sync(() => {
+                  catchUpDispatchedMailboxIds.push(mailboxId);
+                }),
+            }),
+          ),
+        ),
+      );
+
+      expect(catchUpDispatchedMailboxIds).toEqual(["mbx_expired_gap"]);
+    }),
+  );
+
+  it.effect(
+    "does not dispatch catch-up sync when the renewed watch cursor is already current",
+    () =>
+      Effect.gen(function* () {
+        const currentWatchDispatchedMailboxIds: string[] = [];
+        const observedAt = "2026-04-22T00:00:00.000Z";
+        const expiringMailbox = {
+          cursor: "125",
+          mailbox: {
+            ...mailboxFixture,
+            id: "mbx_current_watch",
+          },
+          watchExpiresAt: "2026-04-22T12:00:00.000Z",
+        };
+
+        yield* renewExpiringMailboxWatches({
+          limit: 10,
+          observedAt,
+          renewalWindowMs: 24 * 60 * 60_000,
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              Layer.succeed(MailboxWatchStore, {
+                listMailboxWatchesNeedingRenewal: () => Effect.succeed([expiringMailbox]),
+                markMailboxWatchRenewalStarted: () => Effect.void,
+                completeMailboxWatchRenewal: () => Effect.void,
+                failMailboxWatchRenewal: () => Effect.void,
+              }),
+              Layer.succeed(MailboxWatchProvider, {
+                renewMailboxWatch: () =>
+                  Effect.succeed({
+                    historyId: "125",
+                    watchExpiresAt: "2026-04-28T00:00:00.000Z",
+                  }),
+              }),
+              Layer.succeed(MailboxSyncDispatcher, {
+                dispatchMailboxSync: (mailboxId: string) =>
+                  Effect.sync(() => {
+                    currentWatchDispatchedMailboxIds.push(mailboxId);
+                  }),
+              }),
+            ),
+          ),
+        );
+
+        expect(currentWatchDispatchedMailboxIds).toEqual([]);
+      }),
+  );
+
   it.effect("records individual renewal failures without failing the control job", () =>
     Effect.gen(function* () {
       const failures: Array<{
@@ -1468,6 +1570,7 @@ describe("renewExpiringMailboxWatches", () => {
               listMailboxWatchesNeedingRenewal: () =>
                 Effect.succeed([
                   {
+                    cursor: "hist_mbx_demo",
                     mailbox: mailboxFixture,
                     watchExpiresAt: "2026-04-21T23:59:00.000Z",
                   },
@@ -1485,6 +1588,9 @@ describe("renewExpiringMailboxWatches", () => {
             }),
             Layer.succeed(MailboxWatchProvider, {
               renewMailboxWatch: () => Effect.fail(renewalProblem),
+            }),
+            Layer.succeed(MailboxSyncDispatcher, {
+              dispatchMailboxSync: () => Effect.void,
             }),
           ),
         ),
