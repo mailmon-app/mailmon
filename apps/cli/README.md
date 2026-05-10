@@ -52,6 +52,7 @@ Supported job kinds:
 - `dispatch_replays`
 - `repair_mailboxes`
 - `recover_stuck_syncs`
+- `recover_webhook_deliveries`
 - `cleanup`
 
 ```bash

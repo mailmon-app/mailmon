@@ -463,6 +463,18 @@ variable "webhook_delivery_queue_id" {
   default     = "mailmon-webhook-deliveries"
 }
 
+variable "webhook_delivery_recovery_schedule" {
+  description = "Cloud Scheduler cron expression for durable webhook delivery recovery control jobs."
+  type        = string
+  default     = "*/1 * * * *"
+}
+
+variable "webhook_delivery_recovery_time_zone" {
+  description = "Cloud Scheduler time zone used for durable webhook delivery recovery scheduling."
+  type        = string
+  default     = "Etc/UTC"
+}
+
 variable "worker_base_url" {
   description = "Externally reachable base URL for the worker service internal HTTP endpoints."
   type        = string

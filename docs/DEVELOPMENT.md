@@ -131,6 +131,7 @@ pnpm --filter @mailmon/cli dev -- sync-mailbox <mailbox-id>
 
 # Run a control job
 pnpm --filter @mailmon/cli dev -- control-job recover_stuck_syncs
+pnpm --filter @mailmon/cli dev -- control-job recover_webhook_deliveries
 ```
 
 ### Gmail Credentials

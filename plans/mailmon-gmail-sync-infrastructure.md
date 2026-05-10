@@ -205,6 +205,7 @@ Break this phase into four implementation slices so event semantics and delivery
   - map the transport-neutral delivery scheduler onto Cloud Tasks semantics for staging/production
   - preserve the same core delivery workflow used in local mode
   - use deterministic task IDs, scheduled `notBefore` dispatch, optional OIDC targeting, and idempotent `ALREADY_EXISTS` handling for delivery task creation
+  - run periodic webhook delivery recovery from durable delivery rows so transient Cloud Tasks scheduling failures do not require worker restart
   - keep API mailbox dispatch explicit by mode and fail fast in unsupported `legacy_bullmq` API configurations
 
 ### Acceptance criteria

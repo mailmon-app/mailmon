@@ -929,6 +929,36 @@ resource "google_cloud_scheduler_job" "recover_stuck_syncs" {
   }
 }
 
+resource "google_cloud_scheduler_job" "recover_webhook_deliveries" {
+  depends_on = [google_project_service.required_api]
+
+  name        = "${var.name_prefix}-recover-webhook-deliveries"
+  description = "Re-arms pending or stale webhook deliveries from durable delivery rows."
+  schedule    = var.webhook_delivery_recovery_schedule
+  time_zone   = var.webhook_delivery_recovery_time_zone
+
+  http_target {
+    uri         = "${local.worker_base_url}/internal/control-jobs"
+    http_method = "POST"
+    body        = base64encode(jsonencode({ kind = "recover_webhook_deliveries" }))
+
+    headers = {
+      "Content-Type" = "application/json"
+    }
+
+    oidc_token {
+      audience              = local.worker_base_url
+      service_account_email = google_service_account.scheduler.email
+    }
+  }
+
+  retry_config {
+    max_backoff_duration = "60s"
+    min_backoff_duration = "10s"
+    retry_count          = 3
+  }
+}
+
 resource "google_logging_metric" "mailmon_lease_contention_count" {
   depends_on = [google_project_service.required_api]
 
@@ -1007,6 +1037,20 @@ resource "google_logging_metric" "mailmon_webhook_delivery_worker_5xx_count" {
 
   metric_descriptor {
     display_name = "Mailmon webhook delivery worker 5xx count"
+    metric_kind  = "DELTA"
+    unit         = "1"
+    value_type   = "INT64"
+  }
+}
+
+resource "google_logging_metric" "mailmon_webhook_delivery_scheduling_recovery_count" {
+  depends_on = [google_project_service.required_api]
+
+  name   = "mailmon_webhook_delivery_scheduling_recovery_count"
+  filter = "resource.type=\"cloud_run_revision\" AND jsonPayload.event=\"webhook_delivery_scheduling_recovery\""
+
+  metric_descriptor {
+    display_name = "Mailmon webhook delivery scheduling recovery count"
     metric_kind  = "DELTA"
     unit         = "1"
     value_type   = "INT64"

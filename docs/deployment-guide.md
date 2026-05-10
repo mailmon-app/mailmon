@@ -12,7 +12,7 @@ Mailmon uses:
 - Cloud Tasks for webhook delivery scheduling
 - Pub/Sub for Gmail Push Notifications
 - Pub/Sub for durable mailbox sync dispatch
-- Cloud Scheduler for watch renewal
+- Cloud Scheduler for watch renewal and recovery control jobs
 - Secret Manager for runtime secrets
 - Cloud KMS for Secret Manager customer-managed encryption
 - Artifact Registry for container images
@@ -138,6 +138,7 @@ Terraform always creates these log-based metrics:
 - `mailmon_sync_dispatch_exhaustion_count`
 - `mailmon_webhook_retry_exhaustion_count`
 - `mailmon_webhook_delivery_worker_5xx_count`
+- `mailmon_webhook_delivery_scheduling_recovery_count`
 
 Set `enable_operational_alerts=true` to create alert policies.
 Alert policies use five-minute aligned counts and send notifications to `alert_notification_channel_ids`.
@@ -156,6 +157,7 @@ Mailbox sync dispatch and webhook delivery use different exhaustion paths:
 - mailbox sync dispatch is Pub/Sub-backed; exhausted pushes are sent to the mailbox sync dispatch dead-letter topic and then pushed to `/internal/sync-dead-letter`, where the worker records `mailbox_sync_dispatch_retry_exhausted` as a Sync Run outcome and Mailbox Last Error
 - webhook delivery is Cloud Tasks-backed; customer endpoint retries are owned by Mailmon in `webhook_deliveries`, and exhausted deliveries are persisted with `webhook_delivery_retry_exhausted`
 - Cloud Tasks platform dispatch failures to `/internal/webhook-deliveries` are surfaced through `mailmon_webhook_delivery_worker_5xx_count`; investigate worker errors before changing Cloud Tasks retry settings
+- transient Cloud Tasks scheduling failures are recovered by the `recover_webhook_deliveries` control job, which logs `webhook_delivery_scheduling_recovery` when it re-arms durable pending or stale deliveries
 
 ## Environment variables
 
@@ -257,7 +259,7 @@ After deployment, confirm:
 - the worker can accept `/internal/gmail-push`
 - the mailbox sync dispatch subscription can push to `/internal/sync`
 - Cloud Tasks can reach `/internal/webhook-deliveries`
-- Cloud Scheduler can reach `/internal/control-jobs`
+- Cloud Scheduler can reach `/internal/control-jobs` for watch renewal, stuck sync recovery, and webhook delivery recovery
 - unauthenticated `/internal/*` requests are rejected in `gcp` mode
 - the Gmail Push Notification subscription is active
 - the mailbox sync dispatch subscription and dead-letter topic are active

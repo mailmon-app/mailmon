@@ -154,6 +154,7 @@ Run a control job:
 
 ```bash
 pnpm --filter @mailmon/cli dev -- control-job recover_stuck_syncs
+pnpm --filter @mailmon/cli dev -- control-job recover_webhook_deliveries
 ```
 
 Audit or rewrap persisted Gmail credential envelopes:
