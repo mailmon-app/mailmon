@@ -31,13 +31,19 @@ const NonEmptyString = Schema.NonEmptyString;
 const OptionalNonEmptyString = Schema.optional(NonEmptyString);
 const OptionalString = Schema.optional(Schema.String);
 const OptionalListLimit = Schema.optional(
-  Schema.NumberFromString.pipe(Schema.int(), Schema.between(1, MAX_LIST_LIMIT)),
+  Schema.NumberFromString.pipe(
+    Schema.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: MAX_LIST_LIMIT })),
+  ),
 );
 
-const HttpUrlSchema = NonEmptyString.pipe(Schema.filter((value) => isHttpUrl(value)));
+const HttpUrlSchema = NonEmptyString.pipe(
+  Schema.refine((value): value is string => isHttpUrl(value), {
+    description: "a valid http(s) url",
+  }),
+);
 
 export const CreateConnectSessionBodySchema = Schema.Struct({
-  provider: Schema.Literal("gmail"),
+  provider: Schema.Literals(["gmail"]),
   tenantExternalId: NonEmptyString,
   mailboxExternalId: NonEmptyString,
   redirectUrl: NonEmptyString,
@@ -48,11 +54,11 @@ export const CreateWebhookEndpointBodySchema = Schema.Struct({
   description: Schema.optional(Schema.NullOr(NonEmptyString)),
 });
 
-const WebhookEventTypeBodySchema = Schema.Literal(
+const WebhookEventTypeBodySchema = Schema.Literals([
   "message.created",
   "message.updated",
   "thread.updated",
-);
+]);
 
 const WebhookSubscriptionCamelBodySchema = Schema.Struct({
   mailboxIds: Schema.NonEmptyArray(NonEmptyString),
@@ -64,14 +70,13 @@ const WebhookSubscriptionSnakeBodySchema = Schema.Struct({
   event_types: Schema.NonEmptyArray(WebhookEventTypeBodySchema),
 });
 
-export const CreateWebhookEndpointSubscriptionBodySchema = Schema.Union(
+export const CreateWebhookEndpointSubscriptionBodySchema = Schema.Union([
   WebhookSubscriptionCamelBodySchema,
   WebhookSubscriptionSnakeBodySchema,
-);
+]);
 
-export type CreateWebhookEndpointSubscriptionBody = Schema.Schema.Type<
-  typeof CreateWebhookEndpointSubscriptionBodySchema
->;
+export type CreateWebhookEndpointSubscriptionBody =
+  typeof CreateWebhookEndpointSubscriptionBodySchema.Type;
 
 const ReplayCamelBodySchema = Schema.Struct({
   mailboxId: NonEmptyString,
@@ -87,24 +92,36 @@ const ReplaySnakeBodySchema = Schema.Struct({
   end_time: NonEmptyString,
 });
 
-export const CreateReplayBodySchema = Schema.Union(ReplayCamelBodySchema, ReplaySnakeBodySchema);
+export const CreateReplayBodySchema = Schema.Union([ReplayCamelBodySchema, ReplaySnakeBodySchema]);
 
-export type CreateReplayBody = Schema.Schema.Type<typeof CreateReplayBodySchema>;
+export type CreateReplayBody = typeof CreateReplayBodySchema.Type;
 
 export const CursorLimitQuerySchema = Schema.Struct({
   cursor: OptionalString,
   limit: OptionalListLimit,
 });
 
-export const MailboxListQuerySchema = Schema.Struct({
+const MailboxListQueryBaseSchema = Schema.Struct({
   cursor: OptionalString,
   limit: OptionalListLimit,
   mailboxId: OptionalNonEmptyString,
   mailbox_id: OptionalNonEmptyString,
-}).pipe(Schema.filter((query) => query.mailboxId !== undefined || query.mailbox_id !== undefined));
+});
 
-export type CursorLimitQueryParams = Schema.Schema.Type<typeof CursorLimitQuerySchema>;
-export type MailboxListQueryParams = Schema.Schema.Type<typeof MailboxListQuerySchema>;
+type MailboxListQueryBase = typeof MailboxListQueryBaseSchema.Type;
+
+export const MailboxListQuerySchema = MailboxListQueryBaseSchema.pipe(
+  Schema.refine(
+    (query): query is MailboxListQueryBase =>
+      query.mailboxId !== undefined || query.mailbox_id !== undefined,
+    {
+      description: "a query with mailboxId or mailbox_id",
+    },
+  ),
+);
+
+export type CursorLimitQueryParams = typeof CursorLimitQuerySchema.Type;
+export type MailboxListQueryParams = typeof MailboxListQuerySchema.Type;
 
 export const invalidRequest = (detail: string): ProblemDetails => {
   return {

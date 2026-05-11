@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { validator as honoValidator } from "hono-openapi";
+import { loadVendor, validator as honoValidator } from "hono-openapi";
 import type { ValidationTargets } from "hono/types";
 
 import { createProblemResponse } from "./handlers.js";
@@ -13,22 +13,77 @@ import {
 
 type ValidationDetail = string | ((data: unknown, target: keyof ValidationTargets) => string);
 
+type JsonSchemaTarget = "draft-07" | "draft-2020-12";
+type JsonSchemaObject = Readonly<Record<string, unknown>>;
+type EffectStandardSchemaWithJsonSchema = {
+  readonly "~standard": {
+    readonly jsonSchema: {
+      readonly input: (options: Readonly<{ target: JsonSchemaTarget }>) => JsonSchemaObject;
+    };
+  };
+};
+
+const DEFAULT_JSON_SCHEMA_TARGET: JsonSchemaTarget = "draft-2020-12";
+
+const isJsonSchemaTarget = (value: unknown): value is JsonSchemaTarget => {
+  return value === "draft-07" || value === "draft-2020-12";
+};
+
+const hasEffectJsonSchema = (value: unknown): value is EffectStandardSchemaWithJsonSchema => {
+  if (typeof value !== "object" || value === null || !("~standard" in value)) {
+    return false;
+  }
+
+  const standard = value["~standard"];
+
+  return (
+    typeof standard === "object" &&
+    standard !== null &&
+    "jsonSchema" in standard &&
+    typeof standard.jsonSchema === "object" &&
+    standard.jsonSchema !== null &&
+    "input" in standard.jsonSchema &&
+    typeof standard.jsonSchema.input === "function"
+  );
+};
+
+const toEffectJsonSchema = (
+  schema: unknown,
+  options?: Readonly<Record<string, unknown>>,
+) : JsonSchemaObject => {
+  if (!hasEffectJsonSchema(schema)) {
+    throw new Error("Effect Standard Schema is missing JSON Schema support.");
+  }
+
+  return schema["~standard"].jsonSchema.input({
+    target: isJsonSchemaTarget(options?.target) ? options.target : DEFAULT_JSON_SCHEMA_TARGET,
+  });
+};
+
+loadVendor("effect", {
+  toJSONSchema: toEffectJsonSchema,
+});
+
 const detailFor = (detail: ValidationDetail, data: unknown, target: keyof ValidationTargets) => {
   return typeof detail === "function" ? detail(data, target) : detail;
 };
 
 export const validate = <T extends keyof ValidationTargets>(
   target: T,
-  schema: Schema.Schema<any, any>,
+  schema: Schema.Decoder<any>,
   detail: ValidationDetail,
 ) => {
-  return honoValidator(target, Schema.standardSchemaV1(schema), (result) => {
-    if (result.success) {
-      return undefined;
-    }
+  return honoValidator(
+    target,
+    Schema.toStandardJSONSchemaV1(Schema.toStandardSchemaV1(schema)),
+    (result) => {
+      if (result.success) {
+        return undefined;
+      }
 
-    return createProblemResponse(invalidRequest(detailFor(detail, result.data, result.target)));
-  });
+      return createProblemResponse(invalidRequest(detailFor(detail, result.data, result.target)));
+    },
+  );
 };
 
 const isReadonlyRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {

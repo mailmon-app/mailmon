@@ -64,7 +64,7 @@ interface WorkerHttpRuntimeHandle {
   readonly transport: "http";
 }
 
-class WorkerHttpProcessors extends Context.Tag("@mailmon/worker/WorkerHttpProcessors")<
+class WorkerHttpProcessors extends Context.Service<
   WorkerHttpProcessors,
   {
     readonly processControlJob: WorkerHttpRuntimeOptions["processControlJob"];
@@ -75,7 +75,7 @@ class WorkerHttpProcessors extends Context.Tag("@mailmon/worker/WorkerHttpProces
     readonly processSyncJob: WorkerHttpRuntimeOptions["processSyncJob"];
     readonly processWebhookDelivery: WorkerHttpRuntimeOptions["processWebhookDelivery"];
   }
->() {}
+>()("@mailmon/worker/WorkerHttpProcessors") {}
 
 type InternalAuthResult =
   | {
@@ -319,13 +319,10 @@ const closeServer = (server: ServerType) => {
   });
 };
 
-type WorkerHttpServerRuntime = Pick<
-  ManagedRuntime.ManagedRuntime<WorkerHttpProcessors, never>,
-  "runPromise"
->;
+type WorkerHttpServerRuntime = Pick<ManagedRuntime.ManagedRuntime<any, any>, "runPromise">;
 
 const getWorkerHttpProcessors = (runtime: WorkerHttpServerRuntime) => {
-  return runtime.runPromise(WorkerHttpProcessors);
+  return runtime.runPromise(WorkerHttpProcessors.asEffect());
 };
 
 const createWorkerApp = (

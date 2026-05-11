@@ -10,10 +10,13 @@ import {
 
 const TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
 
+const testConfigLayer = (config: Record<string, unknown>) =>
+  ConfigProvider.layer(ConfigProvider.fromUnknown(config));
+
 describe("ApiConfig", () => {
   it.effect("loads config from a provider and applies defaults", () =>
     Effect.gen(function* () {
-      const config = yield* ApiConfig;
+      const config = yield* ApiConfig.asEffect();
 
       expect(config).toEqual({
         asyncTransportMode: "local",
@@ -34,8 +37,8 @@ describe("ApiConfig", () => {
       });
     }).pipe(
       Effect.provide(ApiConfig.layer),
-      Effect.withConfigProvider(
-        ConfigProvider.fromJson({
+      Effect.provide(
+        testConfigLayer({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           NODE_ENV: "test",
@@ -48,7 +51,7 @@ describe("ApiConfig", () => {
 describe("WorkerConfig", () => {
   it.effect("defaults to local http runtime settings", () =>
     Effect.gen(function* () {
-      const config = yield* WorkerConfig;
+      const config = yield* WorkerConfig.asEffect();
 
       expect(config).toEqual({
         asyncTransportMode: "local",
@@ -76,8 +79,8 @@ describe("WorkerConfig", () => {
       });
     }).pipe(
       Effect.provide(WorkerConfig.layer),
-      Effect.withConfigProvider(
-        ConfigProvider.fromJson({
+      Effect.provide(
+        testConfigLayer({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           NODE_ENV: "test",
@@ -88,7 +91,7 @@ describe("WorkerConfig", () => {
 
   it.effect("supports legacy bullmq mode when redis is configured", () =>
     Effect.gen(function* () {
-      const config = yield* WorkerConfig;
+      const config = yield* WorkerConfig.asEffect();
 
       expect(config.asyncTransportMode).toBe("legacy_bullmq");
       expect(config.redisUrl).toBe("redis://localhost:6379");
@@ -96,8 +99,8 @@ describe("WorkerConfig", () => {
       expect(config.gmailOauthClientId).toBeNull();
     }).pipe(
       Effect.provide(WorkerConfig.layer),
-      Effect.withConfigProvider(
-        ConfigProvider.fromJson({
+      Effect.provide(
+        testConfigLayer({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_ASYNC_TRANSPORT_MODE: "legacy_bullmq",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
@@ -111,10 +114,10 @@ describe("WorkerConfig", () => {
   it("requires a worker base url when gcp mode is selected for the api", async () => {
     await expect(
       Effect.runPromise(
-        ApiConfig.pipe(
+        ApiConfig.asEffect().pipe(
           Effect.provide(ApiConfig.layer),
-          Effect.withConfigProvider(
-            ConfigProvider.fromJson({
+          Effect.provide(
+            testConfigLayer({
               DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
               MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
               MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
@@ -128,7 +131,7 @@ describe("WorkerConfig", () => {
 
   it.effect("binds the api to all interfaces in gcp mode by default", () =>
     Effect.gen(function* () {
-      const config = yield* ApiConfig;
+      const config = yield* ApiConfig.asEffect();
 
       expect(config.host).toBe("0.0.0.0");
       expect(config.syncDispatchPubSubTopicName).toBe(
@@ -137,8 +140,8 @@ describe("WorkerConfig", () => {
       expect(config.workerBaseUrl).toBe("https://worker.example.com");
     }).pipe(
       Effect.provide(ApiConfig.layer),
-      Effect.withConfigProvider(
-        ConfigProvider.fromJson({
+      Effect.provide(
+        testConfigLayer({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
@@ -154,10 +157,10 @@ describe("WorkerConfig", () => {
   it("requires gcp routing values when worker gcp mode is selected", async () => {
     await expect(
       Effect.runPromise(
-        WorkerConfig.pipe(
+        WorkerConfig.asEffect().pipe(
           Effect.provide(WorkerConfig.layer),
-          Effect.withConfigProvider(
-            ConfigProvider.fromJson({
+          Effect.provide(
+            testConfigLayer({
               DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
               MAILMON_ASYNC_TRANSPORT_MODE: "gcp",
               MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
@@ -175,7 +178,7 @@ describe("WorkerConfig", () => {
 
   it.effect("loads gcp worker scheduling defaults when configured", () =>
     Effect.gen(function* () {
-      const config = yield* WorkerConfig;
+      const config = yield* WorkerConfig.asEffect();
 
       expect(config.asyncTransportMode).toBe("gcp");
       expect(config.gcpProjectId).toBe("mailmon-staging");
@@ -196,8 +199,8 @@ describe("WorkerConfig", () => {
       expect(config.gmailRefreshTokenEncryptionKey).toBe(TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY);
     }).pipe(
       Effect.provide(WorkerConfig.layer),
-      Effect.withConfigProvider(
-        ConfigProvider.fromJson({
+      Effect.provide(
+        testConfigLayer({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           GCP_PROJECT_ID: "mailmon-staging",
           GCP_REGION: "us-central1",
@@ -218,7 +221,7 @@ describe("WorkerConfig", () => {
 
   it.effect("loads Gmail refresh token rotation keys", () =>
     Effect.gen(function* () {
-      const config = yield* WorkerConfig;
+      const config = yield* WorkerConfig.asEffect();
 
       expect(config.gmailRefreshTokenEncryptionKeyId).toBe("key_new");
       expect(config.gmailRefreshTokenPreviousEncryptionKeys).toEqual([
@@ -233,8 +236,8 @@ describe("WorkerConfig", () => {
       ]);
     }).pipe(
       Effect.provide(WorkerConfig.layer),
-      Effect.withConfigProvider(
-        ConfigProvider.fromJson({
+      Effect.provide(
+        testConfigLayer({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY_ID: "key_new",
@@ -250,7 +253,7 @@ describe("WorkerConfig", () => {
 describe("CliConfig", () => {
   it.effect("defaults optional local mailbox dispatch settings", () =>
     Effect.gen(function* () {
-      const config = yield* CliConfig;
+      const config = yield* CliConfig.asEffect();
 
       expect(config).toEqual({
         asyncTransportMode: "local",
@@ -263,8 +266,8 @@ describe("CliConfig", () => {
       });
     }).pipe(
       Effect.provide(CliConfig.layer),
-      Effect.withConfigProvider(
-        ConfigProvider.fromJson({
+      Effect.provide(
+        testConfigLayer({
           NODE_ENV: "test",
         }),
       ),

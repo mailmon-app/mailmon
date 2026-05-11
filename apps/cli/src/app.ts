@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 
-import { Args, Command, Options } from "@effect/cli";
+import { Argument, Command, Flag } from "effect/unstable/cli";
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
 import {
   type ControlJobKind,
@@ -39,50 +39,50 @@ class CliError extends Data.TaggedError("CliError")<{
   readonly message: string;
 }> {}
 
-const forwardToOption = Options.text("forward-to").pipe(
-  Options.optional,
-  Options.withDescription("Forward webhook deliveries to a local HTTP endpoint"),
+const forwardToOption = Flag.string("forward-to").pipe(
+  Flag.optional,
+  Flag.withDescription("Forward webhook deliveries to a local HTTP endpoint"),
 );
-const requiredForwardToOption = Options.text("forward-to").pipe(
-  Options.withDescription("Forward webhook events to a local HTTP endpoint"),
+const requiredForwardToOption = Flag.string("forward-to").pipe(
+  Flag.withDescription("Forward webhook events to a local HTTP endpoint"),
 );
-const mailboxOption = Options.text("mailbox").pipe(
-  Options.withDescription("Mailbox ID to replay events for"),
+const mailboxOption = Flag.string("mailbox").pipe(
+  Flag.withDescription("Mailbox ID to replay events for"),
 );
-const lastOption = Options.text("last").pipe(
-  Options.withDescription("Replay events from the last duration, for example 15m, 1h, or 7d"),
+const lastOption = Flag.string("last").pipe(
+  Flag.withDescription("Replay events from the last duration, for example 15m, 1h, or 7d"),
 );
-const testSigningSecretOption = Options.text("test-signing-secret").pipe(
-  Options.withDefault("whsec_mailmon_cli_test"),
-  Options.withDescription("Signing secret used for local test webhook signatures"),
+const testSigningSecretOption = Flag.string("test-signing-secret").pipe(
+  Flag.withDefault("whsec_mailmon_cli_test"),
+  Flag.withDescription("Signing secret used for local test webhook signatures"),
 );
-const pollIntervalMsOption = Options.integer("poll-interval-ms").pipe(
-  Options.withDefault(1000),
-  Options.withDescription("Polling interval for local webhook deliveries"),
+const pollIntervalMsOption = Flag.integer("poll-interval-ms").pipe(
+  Flag.withDefault(1000),
+  Flag.withDescription("Polling interval for local webhook deliveries"),
 );
-const workspaceIdOption = Options.text("workspace-id").pipe(
-  Options.optional,
-  Options.withDescription("Workspace ID"),
+const workspaceIdOption = Flag.string("workspace-id").pipe(
+  Flag.optional,
+  Flag.withDescription("Workspace ID"),
 );
-const requiredWorkspaceIdOption = Options.text("workspace-id").pipe(
-  Options.withDescription("Workspace ID"),
+const requiredWorkspaceIdOption = Flag.string("workspace-id").pipe(
+  Flag.withDescription("Workspace ID"),
 );
-const keyPrefixOption = Options.text("prefix").pipe(
-  Options.withDefault("mm_test_"),
-  Options.withDescription("API key prefix: mm_test_ or mm_live_"),
+const keyPrefixOption = Flag.string("prefix").pipe(
+  Flag.withDefault("mm_test_"),
+  Flag.withDescription("API key prefix: mm_test_ or mm_live_"),
 );
-const apiKeyIdOption = Options.text("key-id").pipe(
-  Options.optional,
-  Options.withDescription("Workspace API key ID to revoke"),
+const apiKeyIdOption = Flag.string("key-id").pipe(
+  Flag.optional,
+  Flag.withDescription("Workspace API key ID to revoke"),
 );
-const apiKeyOption = Options.text("api-key").pipe(
-  Options.optional,
-  Options.withDescription("Raw workspace API key to revoke"),
+const apiKeyOption = Flag.string("api-key").pipe(
+  Flag.optional,
+  Flag.withDescription("Raw workspace API key to revoke"),
 );
-const markUnreadableReconnectRequiredOption = Options.boolean(
+const markUnreadableReconnectRequiredOption = Flag.boolean(
   "mark-unreadable-reconnect-required",
 ).pipe(
-  Options.withDescription(
+  Flag.withDescription(
     "Move credentials that cannot be decrypted into reconnect_required instead of only reporting them",
   ),
 );
@@ -178,7 +178,8 @@ export const parseLastDurationMs = (last: string) => {
   return amount * multiplier;
 };
 
-const encodeJsonString = (value: unknown) => Schema.encodeUnknownSync(Schema.parseJson())(value);
+const encodeJsonString = (value: unknown) =>
+  Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(value);
 
 const createWebhookDeliverySignature = (
   signingSecret: string,
@@ -705,9 +706,7 @@ const replayCommand = Command.make(
 const syncMailboxCommand = Command.make(
   "sync-mailbox",
   {
-    mailboxId: Args.text({
-      name: "mailbox-id",
-    }),
+    mailboxId: Argument.string("mailbox-id"),
   },
   (options) => runSyncMailbox(options),
 ).pipe(Command.withDescription("Dispatch mailbox sync through the local worker runtime"));
@@ -715,9 +714,7 @@ const syncMailboxCommand = Command.make(
 const controlJobCommand = Command.make(
   "control-job",
   {
-    kind: Args.text({
-      name: "kind",
-    }),
+    kind: Argument.string("kind"),
   },
   (options) => runControlJobDispatch(options),
 ).pipe(Command.withDescription("Run a control job through the local worker runtime"));

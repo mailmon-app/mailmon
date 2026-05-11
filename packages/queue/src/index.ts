@@ -11,7 +11,7 @@ import {
   type ControlJobDispatchRequest,
   type WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
-import { Context, Effect, Layer, Ref, Runtime } from "effect";
+import { Context, Effect, Layer, Ref } from "effect";
 
 export {
   createMailboxSyncJobData,
@@ -57,15 +57,13 @@ const emptyLocalAsyncTransportSnapshot = (): LocalAsyncTransportSnapshot => {
   };
 };
 
-export class LocalAsyncTransportProbe extends Context.Tag(
-  "@mailmon/queue/LocalAsyncTransportProbe",
-)<
+export class LocalAsyncTransportProbe extends Context.Service<
   LocalAsyncTransportProbe,
   {
     readonly getSnapshot: Effect.Effect<LocalAsyncTransportSnapshot>;
     readonly reset: Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/queue/LocalAsyncTransportProbe") {}
 
 export interface LocalAsyncTransportOptions {
   readonly fetch?: typeof globalThis.fetch;
@@ -352,14 +350,13 @@ export const createGcpWebhookDeliverySchedulerLayer = (
 };
 
 export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptions = {}) =>
-  Layer.unwrapEffect(
+  Layer.unwrap(
     Effect.gen(function* () {
       const snapshotRef = yield* Ref.make<LocalAsyncTransportSnapshot>(
         emptyLocalAsyncTransportSnapshot(),
       );
       const fetchImpl = options.fetch ?? globalThis.fetch;
-      const runtime = yield* Effect.runtime();
-      const runPromise = Runtime.runPromise(runtime);
+      const runPromise = Effect.runPromise;
       const workerBaseUrl = normalizeWorkerBaseUrl(
         options.workerBaseUrl ?? DEFAULT_LOCAL_WORKER_BASE_URL,
       );
@@ -385,7 +382,7 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
                   request,
                   "Local webhook delivery dispatch failed with",
                 ),
-              ).catch((error) => {
+              ).catch((error: unknown) => {
                 options.onWebhookDeliveryDispatchError?.(error, request);
               });
             }, delayMs);
@@ -398,25 +395,21 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
             Ref.update(snapshotRef, (snapshot) => ({
               ...snapshot,
               mailboxSyncMailboxIds: [...snapshot.mailboxSyncMailboxIds, mailboxId],
-            })).pipe(
-              Effect.zipRight(dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId)),
-            ),
+            })).pipe(Effect.andThen(dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId))),
         }),
         Layer.succeed(WebhookDeliveryScheduler, {
           scheduleWebhookDelivery: (request: WebhookDeliveryScheduleRequest) =>
             Ref.update(snapshotRef, (snapshot) => ({
               ...snapshot,
               webhookDeliveries: [...snapshot.webhookDeliveries, request],
-            })).pipe(Effect.zipRight(scheduleWebhookDeliveryDispatch(request))),
+            })).pipe(Effect.andThen(scheduleWebhookDeliveryDispatch(request))),
         }),
         Layer.succeed(ControlJobDispatcher, {
           dispatchControlJob: (request: ControlJobDispatchRequest) =>
             Ref.update(snapshotRef, (snapshot) => ({
               ...snapshot,
               controlJobs: [...snapshot.controlJobs, request],
-            })).pipe(
-              Effect.zipRight(dispatchControlJobToWorker(fetchImpl, workerBaseUrl, request)),
-            ),
+            })).pipe(Effect.andThen(dispatchControlJobToWorker(fetchImpl, workerBaseUrl, request))),
         }),
         Layer.succeed(LocalAsyncTransportProbe, {
           getSnapshot: Ref.get(snapshotRef),

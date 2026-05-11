@@ -20,7 +20,7 @@ export type InternalMessageDecodeResult<T> =
 
 const GmailPushNotificationDataSchema = Schema.Struct({
   emailAddress: Schema.NonEmptyString,
-  historyId: Schema.Union(Schema.NonEmptyString, Schema.Number),
+  historyId: Schema.Union([Schema.NonEmptyString, Schema.Number]),
 });
 
 const normalizeGmailHistoryId = (historyId: string | number) => {
@@ -28,14 +28,14 @@ const normalizeGmailHistoryId = (historyId: string | number) => {
 };
 
 const encodeJsonString = (value: unknown) => {
-  return Schema.encodeUnknownSync(Schema.parseJson())(value);
+  return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(value);
 };
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
   return typeof value === "object" && value !== null;
 };
 
-const decodeSchema = <A>(schema: Schema.Schema<A>, value: unknown): A | null => {
+const decodeSchema = <A>(schema: Schema.Decoder<A>, value: unknown): A | null => {
   try {
     return Schema.decodeUnknownSync(schema)(value);
   } catch {

@@ -7,7 +7,7 @@ import {
 } from "@mailmon/core";
 import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { asc, eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Option } from "effect";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 
@@ -312,7 +312,7 @@ describe("Replay persistence", () => {
             webhookEndpointId,
             startTime: replayStartTime,
             endTime: replayEndTime,
-          }).pipe(Effect.either, Effect.provide(runtimeLayer(connectionString))),
+          }).pipe(Effect.exit, Effect.provide(runtimeLayer(connectionString))),
         ),
         Effect.runPromise(
           createReplay(workspaceId, {
@@ -320,19 +320,22 @@ describe("Replay persistence", () => {
             webhookEndpointId,
             startTime: "2026-04-10T10:20:00.000Z",
             endTime: "2026-04-10T10:45:00.000Z",
-          }).pipe(Effect.either, Effect.provide(runtimeLayer(connectionString))),
+          }).pipe(Effect.exit, Effect.provide(runtimeLayer(connectionString))),
         ),
       ]);
 
-      expect(attempts.filter((attempt) => attempt._tag === "Right")).toHaveLength(1);
-      expect(attempts.filter((attempt) => attempt._tag === "Left")).toEqual([
-        expect.objectContaining({
-          _tag: "Left",
-          left: expect.objectContaining({
+      expect(attempts.filter(Exit.isSuccess)).toHaveLength(1);
+      expect(
+        attempts
+          .filter(Exit.isFailure)
+          .map((attempt) => Cause.findErrorOption(attempt.cause)),
+      ).toEqual([
+        Option.some(
+          expect.objectContaining({
             code: "replay_conflict",
             status: 409,
           }),
-        }),
+        ),
       ]);
     });
   });

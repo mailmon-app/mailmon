@@ -6,7 +6,7 @@ import {
 } from "@mailmon/core";
 import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Option } from "effect";
 
 import { createCorePersistenceLayer, createDb, schema } from "./index.js";
 import { withIsolatedDatabaseEffect } from "./test-setup.js";
@@ -237,64 +237,64 @@ describe("DB-backed webhook endpoint spine", () => {
       return Effect.gen(function* () {
         yield* Effect.promise(() => seedWebhookFixtures(connectionString));
 
-        const endpointCreateA = yield* Effect.fork(
-          createWebhookEndpoint(primaryWorkspaceId, {
-            url: "https://app.example.com/webhooks/concurrent",
-            description: "first",
-          }).pipe(Effect.either),
+        const endpointResults = yield* Effect.all(
+          [
+            createWebhookEndpoint(primaryWorkspaceId, {
+              url: "https://app.example.com/webhooks/concurrent",
+              description: "first",
+            }).pipe(Effect.exit),
+            createWebhookEndpoint(primaryWorkspaceId, {
+              url: "https://app.example.com/webhooks/concurrent",
+              description: "second",
+            }).pipe(Effect.exit),
+          ],
+          { concurrency: "unbounded" },
         );
-        const endpointCreateB = yield* Effect.fork(
-          createWebhookEndpoint(primaryWorkspaceId, {
-            url: "https://app.example.com/webhooks/concurrent",
-            description: "second",
-          }).pipe(Effect.either),
-        );
-        const endpointResults = [
-          yield* Fiber.join(endpointCreateA),
-          yield* Fiber.join(endpointCreateB),
-        ];
 
-        expect(endpointResults.filter((result) => result._tag === "Right")).toHaveLength(1);
-        expect(endpointResults.filter((result) => result._tag === "Left")).toEqual([
-          expect.objectContaining({
-            _tag: "Left",
-            left: expect.objectContaining({
+        expect(endpointResults.filter(Exit.isSuccess)).toHaveLength(1);
+        expect(
+          endpointResults
+            .filter(Exit.isFailure)
+            .map((result) => Cause.findErrorOption(result.cause)),
+        ).toEqual([
+          Option.some(
+            expect.objectContaining({
               code: "webhook_endpoint_already_exists",
               status: 409,
             }),
-          }),
+          ),
         ]);
 
         const primaryEndpoint = yield* createWebhookEndpoint(primaryWorkspaceId, {
           url: "https://app.example.com/webhooks/subscription-concurrent",
           description: "subscription concurrent",
         });
-        const subscriptionCreateA = yield* Effect.fork(
-          createWebhookEndpointSubscription(primaryWorkspaceId, primaryEndpoint.id, {
-            mailboxIds: [primaryMailboxId],
-            eventTypes: ["message.created"],
-          }).pipe(Effect.either),
+        const subscriptionResults = yield* Effect.all(
+          [
+            createWebhookEndpointSubscription(primaryWorkspaceId, primaryEndpoint.id, {
+              mailboxIds: [primaryMailboxId],
+              eventTypes: ["message.created"],
+            }).pipe(Effect.exit),
+            createWebhookEndpointSubscription(primaryWorkspaceId, primaryEndpoint.id, {
+              mailboxIds: [primaryMailboxId],
+              eventTypes: ["message.updated"],
+            }).pipe(Effect.exit),
+          ],
+          { concurrency: "unbounded" },
         );
-        const subscriptionCreateB = yield* Effect.fork(
-          createWebhookEndpointSubscription(primaryWorkspaceId, primaryEndpoint.id, {
-            mailboxIds: [primaryMailboxId],
-            eventTypes: ["message.updated"],
-          }).pipe(Effect.either),
-        );
-        const subscriptionResults = [
-          yield* Fiber.join(subscriptionCreateA),
-          yield* Fiber.join(subscriptionCreateB),
-        ];
 
-        expect(subscriptionResults.filter((result) => result._tag === "Right")).toHaveLength(1);
-        expect(subscriptionResults.filter((result) => result._tag === "Left")).toEqual([
-          expect.objectContaining({
-            _tag: "Left",
-            left: expect.objectContaining({
+        expect(subscriptionResults.filter(Exit.isSuccess)).toHaveLength(1);
+        expect(
+          subscriptionResults
+            .filter(Exit.isFailure)
+            .map((result) => Cause.findErrorOption(result.cause)),
+        ).toEqual([
+          Option.some(
+            expect.objectContaining({
               code: "webhook_endpoint_subscription_already_exists",
               status: 409,
             }),
-          }),
+          ),
         ]);
       }).pipe(Effect.provide(persistenceLayer));
     }),

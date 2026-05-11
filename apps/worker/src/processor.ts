@@ -17,15 +17,18 @@ import {
   runWebhookDelivery,
   runMailboxSync,
 } from "@mailmon/core";
+import { Effect } from "effect";
 
 type WorkerProcessorRuntime<R> = {
   readonly runPromise: <A, E, R2 extends R>(
-    effect: import("effect").Effect.Effect<A, E, R2>,
+    effect: Effect.Effect<A, E, R2>,
     options?: {
       readonly signal?: AbortSignal;
     },
   ) => Promise<A>;
 };
+
+type ContextOf<T> = T extends Effect.Effect<any, any, infer R> ? R : never;
 
 type WorkerTransportMode = "gcp" | "legacy_bullmq" | "local";
 
@@ -168,24 +171,20 @@ const logRecoveredWebhookDeliveryScheduling = (
   });
 };
 
-type SyncProcessorRuntime = WorkerProcessorRuntime<
-  import("effect").Effect.Effect.Context<ReturnType<typeof runMailboxSync>>
->;
+type SyncProcessorRuntime = WorkerProcessorRuntime<ContextOf<ReturnType<typeof runMailboxSync>>>;
 
 type WebhookDeliveryProcessorRuntime = WorkerProcessorRuntime<
-  import("effect").Effect.Effect.Context<ReturnType<typeof runWebhookDelivery>>
+  ContextOf<ReturnType<typeof runWebhookDelivery>>
 >;
 
-type ControlJobProcessorRuntime = WorkerProcessorRuntime<
-  import("effect").Effect.Effect.Context<ReturnType<typeof runControlJob>>
->;
+type ControlJobProcessorRuntime = WorkerProcessorRuntime<ContextOf<ReturnType<typeof runControlJob>>>;
 
 type GmailPushProcessorRuntime = WorkerProcessorRuntime<
-  import("effect").Effect.Effect.Context<ReturnType<typeof ingestGmailPushNotification>>
+  ContextOf<ReturnType<typeof ingestGmailPushNotification>>
 >;
 
 type SyncDeadLetterProcessorRuntime = WorkerProcessorRuntime<
-  import("effect").Effect.Effect.Context<ReturnType<typeof recordMailboxSyncDispatchExhausted>>
+  ContextOf<ReturnType<typeof recordMailboxSyncDispatchExhausted>>
 >;
 
 export const createProcessSyncJob = (

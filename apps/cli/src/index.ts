@@ -1,16 +1,20 @@
 #!/usr/bin/env node
-import { Command } from "@effect/cli";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { CliConfig } from "@mailmon/config";
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Command from "effect/unstable/cli/Command";
 
 import { appCommand } from "./app.js";
 
-const cli = Command.run(appCommand, {
-  name: "mailmon",
+const MainLayer = Layer.mergeAll(CliConfig.layer, NodeServices.layer);
+
+const main = Command.run(appCommand, {
   version: "0.0.0",
-});
+}).pipe(
+  Effect.provide(MainLayer),
+  Effect.scoped,
+);
 
-const runtimeLayer = Layer.mergeAll(CliConfig.layer, NodeContext.layer);
-
-cli(process.argv).pipe(Effect.provide(runtimeLayer), Effect.scoped, NodeRuntime.runMain);
+NodeRuntime.runMain(main);

@@ -47,7 +47,7 @@ import type {
   WorkspaceApiKeyIdentity,
 } from "./contracts.js";
 
-export class MailboxCatalog extends Context.Tag("@mailmon/core/MailboxCatalog")<
+export class MailboxCatalog extends Context.Service<
   MailboxCatalog,
   {
     readonly getMailbox: (
@@ -57,18 +57,18 @@ export class MailboxCatalog extends Context.Tag("@mailmon/core/MailboxCatalog")<
       }>,
     ) => Effect.Effect<Option.Option<MailboxResource>>;
   }
->() {}
+>()("@mailmon/core/MailboxCatalog") {}
 
-export class WorkspaceApiKeyStore extends Context.Tag("@mailmon/core/WorkspaceApiKeyStore")<
+export class WorkspaceApiKeyStore extends Context.Service<
   WorkspaceApiKeyStore,
   {
     readonly getWorkspaceForApiKey: (
       apiKey: string,
     ) => Effect.Effect<Option.Option<WorkspaceApiKeyIdentity>>;
   }
->() {}
+>()("@mailmon/core/WorkspaceApiKeyStore") {}
 
-export class WebhookEndpointCatalog extends Context.Tag("@mailmon/core/WebhookEndpointCatalog")<
+export class WebhookEndpointCatalog extends Context.Service<
   WebhookEndpointCatalog,
   {
     readonly getWebhookEndpoint: (
@@ -78,9 +78,9 @@ export class WebhookEndpointCatalog extends Context.Tag("@mailmon/core/WebhookEn
       }>,
     ) => Effect.Effect<Option.Option<WebhookEndpointResource>>;
   }
->() {}
+>()("@mailmon/core/WebhookEndpointCatalog") {}
 
-export class WebhookEndpointStore extends Context.Tag("@mailmon/core/WebhookEndpointStore")<
+export class WebhookEndpointStore extends Context.Service<
   WebhookEndpointStore,
   {
     readonly createWebhookEndpoint: (params: {
@@ -92,11 +92,9 @@ export class WebhookEndpointStore extends Context.Tag("@mailmon/core/WebhookEndp
       readonly createdAt: string;
     }) => Effect.Effect<CreatedWebhookEndpointResource, ProblemDetails>;
   }
->() {}
+>()("@mailmon/core/WebhookEndpointStore") {}
 
-export class WebhookEndpointSubscriptionStore extends Context.Tag(
-  "@mailmon/core/WebhookEndpointSubscriptionStore",
-)<
+export class WebhookEndpointSubscriptionStore extends Context.Service<
   WebhookEndpointSubscriptionStore,
   {
     readonly createWebhookEndpointSubscription: (params: {
@@ -107,9 +105,9 @@ export class WebhookEndpointSubscriptionStore extends Context.Tag(
       readonly createdAt: string;
     }) => Effect.Effect<ListResource<WebhookEndpointSubscriptionResource>, ProblemDetails>;
   }
->() {}
+>()("@mailmon/core/WebhookEndpointSubscriptionStore") {}
 
-export class MailboxQueryCatalog extends Context.Tag("@mailmon/core/MailboxQueryCatalog")<
+export class MailboxQueryCatalog extends Context.Service<
   MailboxQueryCatalog,
   {
     readonly listMessages: (
@@ -131,11 +129,9 @@ export class MailboxQueryCatalog extends Context.Tag("@mailmon/core/MailboxQuery
       }>,
     ) => Effect.Effect<Option.Option<ThreadResource>>;
   }
->() {}
+>()("@mailmon/core/MailboxQueryCatalog") {}
 
-export class MailboxObservabilityCatalog extends Context.Tag(
-  "@mailmon/core/MailboxObservabilityCatalog",
-)<
+export class MailboxObservabilityCatalog extends Context.Service<
   MailboxObservabilityCatalog,
   {
     readonly listSyncRuns: (
@@ -146,11 +142,9 @@ export class MailboxObservabilityCatalog extends Context.Tag(
       readonly observedAt: string;
     }) => Effect.Effect<MailboxObservabilitySnapshotResource>;
   }
->() {}
+>()("@mailmon/core/MailboxObservabilityCatalog") {}
 
-export class MailboxConnectSessionStore extends Context.Tag(
-  "@mailmon/core/MailboxConnectSessionStore",
-)<
+export class MailboxConnectSessionStore extends Context.Service<
   MailboxConnectSessionStore,
   {
     readonly createConnectSession: (params: {
@@ -173,17 +167,17 @@ export class MailboxConnectSessionStore extends Context.Tag(
       readonly refreshToken: string;
     }) => Effect.Effect<CompletedMailboxConnectSession, ProblemDetails>;
   }
->() {}
+>()("@mailmon/core/MailboxConnectSessionStore") {}
 
-export class SyncRunStore extends Context.Tag("@mailmon/core/SyncRunStore")<
+export class SyncRunStore extends Context.Service<
   SyncRunStore,
   {
     readonly startSyncRun: (mailboxId: string) => Effect.Effect<StartedSyncRun>;
     readonly completeSyncRun: (result: CompletedSyncRun) => Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/core/SyncRunStore") {}
 
-export class MailboxSyncCoordinator extends Context.Tag("@mailmon/core/MailboxSyncCoordinator")<
+export class MailboxSyncCoordinator extends Context.Service<
   MailboxSyncCoordinator,
   {
     readonly acquireMailboxSyncLease: (
@@ -210,18 +204,18 @@ export class MailboxSyncCoordinator extends Context.Tag("@mailmon/core/MailboxSy
       }>,
     ) => Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/core/MailboxSyncCoordinator") {}
 
-export class MailboxSyncProvider extends Context.Tag("@mailmon/core/MailboxSyncProvider")<
+export class MailboxSyncProvider extends Context.Service<
   MailboxSyncProvider,
   {
     readonly syncMailbox: (
       request: MailboxSyncRequest,
     ) => Effect.Effect<MailboxProviderSyncResult, ProblemDetails>;
   }
->() {}
+>()("@mailmon/core/MailboxSyncProvider") {}
 
-export class MailboxConnectProvider extends Context.Tag("@mailmon/core/MailboxConnectProvider")<
+export class MailboxConnectProvider extends Context.Service<
   MailboxConnectProvider,
   {
     readonly createAuthorizationUrl: (params: {
@@ -236,9 +230,9 @@ export class MailboxConnectProvider extends Context.Tag("@mailmon/core/MailboxCo
       readonly redirectUri: string;
     }) => Effect.Effect<MailboxConnectAuthorization, ProblemDetails>;
   }
->() {}
+>()("@mailmon/core/MailboxConnectProvider") {}
 
-export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateStore")<
+export class MailboxStateStore extends Context.Service<
   MailboxStateStore,
   {
     readonly getMailboxCursor: (mailboxId: string) => Effect.Effect<string | null>;
@@ -254,11 +248,9 @@ export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateSt
       }>,
     ) => Effect.Effect<MailboxSyncCommitResult, ProblemDetails>;
   }
->() {}
+>()("@mailmon/core/MailboxStateStore") {}
 
-export class MailboxSyncDispatchExhaustionStore extends Context.Tag(
-  "@mailmon/core/MailboxSyncDispatchExhaustionStore",
-)<
+export class MailboxSyncDispatchExhaustionStore extends Context.Service<
   MailboxSyncDispatchExhaustionStore,
   {
     readonly recordMailboxSyncDispatchExhausted: (params: {
@@ -267,9 +259,9 @@ export class MailboxSyncDispatchExhaustionStore extends Context.Tag(
       readonly syncRunId: string;
     }) => Effect.Effect<MailboxSyncDispatchExhaustedResult>;
   }
->() {}
+>()("@mailmon/core/MailboxSyncDispatchExhaustionStore") {}
 
-export class MailboxWatchStore extends Context.Tag("@mailmon/core/MailboxWatchStore")<
+export class MailboxWatchStore extends Context.Service<
   MailboxWatchStore,
   {
     readonly listMailboxWatchesNeedingRenewal: (params: {
@@ -293,9 +285,9 @@ export class MailboxWatchStore extends Context.Tag("@mailmon/core/MailboxWatchSt
       readonly problem: ProblemDetails;
     }) => Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/core/MailboxWatchStore") {}
 
-export class MailboxRepairStore extends Context.Tag("@mailmon/core/MailboxRepairStore")<
+export class MailboxRepairStore extends Context.Service<
   MailboxRepairStore,
   {
     readonly listMailboxesNeedingRepair: (params: {
@@ -308,11 +300,9 @@ export class MailboxRepairStore extends Context.Tag("@mailmon/core/MailboxRepair
       readonly resetCursor: boolean;
     }) => Effect.Effect<boolean>;
   }
->() {}
+>()("@mailmon/core/MailboxRepairStore") {}
 
-export class MailboxExecutionRecoveryStore extends Context.Tag(
-  "@mailmon/core/MailboxExecutionRecoveryStore",
-)<
+export class MailboxExecutionRecoveryStore extends Context.Service<
   MailboxExecutionRecoveryStore,
   {
     readonly listStuckMailboxSyncExecutions: (params: {
@@ -326,45 +316,43 @@ export class MailboxExecutionRecoveryStore extends Context.Tag(
       readonly syncRunId: string | null;
     }) => Effect.Effect<boolean>;
   }
->() {}
+>()("@mailmon/core/MailboxExecutionRecoveryStore") {}
 
-export class MailboxWatchProvider extends Context.Tag("@mailmon/core/MailboxWatchProvider")<
+export class MailboxWatchProvider extends Context.Service<
   MailboxWatchProvider,
   {
     readonly renewMailboxWatch: (
       request: MailboxWatchRenewalRequest,
     ) => Effect.Effect<MailboxWatchRenewalResult, ProblemDetails>;
   }
->() {}
+>()("@mailmon/core/MailboxWatchProvider") {}
 
-export class MailboxPushNotificationStore extends Context.Tag(
-  "@mailmon/core/MailboxPushNotificationStore",
-)<
+export class MailboxPushNotificationStore extends Context.Service<
   MailboxPushNotificationStore,
   {
     readonly listMailboxesForGmailPushNotification: (
       notification: GmailPushNotification,
     ) => Effect.Effect<ReadonlyArray<MailboxResource>>;
   }
->() {}
+>()("@mailmon/core/MailboxPushNotificationStore") {}
 
-export class MailboxSyncDispatcher extends Context.Tag("@mailmon/core/MailboxSyncDispatcher")<
+export class MailboxSyncDispatcher extends Context.Service<
   MailboxSyncDispatcher,
   {
     readonly dispatchMailboxSync: (mailboxId: string) => Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/core/MailboxSyncDispatcher") {}
 
-export class WebhookDeliveryScheduler extends Context.Tag("@mailmon/core/WebhookDeliveryScheduler")<
+export class WebhookDeliveryScheduler extends Context.Service<
   WebhookDeliveryScheduler,
   {
     readonly scheduleWebhookDelivery: (
       request: WebhookDeliveryScheduleRequest,
     ) => Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/core/WebhookDeliveryScheduler") {}
 
-export class WebhookDeliveryStore extends Context.Tag("@mailmon/core/WebhookDeliveryStore")<
+export class WebhookDeliveryStore extends Context.Service<
   WebhookDeliveryStore,
   {
     readonly createWebhookDeliveriesForMailboxEvents: (
@@ -387,9 +375,9 @@ export class WebhookDeliveryStore extends Context.Tag("@mailmon/core/WebhookDeli
       attempt: CompletedWebhookDeliveryAttempt,
     ) => Effect.Effect<boolean>;
   }
->() {}
+>()("@mailmon/core/WebhookDeliveryStore") {}
 
-export class ReplayStore extends Context.Tag("@mailmon/core/ReplayStore")<
+export class ReplayStore extends Context.Service<
   ReplayStore,
   {
     readonly createReplay: (
@@ -420,9 +408,9 @@ export class ReplayStore extends Context.Tag("@mailmon/core/ReplayStore")<
       readonly replayId: string;
     }) => Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/core/ReplayStore") {}
 
-export class WebhookDeliverySender extends Context.Tag("@mailmon/core/WebhookDeliverySender")<
+export class WebhookDeliverySender extends Context.Service<
   WebhookDeliverySender,
   {
     readonly send: (
@@ -430,11 +418,11 @@ export class WebhookDeliverySender extends Context.Tag("@mailmon/core/WebhookDel
       attemptedAt: string,
     ) => Effect.Effect<WebhookDeliverySendResponse, WebhookDeliverySendFailure>;
   }
->() {}
+>()("@mailmon/core/WebhookDeliverySender") {}
 
-export class ControlJobDispatcher extends Context.Tag("@mailmon/core/ControlJobDispatcher")<
+export class ControlJobDispatcher extends Context.Service<
   ControlJobDispatcher,
   {
     readonly dispatchControlJob: (request: ControlJobDispatchRequest) => Effect.Effect<void>;
   }
->() {}
+>()("@mailmon/core/ControlJobDispatcher") {}

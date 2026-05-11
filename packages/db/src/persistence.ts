@@ -1378,9 +1378,14 @@ export const rewrapGmailMailboxCredentials = (options?: {
     for (const credential of credentialRows) {
       const rewrappedRefreshToken = yield* gmailRefreshTokenCipher
         .rewrapRefreshToken(credential.refreshTokenCiphertext)
-        .pipe(Effect.either);
+        .pipe(
+          Effect.match({
+            onFailure: (error) => ({ _tag: "Failure" as const, error }),
+            onSuccess: (value) => ({ _tag: "Success" as const, value }),
+          }),
+        );
 
-      if (rewrappedRefreshToken._tag === "Left") {
+      if (rewrappedRefreshToken._tag === "Failure") {
         if (markUnreadableReconnectRequired) {
           yield* Effect.promise(() =>
             database.db
@@ -1405,7 +1410,7 @@ export const rewrapGmailMailboxCredentials = (options?: {
         continue;
       }
 
-      if (rewrappedRefreshToken.right === credential.refreshTokenCiphertext) {
+      if (rewrappedRefreshToken.value === credential.refreshTokenCiphertext) {
         result.alreadyCurrent += 1;
         continue;
       }
@@ -1414,7 +1419,7 @@ export const rewrapGmailMailboxCredentials = (options?: {
         database.db
           .update(gmailMailboxCredentials)
           .set({
-            refreshTokenCiphertext: rewrappedRefreshToken.right,
+            refreshTokenCiphertext: rewrappedRefreshToken.value,
             updatedAt: observedAt,
           })
           .where(
@@ -1437,13 +1442,12 @@ export const rewrapGmailMailboxCredentials = (options?: {
     return result satisfies GmailMailboxCredentialRewrapResult;
   });
 
-export class MailmonDatabase extends Context.Tag("@mailmon/db/MailmonDatabase")<
-  MailmonDatabase,
-  DatabaseHandle
->() {}
+export class MailmonDatabase extends Context.Service<MailmonDatabase, DatabaseHandle>()(
+  "@mailmon/db/MailmonDatabase",
+) {}
 
 export const createDatabaseLayer = (connectionString: string) =>
-  Layer.scoped(
+  Layer.effect(
     MailmonDatabase,
     Effect.acquireRelease(
       Effect.sync(() => createDb(connectionString)),
@@ -1685,7 +1689,7 @@ export const createMailboxCatalogLayer = Layer.effect(
             )
             .limit(1);
 
-          return Option.fromNullable(row).pipe(Option.map(toMailboxResource));
+          return Option.fromNullishOr(row).pipe(Option.map(toMailboxResource));
         }),
     };
   }),
@@ -1738,7 +1742,7 @@ export const createWorkspaceApiKeyStoreLayer = Layer.effect(
             )
             .limit(1);
 
-          return Option.fromNullable(row).pipe(
+          return Option.fromNullishOr(row).pipe(
             Option.map((value) => toWorkspaceApiKeyIdentity(value.workspaceId)),
           );
         }),
@@ -1772,7 +1776,7 @@ export const createWebhookEndpointCatalogLayer = Layer.effect(
             )
             .limit(1);
 
-          return Option.fromNullable(row).pipe(Option.map(toWebhookEndpointResource));
+          return Option.fromNullishOr(row).pipe(Option.map(toWebhookEndpointResource));
         }),
     };
   }),
@@ -2367,7 +2371,7 @@ export const createReplayStoreLayer = Layer.effect(
             )
             .limit(1);
 
-          return Option.fromNullable(row).pipe(Option.map(toReplayResource));
+          return Option.fromNullishOr(row).pipe(Option.map(toReplayResource));
         }),
       listReplayDispatchTargets: ({ limit }) =>
         Effect.promise(async () => {
@@ -2528,7 +2532,7 @@ export const createMailboxQueryCatalogLayer = Layer.effect(
             )
             .limit(1);
 
-          return Option.fromNullable(row?.message).pipe(
+          return Option.fromNullishOr(row?.message).pipe(
             Option.map((message) => toMessageResource(message)),
           );
         }),
@@ -2908,7 +2912,7 @@ export const createMailboxConnectSessionStoreLayer = Layer.effect(
             .where(eq(mailboxConnectSessions.id, connectSessionId))
             .limit(1);
 
-          return Option.fromNullable(row).pipe(Option.map(toStoredConnectSession));
+          return Option.fromNullishOr(row).pipe(Option.map(toStoredConnectSession));
         }),
       completeConnectSession: (params) =>
         Effect.gen(function* () {

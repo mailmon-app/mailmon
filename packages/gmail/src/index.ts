@@ -42,7 +42,7 @@ export interface GmailRefreshTokenInspection {
   readonly storage: "encrypted" | "plaintext";
 }
 
-export class GmailRefreshTokenCipher extends Context.Tag("@mailmon/gmail/GmailRefreshTokenCipher")<
+export class GmailRefreshTokenCipher extends Context.Service<
   GmailRefreshTokenCipher,
   {
     readonly decryptRefreshToken: (
@@ -58,18 +58,16 @@ export class GmailRefreshTokenCipher extends Context.Tag("@mailmon/gmail/GmailRe
       storedRefreshToken: string,
     ) => Effect.Effect<string, GmailRefreshTokenCipherError>;
   }
->() {}
+>()("@mailmon/gmail/GmailRefreshTokenCipher") {}
 
-export class GmailMailboxCredentialStore extends Context.Tag(
-  "@mailmon/gmail/GmailMailboxCredentialStore",
-)<
+export class GmailMailboxCredentialStore extends Context.Service<
   GmailMailboxCredentialStore,
   {
     readonly getGmailMailboxCredential: (
       mailboxId: string,
     ) => Effect.Effect<GmailMailboxCredential | null, ProblemDetails>;
   }
->() {}
+>()("@mailmon/gmail/GmailMailboxCredentialStore") {}
 
 export interface GmailRefreshTokenCipherConfig {
   readonly activeKeyId?: string;

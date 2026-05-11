@@ -1,40 +1,40 @@
 import { Schema } from "effect";
 
-export const MailboxStatusSchema = Schema.Literal("active", "reconnect_required", "disabled");
-export const MailboxSyncStateSchema = Schema.Literal(
+export const MailboxStatusSchema = Schema.Literals(["active", "reconnect_required", "disabled"]);
+export const MailboxSyncStateSchema = Schema.Literals([
   "initializing",
   "healthy",
   "lagging",
   "failed",
-);
-export const MailboxWatchStateSchema = Schema.Literal("active", "expiring", "expired", "unhealthy");
-export const MailboxEventTypeSchema = Schema.Literal(
+]);
+export const MailboxWatchStateSchema = Schema.Literals(["active", "expiring", "expired", "unhealthy"]);
+export const MailboxEventTypeSchema = Schema.Literals([
   "message.created",
   "message.updated",
   "thread.updated",
-);
-export const WebhookEventTypeSchema = Schema.Literal(
+]);
+export const WebhookEventTypeSchema = Schema.Literals([
   "message.created",
   "message.updated",
   "thread.updated",
-);
-export const WebhookEndpointDeliveryStateSchema = Schema.Literal("healthy", "degraded", "failing");
-export const ReplayStatusSchema = Schema.Literal(
+]);
+export const WebhookEndpointDeliveryStateSchema = Schema.Literals(["healthy", "degraded", "failing"]);
+export const ReplayStatusSchema = Schema.Literals([
   "queued",
   "running",
   "completed",
   "failed",
   "cancelled",
-);
-export const SyncRunOutcomeSchema = Schema.Literal(
+]);
+export const SyncRunOutcomeSchema = Schema.Literals([
   "completed",
   "skipped_due_to_active_lease",
   "reconnect_required",
   "dispatch_retry_exhausted",
   "failed_after_lease_acquired",
   "lease_lost",
-);
-export const MailboxSyncRunInspectionStatusSchema = Schema.Literal(
+]);
+export const MailboxSyncRunInspectionStatusSchema = Schema.Literals([
   "running",
   "completed",
   "skipped_due_to_active_lease",
@@ -42,15 +42,15 @@ export const MailboxSyncRunInspectionStatusSchema = Schema.Literal(
   "dispatch_retry_exhausted",
   "failed_after_lease_acquired",
   "lease_lost",
-);
-export const ControlJobKindSchema = Schema.Literal(
+]);
+export const ControlJobKindSchema = Schema.Literals([
   "renew_watches",
   "dispatch_replays",
   "repair_mailboxes",
   "recover_stuck_syncs",
   "recover_webhook_deliveries",
   "cleanup",
-);
+]);
 export const MailboxSyncJobDataSchema = Schema.Struct({
   mailboxId: Schema.NonEmptyString,
 });
@@ -62,25 +62,19 @@ export const ControlJobDispatchRequestSchema = Schema.Struct({
   kind: ControlJobKindSchema,
 });
 
-export type MailboxStatus = Schema.Schema.Type<typeof MailboxStatusSchema>;
-export type MailboxSyncState = Schema.Schema.Type<typeof MailboxSyncStateSchema>;
-export type MailboxWatchState = Schema.Schema.Type<typeof MailboxWatchStateSchema>;
-export type MailboxEventType = Schema.Schema.Type<typeof MailboxEventTypeSchema>;
-export type WebhookEventType = Schema.Schema.Type<typeof WebhookEventTypeSchema>;
-export type WebhookEndpointDeliveryState = Schema.Schema.Type<
-  typeof WebhookEndpointDeliveryStateSchema
->;
-export type ReplayStatus = Schema.Schema.Type<typeof ReplayStatusSchema>;
-export type SyncRunOutcome = Schema.Schema.Type<typeof SyncRunOutcomeSchema>;
-export type MailboxSyncRunInspectionStatus = Schema.Schema.Type<
-  typeof MailboxSyncRunInspectionStatusSchema
->;
-export type ControlJobKind = Schema.Schema.Type<typeof ControlJobKindSchema>;
-export type MailboxSyncJobData = Schema.Schema.Type<typeof MailboxSyncJobDataSchema>;
-export type WebhookDeliveryScheduleRequest = Schema.Schema.Type<
-  typeof WebhookDeliveryScheduleRequestSchema
->;
-export type ControlJobDispatchRequest = Schema.Schema.Type<typeof ControlJobDispatchRequestSchema>;
+export type MailboxStatus = typeof MailboxStatusSchema.Type;
+export type MailboxSyncState = typeof MailboxSyncStateSchema.Type;
+export type MailboxWatchState = typeof MailboxWatchStateSchema.Type;
+export type MailboxEventType = typeof MailboxEventTypeSchema.Type;
+export type WebhookEventType = typeof WebhookEventTypeSchema.Type;
+export type WebhookEndpointDeliveryState = typeof WebhookEndpointDeliveryStateSchema.Type;
+export type ReplayStatus = typeof ReplayStatusSchema.Type;
+export type SyncRunOutcome = typeof SyncRunOutcomeSchema.Type;
+export type MailboxSyncRunInspectionStatus = typeof MailboxSyncRunInspectionStatusSchema.Type;
+export type ControlJobKind = typeof ControlJobKindSchema.Type;
+export type MailboxSyncJobData = typeof MailboxSyncJobDataSchema.Type;
+export type WebhookDeliveryScheduleRequest = typeof WebhookDeliveryScheduleRequestSchema.Type;
+export type ControlJobDispatchRequest = typeof ControlJobDispatchRequestSchema.Type;
 
 export interface MailboxOperationalError {
   readonly code: string;

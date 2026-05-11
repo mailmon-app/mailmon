@@ -221,34 +221,32 @@ const acquireMailboxSyncExecution = (mailbox: MailboxResource) =>
 
 const createMailboxSyncHeartbeat = (execution: AcquiredMailboxSyncExecution) =>
   Effect.forever(
-    Effect.sleep(Duration.millis(DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS)).pipe(
-      Effect.zipRight(
-        Effect.gen(function* () {
-          const syncCoordinator = yield* MailboxSyncCoordinator;
-          const heartbeatAt = nowIso();
+    Effect.gen(function* () {
+      yield* Effect.sleep(Duration.millis(DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS));
 
-          return yield* syncCoordinator.renewMailboxSyncLease({
-            mailboxId: execution.mailbox.id,
+      const syncCoordinator = yield* MailboxSyncCoordinator;
+      const heartbeatAt = nowIso();
+      const renewal = yield* syncCoordinator.renewMailboxSyncLease({
+        mailboxId: execution.mailbox.id,
+        leaseOwnerId: execution.leaseOwnerId,
+        heartbeatAt,
+        expiresAt: addMillisecondsToIsoTimestamp(
+          heartbeatAt,
+          DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS,
+        ),
+      });
+
+      if (!renewal.renewed) {
+        return yield* Effect.fail(
+          mailboxSyncLeaseLost(execution.mailbox.id, {
             leaseOwnerId: execution.leaseOwnerId,
-            heartbeatAt,
-            expiresAt: addMillisecondsToIsoTimestamp(
-              heartbeatAt,
-              DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS,
-            ),
-          });
-        }),
-      ),
-      Effect.flatMap((renewal) =>
-        renewal.renewed
-          ? Effect.void
-          : Effect.fail(
-              mailboxSyncLeaseLost(execution.mailbox.id, {
-                leaseOwnerId: execution.leaseOwnerId,
-                syncRunId: execution.syncRun.syncRunId,
-              }),
-            ),
-      ),
-    ),
+            syncRunId: execution.syncRun.syncRunId,
+          }),
+        );
+      }
+
+      return yield* Effect.void;
+    }),
   );
 
 const commitProviderSyncResult = (execution: AcquiredMailboxSyncExecution) =>
@@ -326,7 +324,7 @@ const runAcquiredMailboxSyncExecution = (execution: AcquiredMailboxSyncExecution
   const heartbeat = createMailboxSyncHeartbeat(execution);
 
   return Effect.raceFirst(syncWork, heartbeat).pipe(
-    Effect.catchAll((problem) => completeAcquiredExecutionFailure(execution, problem)),
+    Effect.catch((problem) => completeAcquiredExecutionFailure(execution, problem)),
     Effect.ensuring(
       Effect.gen(function* () {
         const syncCoordinator = yield* MailboxSyncCoordinator;

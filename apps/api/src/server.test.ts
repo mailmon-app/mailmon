@@ -214,7 +214,7 @@ const createRuntime = () => {
       Layer.succeed(MailboxCatalog, {
         getMailbox: (mailboxId: string, options?: Readonly<{ workspaceId?: string }>) =>
           Effect.succeed(
-            Option.fromNullable(mailboxFixtures.get(mailboxId)).pipe(
+            Option.fromNullishOr(mailboxFixtures.get(mailboxId)).pipe(
               Option.filter(
                 (value) =>
                   options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
@@ -229,7 +229,7 @@ const createRuntime = () => {
           options?: Readonly<{ workspaceId?: string }>,
         ) =>
           Effect.succeed(
-            Option.fromNullable(webhookEndpoints.get(webhookEndpointId)).pipe(
+            Option.fromNullishOr(webhookEndpoints.get(webhookEndpointId)).pipe(
               Option.filter(
                 (value) =>
                   options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
@@ -341,7 +341,7 @@ const createRuntime = () => {
           }),
         getReplay: (replayId, options) =>
           Effect.succeed(
-            Option.fromNullable(replays.get(replayId)).pipe(
+            Option.fromNullishOr(replays.get(replayId)).pipe(
               Option.filter(
                 (value) =>
                   options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
@@ -375,7 +375,7 @@ const createRuntime = () => {
             return session;
           }),
         getConnectSession: (connectSessionId: string) =>
-          Effect.succeed(Option.fromNullable(connectSessions.get(connectSessionId))),
+          Effect.succeed(Option.fromNullishOr(connectSessions.get(connectSessionId))),
         completeConnectSession: (params) =>
           Effect.sync(() => {
             const session = connectSessions.get(params.connectSessionId);

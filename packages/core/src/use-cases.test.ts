@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option } from "effect";
-import * as TestClock from "effect/TestClock";
+import { TestClock } from "effect/testing";
 
 import type {
   CompletedSyncRun,
@@ -106,7 +106,7 @@ const mailboxFixtures = new Map([
 const catalogLayer = Layer.succeed(MailboxCatalog, {
   getMailbox: (mailboxId: string, options?: Readonly<{ workspaceId?: string }>) =>
     Effect.succeed(
-      Option.fromNullable(mailboxFixtures.get(mailboxId)).pipe(
+      Option.fromNullishOr(mailboxFixtures.get(mailboxId)).pipe(
         Option.filter(
           (value) =>
             options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
@@ -136,7 +136,7 @@ const webhookEndpointFixtures = new Map([
 const webhookEndpointCatalogLayer = Layer.succeed(WebhookEndpointCatalog, {
   getWebhookEndpoint: (webhookEndpointId: string, options?: Readonly<{ workspaceId?: string }>) =>
     Effect.succeed(
-      Option.fromNullable(webhookEndpointFixtures.get(webhookEndpointId)).pipe(
+      Option.fromNullishOr(webhookEndpointFixtures.get(webhookEndpointId)).pipe(
         Option.filter(
           (value) =>
             options?.workspaceId === undefined || value.workspaceId === options.workspaceId,
@@ -380,7 +380,7 @@ const createWebhookDeliveryStoreTestLayer = (
           attemptedAt,
         });
 
-        return Option.fromNullable(params.preparedDelivery).pipe(
+        return Option.fromNullishOr(params.preparedDelivery).pipe(
           Option.filter((delivery) => delivery.deliveryId === deliveryId),
         );
       }),
@@ -431,7 +431,7 @@ const createFailingWebhookDeliverySchedulerTestLayer = (
           deliveryId,
           notBefore,
         });
-      }).pipe(Effect.zipRight(Effect.die(new Error("Cloud Tasks createTask failed")))),
+      }).pipe(Effect.andThen(Effect.die(new Error("Cloud Tasks createTask failed")))),
   });
 
 const createReplayStoreTestLayer = (
@@ -475,7 +475,7 @@ const createReplayStoreTestLayer = (
       }),
     getReplay: (replayId, options) =>
       Effect.succeed(
-        Option.fromNullable(params.replayById?.[replayId]).pipe(
+        Option.fromNullishOr(params.replayById?.[replayId]).pipe(
           Option.filter(
             () => options?.workspaceId === undefined || options.workspaceId === primaryWorkspaceId,
           ),
@@ -484,7 +484,7 @@ const createReplayStoreTestLayer = (
     listReplayDispatchTargets: () => Effect.succeed([...(params.dispatchTargets ?? [])]),
     prepareReplayDispatch: ({ replayId, startedAt }) =>
       Effect.succeed(
-        Option.fromNullable(params.dispatchTargets?.find((target) => target.id === replayId)).pipe(
+        Option.fromNullishOr(params.dispatchTargets?.find((target) => target.id === replayId)).pipe(
           Option.map((replay) => ({
             replay: {
               ...replay,
@@ -531,7 +531,7 @@ const createSyncProviderTestLayer = (
       Effect.sync(() => {
         observedCursors.push(cursor);
       }).pipe(
-        Effect.zipRight(Effect.sleep(Duration.millis(options.delayMs ?? 0))),
+        Effect.andThen(Effect.sleep(Duration.millis(options.delayMs ?? 0))),
         Effect.as({
           snapshot: {
             threads: [
@@ -2566,7 +2566,7 @@ describe("runMailboxSync", () => {
         leaseOwnerId: string;
       }> = [];
 
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkScoped(
         runMailboxSync(mailboxFixture.id).pipe(
           Effect.provide(
             Layer.mergeAll(
@@ -2633,7 +2633,7 @@ describe("runMailboxSync", () => {
         leaseOwnerId: string;
       }> = [];
 
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkScoped(
         runMailboxSync(mailboxFixture.id).pipe(
           Effect.provide(
             Layer.mergeAll(
@@ -2651,7 +2651,7 @@ describe("runMailboxSync", () => {
               noopWebhookDeliverySchedulingLayer,
             ),
           ),
-          Effect.either,
+          Effect.result,
         ),
       );
 
@@ -2659,10 +2659,10 @@ describe("runMailboxSync", () => {
 
       const result = yield* Fiber.join(fiber);
 
-      expect(result._tag).toBe("Left");
+      expect(result._tag).toBe("Failure");
 
-      if (result._tag === "Left") {
-        expect(result.left.code).toBe("mailbox_sync_lease_lost");
+      if (result._tag === "Failure") {
+        expect(result.failure.code).toBe("mailbox_sync_lease_lost");
       }
 
       expect(observedCursors).toEqual([null]);

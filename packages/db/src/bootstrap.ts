@@ -31,7 +31,9 @@ export const createBootstrapMailboxCatalogLayer = (
 ) =>
   Layer.succeed(MailboxCatalog, {
     getMailbox: (mailboxId: string) =>
-      Effect.succeed(Option.fromNullable(mailboxes.find((mailbox) => mailbox.id === mailboxId))),
+      Effect.succeed(
+        Option.fromNullishOr(mailboxes.find((mailbox) => mailbox.id === mailboxId)),
+      ),
   });
 
 /** @public */

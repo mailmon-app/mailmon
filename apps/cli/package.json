@@ -35,7 +35,6 @@
     "format:check": "oxfmt --config ../../.oxfmtrc.json --check ."
   },
   "dependencies": {
-    "@effect/cli": "catalog:",
     "@effect/platform-node": "catalog:",
     "@varlock/google-secret-manager-plugin": "catalog:",
     "effect": "catalog:",

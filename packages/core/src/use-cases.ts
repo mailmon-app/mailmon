@@ -610,35 +610,33 @@ export const dispatchReplays = (
                     failed: false,
                   }),
                 onSome: (dispatch) =>
-                  webhookDeliveryStore
-                    .createWebhookDeliveriesForReplay({
-                      mailboxEventIds: dispatch.mailboxEventIds,
-                      notBefore: observedAt,
+                  Effect.gen(function* () {
+                    const deliveryRequests =
+                      yield* webhookDeliveryStore.createWebhookDeliveriesForReplay({
+                        mailboxEventIds: dispatch.mailboxEventIds,
+                        notBefore: observedAt,
+                        replayId: dispatch.replay.id,
+                        webhookEndpointId: dispatch.replay.webhookEndpointId,
+                      });
+
+                    yield* Effect.forEach(
+                      deliveryRequests,
+                      (request) => webhookDeliveryScheduler.scheduleWebhookDelivery(request),
+                      { discard: true },
+                    );
+
+                    yield* replayStore.completeReplayDispatch({
                       replayId: dispatch.replay.id,
-                      webhookEndpointId: dispatch.replay.webhookEndpointId,
-                    })
-                    .pipe(
-                      Effect.flatMap((deliveryRequests) =>
-                        Effect.forEach(
-                          deliveryRequests,
-                          (request) => webhookDeliveryScheduler.scheduleWebhookDelivery(request),
-                          { discard: true },
-                        ).pipe(
-                          Effect.zipRight(
-                            replayStore.completeReplayDispatch({
-                              replayId: dispatch.replay.id,
-                              completedAt: observedAt,
-                              eventsReplayed: deliveryRequests.length,
-                            }),
-                          ),
-                          Effect.as({
-                            dispatched: true,
-                            eventsReplayed: deliveryRequests.length,
-                            failed: false,
-                          }),
-                        ),
-                      ),
-                    ),
+                      completedAt: observedAt,
+                      eventsReplayed: deliveryRequests.length,
+                    });
+
+                    return {
+                      dispatched: true,
+                      eventsReplayed: deliveryRequests.length,
+                      failed: false,
+                    } as const;
+                  }),
               }),
             ),
           ),
@@ -960,52 +958,45 @@ export const renewExpiringMailboxWatches = (
           target.mailbox.watchState === "expired" ||
           isMailboxWatchExpired(target.watchExpiresAt, observedAt);
 
-        return mailboxWatchStore
-          .markMailboxWatchRenewalStarted({
+        return Effect.gen(function* () {
+          yield* mailboxWatchStore.markMailboxWatchRenewalStarted({
             mailboxId: target.mailbox.id,
             observedAt,
-          })
-          .pipe(
-            Effect.zipRight(
-              mailboxWatchProvider.renewMailboxWatch({
-                mailbox: target.mailbox,
+          });
+
+          const renewal = yield* mailboxWatchProvider.renewMailboxWatch({
+            mailbox: target.mailbox,
+          });
+
+          yield* mailboxWatchStore.completeMailboxWatchRenewal({
+            historyId: renewal.historyId,
+            mailboxId: target.mailbox.id,
+            renewedAt: observedAt,
+            watchExpiresAt: renewal.watchExpiresAt,
+          });
+
+          if (expired || isWatchHistoryAheadOfMailboxCursor(target.cursor, renewal.historyId)) {
+            yield* dispatcher.dispatchMailboxSync(target.mailbox.id);
+          }
+
+          return {
+            expired,
+            status: "renewed" as const,
+          };
+        }).pipe(
+          Effect.catch((problem) =>
+            mailboxWatchStore.failMailboxWatchRenewal({
+              mailboxId: target.mailbox.id,
+              observedAt,
+              problem,
+            }).pipe(
+              Effect.as({
+                expired,
+                status: "failed" as const,
               }),
             ),
-            Effect.flatMap((renewal) =>
-              mailboxWatchStore
-                .completeMailboxWatchRenewal({
-                  historyId: renewal.historyId,
-                  mailboxId: target.mailbox.id,
-                  renewedAt: observedAt,
-                  watchExpiresAt: renewal.watchExpiresAt,
-                })
-                .pipe(
-                  Effect.zipRight(
-                    expired || isWatchHistoryAheadOfMailboxCursor(target.cursor, renewal.historyId)
-                      ? dispatcher.dispatchMailboxSync(target.mailbox.id)
-                      : Effect.void,
-                  ),
-                ),
-            ),
-            Effect.as({
-              expired,
-              status: "renewed" as const,
-            }),
-            Effect.catchAll((problem) =>
-              mailboxWatchStore
-                .failMailboxWatchRenewal({
-                  mailboxId: target.mailbox.id,
-                  observedAt,
-                  problem,
-                })
-                .pipe(
-                  Effect.as({
-                    expired,
-                    status: "failed" as const,
-                  }),
-                ),
-            ),
-          );
+          ),
+        );
       },
       { concurrency: 10 },
     );

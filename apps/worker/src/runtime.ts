@@ -22,7 +22,7 @@ import { Effect, Layer, Schema } from "effect";
 
 const DEFAULT_WEBHOOK_DELIVERY_TIMEOUT_MS = 5_000;
 const encodeJsonString = (value: unknown) => {
-  return Schema.encodeUnknownSync(Schema.parseJson())(value);
+  return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(value);
 };
 
 const requireGcpWorkerValue = (value: string | null, name: string) => {
@@ -127,7 +127,7 @@ interface InProcessWebhookDeliverySchedulerOptions {
 export const createInProcessWebhookDeliverySchedulerLayer = (
   options: InProcessWebhookDeliverySchedulerOptions,
 ) =>
-  Layer.scoped(
+  Layer.effect(
     WebhookDeliveryScheduler,
     Effect.acquireRelease(
       Effect.sync(() => {

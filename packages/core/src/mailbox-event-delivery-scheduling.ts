@@ -4,7 +4,7 @@ import type { WebhookDeliveryScheduleRequest } from "./contracts.js";
 import { WebhookDeliveryScheduler, WebhookDeliveryStore } from "./services.js";
 
 const ignoreSchedulingFailure = <E>(cause: Cause.Cause<E>) =>
-  Cause.isInterruptedOnly(cause) ? Effect.failCause(cause) : Effect.void;
+  Cause.hasInterruptsOnly(cause) ? Effect.failCause(cause) : Effect.void;
 
 export const scheduleWebhookDeliveryRequests = (
   deliveryRequests: ReadonlyArray<WebhookDeliveryScheduleRequest>,
@@ -21,7 +21,7 @@ export const scheduleWebhookDeliveryRequests = (
         const schedule = webhookDeliveryScheduler.scheduleWebhookDelivery(request);
 
         return options.continueOnSchedulingFailure === true
-          ? schedule.pipe(Effect.catchAllCause(ignoreSchedulingFailure))
+          ? schedule.pipe(Effect.catchCause(ignoreSchedulingFailure))
           : schedule;
       },
       { discard: true },

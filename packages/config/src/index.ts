@@ -1,93 +1,82 @@
 import { Config, Context, Effect, Layer, Option } from "effect";
 
-const nonEmptyString = (name: string) =>
-  Config.string(name).pipe(
-    Config.validate({
-      message: `${name} must be a non-empty string`,
-      validation: (value) => value.length > 0,
-    }),
-  );
-
 export type NodeEnv = "development" | "test" | "production";
 export type AsyncTransportMode = "local" | "gcp" | "legacy_bullmq";
 export const DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID = "mailmon-webhook-deliveries";
 
-const loadNodeEnv: Config.Config<NodeEnv> = Config.literal(
-  "development",
-  "test",
-  "production",
-)("NODE_ENV").pipe(Config.orElse(() => Config.succeed("development" as const)));
+const loadNodeEnv = Config.literals(["development", "test", "production"], "NODE_ENV").pipe(
+  Config.orElse(() => Config.succeed("development" as const)),
+);
 
-const loadDatabaseUrl = nonEmptyString("DATABASE_URL");
+const loadDatabaseUrl = Config.nonEmptyString("DATABASE_URL");
 const loadPort = (fallbackPort: number) =>
   Config.port("PORT").pipe(Config.orElse(() => Config.succeed(fallbackPort)));
-const loadHost = Config.option(nonEmptyString("HOST"));
-const loadGcpProjectId = Config.option(nonEmptyString("GCP_PROJECT_ID"));
-const loadGcpRegion = Config.option(nonEmptyString("GCP_REGION"));
-const loadGmailApiBaseUrl = nonEmptyString("MAILMON_GMAIL_API_BASE_URL").pipe(
+const loadHost = Config.option(Config.nonEmptyString("HOST"));
+const loadGcpProjectId = Config.option(Config.nonEmptyString("GCP_PROJECT_ID"));
+const loadGcpRegion = Config.option(Config.nonEmptyString("GCP_REGION"));
+const loadGmailApiBaseUrl = Config.nonEmptyString("MAILMON_GMAIL_API_BASE_URL").pipe(
   Config.orElse(() => Config.succeed("https://gmail.googleapis.com/gmail/v1")),
 );
-const loadGmailOauthClientId = Config.option(nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_ID"));
+const loadGmailOauthClientId = Config.option(Config.nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_ID"));
 const loadGmailOauthClientSecret = Config.option(
-  nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_SECRET"),
+  Config.nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_SECRET"),
 );
-const loadGmailOauthAuthorizeUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_AUTHORIZE_URL").pipe(
+const loadGmailOauthAuthorizeUrl = Config.nonEmptyString("MAILMON_GMAIL_OAUTH_AUTHORIZE_URL").pipe(
   Config.orElse(() => Config.succeed("https://accounts.google.com/o/oauth2/v2/auth")),
 );
-const loadGmailRefreshTokenEncryptionKey = nonEmptyString(
+const loadGmailRefreshTokenEncryptionKey = Config.nonEmptyString(
   "MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY",
 );
-const loadGmailRefreshTokenEncryptionKeyId = nonEmptyString(
+const loadGmailRefreshTokenEncryptionKeyId = Config.nonEmptyString(
   "MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY_ID",
 ).pipe(Config.orElse(() => Config.succeed("primary")));
 const loadGmailRefreshTokenPreviousEncryptionKeys = Config.option(
-  nonEmptyString("MAILMON_GMAIL_REFRESH_TOKEN_PREVIOUS_ENCRYPTION_KEYS"),
+  Config.nonEmptyString("MAILMON_GMAIL_REFRESH_TOKEN_PREVIOUS_ENCRYPTION_KEYS"),
 );
-const loadGmailOauthTokenUrl = nonEmptyString("MAILMON_GMAIL_OAUTH_TOKEN_URL").pipe(
+const loadGmailOauthTokenUrl = Config.nonEmptyString("MAILMON_GMAIL_OAUTH_TOKEN_URL").pipe(
   Config.orElse(() => Config.succeed("https://oauth2.googleapis.com/token")),
 );
-const loadGmailPubSubTopicName = Config.option(nonEmptyString("MAILMON_GMAIL_PUBSUB_TOPIC_NAME"));
+const loadGmailPubSubTopicName = Config.option(
+  Config.nonEmptyString("MAILMON_GMAIL_PUBSUB_TOPIC_NAME"),
+);
 const loadSyncDispatchPubSubTopicName = Config.option(
-  nonEmptyString("MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME"),
+  Config.nonEmptyString("MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME"),
 );
-const loadMailboxWorkerBaseUrl = Config.option(nonEmptyString("MAILMON_WORKER_BASE_URL"));
-const loadRedisUrl = Config.option(nonEmptyString("REDIS_URL"));
-const loadAsyncTransportMode: Config.Config<AsyncTransportMode> = Config.literal(
-  "local",
-  "gcp",
-  "legacy_bullmq",
-)("MAILMON_ASYNC_TRANSPORT_MODE").pipe(Config.orElse(() => Config.succeed("local" as const)));
-const loadGcpWebhookDeliveryQueueId = nonEmptyString("MAILMON_GCP_WEBHOOK_DELIVERY_QUEUE_ID").pipe(
-  Config.orElse(() => Config.succeed(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID)),
-);
+const loadMailboxWorkerBaseUrl = Config.option(Config.nonEmptyString("MAILMON_WORKER_BASE_URL"));
+const loadRedisUrl = Config.option(Config.nonEmptyString("REDIS_URL"));
+const loadAsyncTransportMode = Config.literals(
+  ["local", "gcp", "legacy_bullmq"],
+  "MAILMON_ASYNC_TRANSPORT_MODE",
+).pipe(Config.orElse(() => Config.succeed("local" as const)));
+const loadGcpWebhookDeliveryQueueId = Config.nonEmptyString(
+  "MAILMON_GCP_WEBHOOK_DELIVERY_QUEUE_ID",
+).pipe(Config.orElse(() => Config.succeed(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID)));
 const loadGcpTasksServiceAccountEmail = Config.option(
-  nonEmptyString("MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL"),
+  Config.nonEmptyString("MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL"),
 );
-const loadGcpTasksAudience = Config.option(nonEmptyString("MAILMON_GCP_TASKS_AUDIENCE"));
+const loadGcpTasksAudience = Config.option(Config.nonEmptyString("MAILMON_GCP_TASKS_AUDIENCE"));
 const loadGcpSchedulerServiceAccountEmail = Config.option(
-  nonEmptyString("MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL"),
+  Config.nonEmptyString("MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL"),
 );
 
-const normalizeOptional = <T>(value: Option.Option<T>) => {
-  return Option.getOrNull(value);
-};
+const normalizeOptional = <T>(value: Option.Option<T>) => Option.getOrNull(value);
+
+const defaultHostFor = (asyncTransportMode: AsyncTransportMode) =>
+  asyncTransportMode === "gcp" ? "0.0.0.0" : "127.0.0.1";
 
 const resolveWorkerBaseUrl = (
   asyncTransportMode: AsyncTransportMode,
-  workerBaseUrl: Option.Option<string>,
+  workerBaseUrl: string | null,
 ) => {
-  return Option.match(workerBaseUrl, {
-    onNone: () => {
-      if (asyncTransportMode === "gcp") {
-        throw new Error(
-          "MAILMON_WORKER_BASE_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp",
-        );
-      }
+  if (workerBaseUrl !== null) {
+    return workerBaseUrl;
+  }
 
-      return "http://127.0.0.1:3001";
-    },
-    onSome: (value) => value,
-  });
+  if (asyncTransportMode === "gcp") {
+    throw new Error("MAILMON_WORKER_BASE_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=gcp");
+  }
+
+  return "http://127.0.0.1:3001";
 };
 
 const requireGcpValue = (value: string | null, name: string) => {
@@ -104,26 +93,25 @@ export interface GmailRefreshTokenPreviousEncryptionKey {
 }
 
 const parsePreviousEncryptionKeys = (
-  value: Option.Option<string>,
+  value: string | null,
 ): ReadonlyArray<GmailRefreshTokenPreviousEncryptionKey> => {
-  return Option.match(value, {
-    onNone: () => [],
-    onSome: (rawValue) => {
-      return rawValue.split(",").map((entry) => {
-        const separatorIndex = entry.indexOf("=");
+  if (value === null) {
+    return [];
+  }
 
-        if (separatorIndex <= 0 || separatorIndex === entry.length - 1) {
-          throw new Error(
-            "MAILMON_GMAIL_REFRESH_TOKEN_PREVIOUS_ENCRYPTION_KEYS must be comma-separated key_id=base64_key entries",
-          );
-        }
+  return value.split(",").map((entry) => {
+    const separatorIndex = entry.indexOf("=");
 
-        return {
-          encryptionKey: entry.slice(separatorIndex + 1).trim(),
-          keyId: entry.slice(0, separatorIndex).trim(),
-        };
-      });
-    },
+    if (separatorIndex <= 0 || separatorIndex === entry.length - 1) {
+      throw new Error(
+        "MAILMON_GMAIL_REFRESH_TOKEN_PREVIOUS_ENCRYPTION_KEYS must be comma-separated key_id=base64_key entries",
+      );
+    }
+
+    return {
+      encryptionKey: entry.slice(separatorIndex + 1).trim(),
+      keyId: entry.slice(0, separatorIndex).trim(),
+    };
   });
 };
 
@@ -181,76 +169,199 @@ export interface CliEnv extends CommonEnv {
   readonly workerBaseUrl: string;
 }
 
-export class CommonConfig extends Context.Tag("@mailmon/config/CommonConfig")<
-  CommonConfig,
-  CommonEnv
->() {
-  static readonly layer = Layer.effect(
-    this,
-    Effect.all({
-      nodeEnv: loadNodeEnv,
-    }),
-  );
+const commonConfig = Config.all({
+  nodeEnv: loadNodeEnv,
+});
+
+const apiConfig = Config.all({
+  asyncTransportMode: loadAsyncTransportMode,
+  databaseUrl: loadDatabaseUrl,
+  gmailApiBaseUrl: loadGmailApiBaseUrl,
+  gmailOauthAuthorizeUrl: loadGmailOauthAuthorizeUrl,
+  gmailOauthClientId: loadGmailOauthClientId,
+  gmailOauthClientSecret: loadGmailOauthClientSecret,
+  gmailRefreshTokenEncryptionKey: loadGmailRefreshTokenEncryptionKey,
+  gmailRefreshTokenEncryptionKeyId: loadGmailRefreshTokenEncryptionKeyId,
+  gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
+  gmailOauthTokenUrl: loadGmailOauthTokenUrl,
+  host: loadHost,
+  nodeEnv: loadNodeEnv,
+  port: loadPort(3000),
+  syncDispatchPubSubTopicName: loadSyncDispatchPubSubTopicName,
+  workerBaseUrl: loadMailboxWorkerBaseUrl,
+}).pipe(
+  Config.map((config): ApiEnv => {
+    const syncDispatchPubSubTopicName = normalizeOptional(config.syncDispatchPubSubTopicName);
+    const workerBaseUrl = resolveWorkerBaseUrl(
+      config.asyncTransportMode,
+      normalizeOptional(config.workerBaseUrl),
+    );
+
+    return {
+      asyncTransportMode: config.asyncTransportMode,
+      databaseUrl: config.databaseUrl,
+      gmailApiBaseUrl: config.gmailApiBaseUrl,
+      gmailOauthAuthorizeUrl: config.gmailOauthAuthorizeUrl,
+      gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
+      gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
+      gmailRefreshTokenEncryptionKey: config.gmailRefreshTokenEncryptionKey,
+      gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
+      gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
+        normalizeOptional(config.gmailRefreshTokenPreviousEncryptionKeys),
+      ),
+      gmailOauthTokenUrl: config.gmailOauthTokenUrl,
+      host: Option.match(config.host, {
+        onNone: () => defaultHostFor(config.asyncTransportMode),
+        onSome: (value) => value,
+      }),
+      nodeEnv: config.nodeEnv,
+      port: config.port,
+      syncDispatchPubSubTopicName:
+        config.asyncTransportMode === "gcp"
+          ? requireGcpValue(
+              syncDispatchPubSubTopicName,
+              "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+            )
+          : syncDispatchPubSubTopicName,
+      workerBaseUrl,
+    };
+  }),
+);
+
+const workerConfig = Config.all({
+  asyncTransportMode: loadAsyncTransportMode,
+  databaseUrl: loadDatabaseUrl,
+  gmailApiBaseUrl: loadGmailApiBaseUrl,
+  gmailOauthClientId: loadGmailOauthClientId,
+  gmailOauthClientSecret: loadGmailOauthClientSecret,
+  gmailRefreshTokenEncryptionKey: loadGmailRefreshTokenEncryptionKey,
+  gmailRefreshTokenEncryptionKeyId: loadGmailRefreshTokenEncryptionKeyId,
+  gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
+  gmailOauthTokenUrl: loadGmailOauthTokenUrl,
+  gmailPubSubTopicName: loadGmailPubSubTopicName,
+  syncDispatchPubSubTopicName: loadSyncDispatchPubSubTopicName,
+  gcpProjectId: loadGcpProjectId,
+  gcpRegion: loadGcpRegion,
+  gcpSchedulerServiceAccountEmail: loadGcpSchedulerServiceAccountEmail,
+  gcpTasksAudience: loadGcpTasksAudience,
+  gcpTasksServiceAccountEmail: loadGcpTasksServiceAccountEmail,
+  gcpWebhookDeliveryQueueId: loadGcpWebhookDeliveryQueueId,
+  host: loadHost,
+  nodeEnv: loadNodeEnv,
+  port: loadPort(3001),
+  redisUrl: loadRedisUrl,
+  workerBaseUrl: loadMailboxWorkerBaseUrl,
+}).pipe(
+  Config.map((config): WorkerEnv => {
+    const gcpProjectId = normalizeOptional(config.gcpProjectId);
+    const gcpRegion = normalizeOptional(config.gcpRegion);
+    const gcpSchedulerServiceAccountEmail = normalizeOptional(
+      config.gcpSchedulerServiceAccountEmail,
+    );
+    const gcpTasksAudience = normalizeOptional(config.gcpTasksAudience);
+    const gcpTasksServiceAccountEmail = normalizeOptional(config.gcpTasksServiceAccountEmail);
+    const gmailPubSubTopicName = normalizeOptional(config.gmailPubSubTopicName);
+    const syncDispatchPubSubTopicName = normalizeOptional(config.syncDispatchPubSubTopicName);
+
+    return {
+      asyncTransportMode: config.asyncTransportMode,
+      databaseUrl: config.databaseUrl,
+      gcpProjectId:
+        config.asyncTransportMode === "gcp"
+          ? requireGcpValue(gcpProjectId, "GCP_PROJECT_ID")
+          : gcpProjectId,
+      gcpRegion:
+        config.asyncTransportMode === "gcp"
+          ? requireGcpValue(gcpRegion, "GCP_REGION")
+          : gcpRegion,
+      gcpSchedulerServiceAccountEmail:
+        config.asyncTransportMode === "gcp"
+          ? requireGcpValue(
+              gcpSchedulerServiceAccountEmail,
+              "MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL",
+            )
+          : gcpSchedulerServiceAccountEmail,
+      gcpTasksAudience,
+      gcpTasksServiceAccountEmail:
+        config.asyncTransportMode === "gcp"
+          ? requireGcpValue(
+              gcpTasksServiceAccountEmail,
+              "MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL",
+            )
+          : gcpTasksServiceAccountEmail,
+      gcpWebhookDeliveryQueueId: config.gcpWebhookDeliveryQueueId,
+      gmailApiBaseUrl: config.gmailApiBaseUrl,
+      gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
+      gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
+      gmailPubSubTopicName:
+        config.asyncTransportMode === "gcp"
+          ? requireGcpValue(gmailPubSubTopicName, "MAILMON_GMAIL_PUBSUB_TOPIC_NAME")
+          : gmailPubSubTopicName,
+      gmailRefreshTokenEncryptionKey: config.gmailRefreshTokenEncryptionKey,
+      gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
+      gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
+        normalizeOptional(config.gmailRefreshTokenPreviousEncryptionKeys),
+      ),
+      gmailOauthTokenUrl: config.gmailOauthTokenUrl,
+      host: Option.match(config.host, {
+        onNone: () => defaultHostFor(config.asyncTransportMode),
+        onSome: (value) => value,
+      }),
+      nodeEnv: config.nodeEnv,
+      port: config.port,
+      redisUrl: normalizeOptional(config.redisUrl),
+      syncDispatchPubSubTopicName:
+        config.asyncTransportMode === "gcp"
+          ? requireGcpValue(
+              syncDispatchPubSubTopicName,
+              "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+            )
+          : syncDispatchPubSubTopicName,
+      workerBaseUrl: resolveWorkerBaseUrl(
+        config.asyncTransportMode,
+        normalizeOptional(config.workerBaseUrl),
+      ),
+    };
+  }),
+);
+
+const cliConfig = Config.all({
+  asyncTransportMode: loadAsyncTransportMode,
+  databaseUrl: Config.option(loadDatabaseUrl),
+  gmailRefreshTokenEncryptionKey: Config.option(loadGmailRefreshTokenEncryptionKey),
+  gmailRefreshTokenEncryptionKeyId: loadGmailRefreshTokenEncryptionKeyId,
+  gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
+  nodeEnv: loadNodeEnv,
+  workerBaseUrl: loadMailboxWorkerBaseUrl,
+}).pipe(
+  Config.map((config): CliEnv => ({
+    asyncTransportMode: config.asyncTransportMode,
+    databaseUrl: normalizeOptional(config.databaseUrl),
+    gmailRefreshTokenEncryptionKey: normalizeOptional(config.gmailRefreshTokenEncryptionKey),
+    gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
+    gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
+      normalizeOptional(config.gmailRefreshTokenPreviousEncryptionKeys),
+    ),
+    nodeEnv: config.nodeEnv,
+    workerBaseUrl: resolveWorkerBaseUrl(
+      config.asyncTransportMode,
+      normalizeOptional(config.workerBaseUrl),
+    ),
+  })),
+);
+
+export class CommonConfig extends Context.Service<CommonConfig, CommonEnv>()(
+  "@mailmon/config/CommonConfig",
+) {
+  static readonly layer = Layer.effect(this, commonConfig.asEffect());
 
   static readonly testLayer = Layer.succeed(this, {
     nodeEnv: "test",
   } satisfies CommonEnv);
 }
 
-export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfig, ApiEnv>() {
-  static readonly layer = Layer.effect(
-    this,
-    Effect.all({
-      asyncTransportMode: loadAsyncTransportMode,
-      databaseUrl: loadDatabaseUrl,
-      gmailApiBaseUrl: loadGmailApiBaseUrl,
-      gmailOauthAuthorizeUrl: loadGmailOauthAuthorizeUrl,
-      gmailOauthClientId: loadGmailOauthClientId,
-      gmailOauthClientSecret: loadGmailOauthClientSecret,
-      gmailRefreshTokenEncryptionKey: loadGmailRefreshTokenEncryptionKey,
-      gmailRefreshTokenEncryptionKeyId: loadGmailRefreshTokenEncryptionKeyId,
-      gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
-      gmailOauthTokenUrl: loadGmailOauthTokenUrl,
-      host: loadHost,
-      nodeEnv: loadNodeEnv,
-      port: loadPort(3000),
-      syncDispatchPubSubTopicName: loadSyncDispatchPubSubTopicName,
-      workerBaseUrl: loadMailboxWorkerBaseUrl,
-    }).pipe(
-      Effect.map((config) => ({
-        asyncTransportMode: config.asyncTransportMode,
-        databaseUrl: config.databaseUrl,
-        gmailApiBaseUrl: config.gmailApiBaseUrl,
-        gmailOauthAuthorizeUrl: config.gmailOauthAuthorizeUrl,
-        gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
-        gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
-        gmailRefreshTokenEncryptionKey: config.gmailRefreshTokenEncryptionKey,
-        gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
-        gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
-          config.gmailRefreshTokenPreviousEncryptionKeys,
-        ),
-        gmailOauthTokenUrl: config.gmailOauthTokenUrl,
-        syncDispatchPubSubTopicName: normalizeOptional(config.syncDispatchPubSubTopicName),
-        host: Option.match(config.host, {
-          onNone: () => (config.asyncTransportMode === "gcp" ? "0.0.0.0" : "127.0.0.1"),
-          onSome: (value) => value,
-        }),
-        nodeEnv: config.nodeEnv,
-        port: config.port,
-        workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
-      })),
-      Effect.map((config) => ({
-        ...config,
-        syncDispatchPubSubTopicName:
-          config.asyncTransportMode === "gcp"
-            ? requireGcpValue(
-                config.syncDispatchPubSubTopicName,
-                "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-              )
-            : config.syncDispatchPubSubTopicName,
-      })),
-    ),
-  );
+export class ApiConfig extends Context.Service<ApiConfig, ApiEnv>()("@mailmon/config/ApiConfig") {
+  static readonly layer = Layer.effect(this, apiConfig.asEffect());
 
   static readonly testLayer = Layer.succeed(this, {
     asyncTransportMode: "local",
@@ -271,103 +382,10 @@ export class ApiConfig extends Context.Tag("@mailmon/config/ApiConfig")<ApiConfi
   } satisfies ApiEnv);
 }
 
-export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
-  WorkerConfig,
-  WorkerEnv
->() {
-  static readonly layer = Layer.effect(
-    this,
-    Effect.all({
-      asyncTransportMode: loadAsyncTransportMode,
-      databaseUrl: loadDatabaseUrl,
-      gmailApiBaseUrl: loadGmailApiBaseUrl,
-      gmailOauthClientId: loadGmailOauthClientId,
-      gmailOauthClientSecret: loadGmailOauthClientSecret,
-      gmailRefreshTokenEncryptionKey: loadGmailRefreshTokenEncryptionKey,
-      gmailRefreshTokenEncryptionKeyId: loadGmailRefreshTokenEncryptionKeyId,
-      gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
-      gmailOauthTokenUrl: loadGmailOauthTokenUrl,
-      gmailPubSubTopicName: loadGmailPubSubTopicName,
-      syncDispatchPubSubTopicName: loadSyncDispatchPubSubTopicName,
-      gcpProjectId: loadGcpProjectId,
-      gcpRegion: loadGcpRegion,
-      gcpSchedulerServiceAccountEmail: loadGcpSchedulerServiceAccountEmail,
-      gcpTasksAudience: loadGcpTasksAudience,
-      gcpTasksServiceAccountEmail: loadGcpTasksServiceAccountEmail,
-      gcpWebhookDeliveryQueueId: loadGcpWebhookDeliveryQueueId,
-      host: loadHost,
-      nodeEnv: loadNodeEnv,
-      port: loadPort(3001),
-      redisUrl: loadRedisUrl,
-      workerBaseUrl: loadMailboxWorkerBaseUrl,
-    }).pipe(
-      Effect.map((config) => ({
-        asyncTransportMode: config.asyncTransportMode,
-        databaseUrl: config.databaseUrl,
-        gmailApiBaseUrl: config.gmailApiBaseUrl,
-        gmailOauthClientId: normalizeOptional(config.gmailOauthClientId),
-        gmailOauthClientSecret: normalizeOptional(config.gmailOauthClientSecret),
-        gmailRefreshTokenEncryptionKey: config.gmailRefreshTokenEncryptionKey,
-        gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
-        gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
-          config.gmailRefreshTokenPreviousEncryptionKeys,
-        ),
-        gmailOauthTokenUrl: config.gmailOauthTokenUrl,
-        gmailPubSubTopicName: normalizeOptional(config.gmailPubSubTopicName),
-        syncDispatchPubSubTopicName: normalizeOptional(config.syncDispatchPubSubTopicName),
-        gcpProjectId: normalizeOptional(config.gcpProjectId),
-        gcpRegion: normalizeOptional(config.gcpRegion),
-        gcpSchedulerServiceAccountEmail: normalizeOptional(config.gcpSchedulerServiceAccountEmail),
-        gcpTasksAudience: normalizeOptional(config.gcpTasksAudience),
-        gcpTasksServiceAccountEmail: normalizeOptional(config.gcpTasksServiceAccountEmail),
-        gcpWebhookDeliveryQueueId: config.gcpWebhookDeliveryQueueId,
-        host: Option.match(config.host, {
-          onNone: () => (config.asyncTransportMode === "gcp" ? "0.0.0.0" : "127.0.0.1"),
-          onSome: (value) => value,
-        }),
-        nodeEnv: config.nodeEnv,
-        port: config.port,
-        redisUrl: normalizeOptional(config.redisUrl),
-        workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
-      })),
-      Effect.map((config) => ({
-        ...config,
-        gcpProjectId:
-          config.asyncTransportMode === "gcp"
-            ? requireGcpValue(config.gcpProjectId, "GCP_PROJECT_ID")
-            : config.gcpProjectId,
-        gcpRegion:
-          config.asyncTransportMode === "gcp"
-            ? requireGcpValue(config.gcpRegion, "GCP_REGION")
-            : config.gcpRegion,
-        gcpSchedulerServiceAccountEmail:
-          config.asyncTransportMode === "gcp"
-            ? requireGcpValue(
-                config.gcpSchedulerServiceAccountEmail,
-                "MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL",
-              )
-            : config.gcpSchedulerServiceAccountEmail,
-        gcpTasksServiceAccountEmail:
-          config.asyncTransportMode === "gcp"
-            ? requireGcpValue(
-                config.gcpTasksServiceAccountEmail,
-                "MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL",
-              )
-            : config.gcpTasksServiceAccountEmail,
-        gmailPubSubTopicName:
-          config.asyncTransportMode === "gcp"
-            ? requireGcpValue(config.gmailPubSubTopicName, "MAILMON_GMAIL_PUBSUB_TOPIC_NAME")
-            : config.gmailPubSubTopicName,
-        syncDispatchPubSubTopicName:
-          config.asyncTransportMode === "gcp"
-            ? requireGcpValue(
-                config.syncDispatchPubSubTopicName,
-                "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-              )
-            : config.syncDispatchPubSubTopicName,
-      })),
-    ),
-  );
+export class WorkerConfig extends Context.Service<WorkerConfig, WorkerEnv>()(
+  "@mailmon/config/WorkerConfig",
+) {
+  static readonly layer = Layer.effect(this, workerConfig.asEffect());
 
   static readonly testLayer = Layer.succeed(this, {
     asyncTransportMode: "local",
@@ -395,31 +413,8 @@ export class WorkerConfig extends Context.Tag("@mailmon/config/WorkerConfig")<
   } satisfies WorkerEnv);
 }
 
-export class CliConfig extends Context.Tag("@mailmon/config/CliConfig")<CliConfig, CliEnv>() {
-  static readonly layer = Layer.effect(
-    this,
-    Effect.all({
-      asyncTransportMode: loadAsyncTransportMode,
-      databaseUrl: Config.option(loadDatabaseUrl),
-      gmailRefreshTokenEncryptionKey: Config.option(loadGmailRefreshTokenEncryptionKey),
-      gmailRefreshTokenEncryptionKeyId: loadGmailRefreshTokenEncryptionKeyId,
-      gmailRefreshTokenPreviousEncryptionKeys: loadGmailRefreshTokenPreviousEncryptionKeys,
-      nodeEnv: loadNodeEnv,
-      workerBaseUrl: loadMailboxWorkerBaseUrl,
-    }).pipe(
-      Effect.map((config) => ({
-        asyncTransportMode: config.asyncTransportMode,
-        databaseUrl: normalizeOptional(config.databaseUrl),
-        gmailRefreshTokenEncryptionKey: normalizeOptional(config.gmailRefreshTokenEncryptionKey),
-        gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
-        gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
-          config.gmailRefreshTokenPreviousEncryptionKeys,
-        ),
-        nodeEnv: config.nodeEnv,
-        workerBaseUrl: resolveWorkerBaseUrl(config.asyncTransportMode, config.workerBaseUrl),
-      })),
-    ),
-  );
+export class CliConfig extends Context.Service<CliConfig, CliEnv>()("@mailmon/config/CliConfig") {
+  static readonly layer = Layer.effect(this, cliConfig.asEffect());
 
   static readonly testLayer = Layer.succeed(this, {
     asyncTransportMode: "local",
@@ -432,18 +427,14 @@ export class CliConfig extends Context.Tag("@mailmon/config/CliConfig")<CliConfi
   } satisfies CliEnv);
 }
 
-export const loadCommonEnv = (): CommonEnv => {
-  return Effect.runSync(CommonConfig.pipe(Effect.provide(CommonConfig.layer)));
-};
+export const loadCommonEnv = (): CommonEnv =>
+  Effect.runSync(CommonConfig.asEffect().pipe(Effect.provide(CommonConfig.layer)));
 
-export const loadApiEnv = (): ApiEnv => {
-  return Effect.runSync(ApiConfig.pipe(Effect.provide(ApiConfig.layer)));
-};
+export const loadApiEnv = (): ApiEnv =>
+  Effect.runSync(ApiConfig.asEffect().pipe(Effect.provide(ApiConfig.layer)));
 
-export const loadWorkerEnv = (): WorkerEnv => {
-  return Effect.runSync(WorkerConfig.pipe(Effect.provide(WorkerConfig.layer)));
-};
+export const loadWorkerEnv = (): WorkerEnv =>
+  Effect.runSync(WorkerConfig.asEffect().pipe(Effect.provide(WorkerConfig.layer)));
 
-export const loadCliEnv = (): CliEnv => {
-  return Effect.runSync(CliConfig.pipe(Effect.provide(CliConfig.layer)));
-};
+export const loadCliEnv = (): CliEnv =>
+  Effect.runSync(CliConfig.asEffect().pipe(Effect.provide(CliConfig.layer)));

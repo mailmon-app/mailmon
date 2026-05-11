@@ -14,3 +14,4 @@ coverage
 skills-lock.json
 .husky/_
 .oxc-docs
+.repos
