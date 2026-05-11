@@ -20,6 +20,7 @@ import {
   WebhookEndpointSubscriptionStore,
   WorkspaceApiKeyStore,
   invalidPaginationCursor,
+  mailboxCursorRegressed,
   mailboxAlreadyConnected,
   replayConflict,
   webhookEndpointAlreadyExists,
@@ -53,6 +54,7 @@ import {
   type MailboxWatchRenewalTarget,
   type MessageResource,
   type PreparedWebhookDelivery,
+  type ProblemDetails,
   type StartedSyncRun,
   type StoredConnectSession,
   type ThreadListItemResource,
@@ -116,6 +118,15 @@ type WebhookEndpointSubscriptionRow = typeof webhookEndpointSubscriptions.$infer
 type ReplayRow = typeof replays.$inferSelect;
 
 type SyncRunRow = typeof syncRuns.$inferSelect;
+type MailboxSyncApplyTransactionResult =
+  | {
+      readonly kind: "committed";
+      readonly result: MailboxSyncCommitResult;
+    }
+  | {
+      readonly kind: "failed";
+      readonly problem: ProblemDetails;
+    };
 
 export interface CreatedWorkspaceOperatorResult {
   readonly workspaceId: string;
@@ -196,6 +207,66 @@ const generateWorkspaceApiKey = (prefix: "mm_live_" | "mm_test_") => {
 
 const normalizeEmailAddress = (emailAddress: string) => {
   return emailAddress.trim().toLowerCase();
+};
+
+const parseDecimalHistoryCursor = (cursor: string): bigint | null => {
+  if (!/^\d+$/.test(cursor)) {
+    return null;
+  }
+
+  return BigInt(cursor);
+};
+
+const parseTrailingOrdinalCursor = (cursor: string) => {
+  const match = /^(.*\D)(\d+)$/.exec(cursor);
+
+  if (match === null) {
+    return null;
+  }
+  const [, prefix, value] = match;
+
+  if (prefix === undefined || value === undefined) {
+    return null;
+  }
+
+  return {
+    prefix,
+    value: BigInt(value),
+  };
+};
+
+const isMailboxCursorRegression = (currentCursor: string | null, nextCursor: string | null) => {
+  if (currentCursor === null || currentCursor === nextCursor) {
+    return false;
+  }
+
+  if (nextCursor === null) {
+    return true;
+  }
+
+  const currentDecimal = parseDecimalHistoryCursor(currentCursor);
+  const nextDecimal = parseDecimalHistoryCursor(nextCursor);
+
+  if (currentDecimal !== null && nextDecimal !== null) {
+    return nextDecimal < currentDecimal;
+  }
+
+  if (currentDecimal !== null) {
+    return true;
+  }
+
+  const currentOrdinal = parseTrailingOrdinalCursor(currentCursor);
+  const nextOrdinal = parseTrailingOrdinalCursor(nextCursor);
+
+  if (
+    currentOrdinal !== null &&
+    nextOrdinal !== null &&
+    currentOrdinal.prefix === nextOrdinal.prefix
+  ) {
+    return nextOrdinal.value < currentOrdinal.value;
+  }
+
+  return false;
 };
 
 const createMailboxId = () => {
@@ -1170,6 +1241,17 @@ const getMailboxSyncFailureState = (
         "Mailbox requires a repair sync because the stored Gmail history cursor is invalid or expired.",
       lastErrorOccurredAt: toDate(result.completedAt),
       lastErrorRetryable: true,
+      syncState: "lagging",
+    };
+  }
+
+  if (result.detail === "mailbox_cursor_regressed") {
+    return {
+      lastErrorCode: result.detail,
+      lastErrorMessage:
+        "Mailbox sync produced a cursor older than the stored mailbox cursor. The cursor was not advanced.",
+      lastErrorOccurredAt: toDate(result.completedAt),
+      lastErrorRetryable: false,
       syncState: "lagging",
     };
   }
@@ -2972,11 +3054,11 @@ export const createMailboxStateStoreLayer = Layer.effect(
 
           return row?.cursor ?? null;
         }),
-      applySyncResult: ({ mailboxId, leaseOwnerId, nextCursor, snapshot, syncRunId, syncedAt }) =>
-        Effect.promise(async () => {
-          const syncedAtDate = toDate(syncedAt);
+      applySyncResult: ({ mailboxId, leaseOwnerId, nextCursor, snapshot, syncRunId, syncedAt }) => {
+        const syncedAtDate = toDate(syncedAt);
 
-          return database.db.transaction(async (transaction) => {
+        return Effect.promise(() =>
+          database.db.transaction(async (transaction) => {
             const leaseCheckAt = new Date();
             const [row] = await transaction
               .select({
@@ -2998,15 +3080,29 @@ export const createMailboxStateStoreLayer = Layer.effect(
               row.activeSyncLeaseExpiresAt <= leaseCheckAt
             ) {
               return {
-                applied: false,
-                mailboxEventIds: [],
-              } satisfies MailboxSyncCommitResult;
+                kind: "committed",
+                result: {
+                  applied: false,
+                  mailboxEventIds: [],
+                },
+              } satisfies MailboxSyncApplyTransactionResult;
             }
 
             if (row.workspaceId === null || row.tenantExternalId === null) {
               throw new Error(
                 `Mailbox ${mailboxId} is missing the workspace or tenant identity required for mailbox event emission.`,
               );
+            }
+
+            if (row.cursor !== null && isMailboxCursorRegression(row.cursor, nextCursor)) {
+              return {
+                kind: "failed",
+                problem: mailboxCursorRegressed(mailboxId, {
+                  currentCursor: row.cursor,
+                  nextCursor,
+                  syncRunId,
+                }),
+              } satisfies MailboxSyncApplyTransactionResult;
             }
 
             const deletedMessageRows =
@@ -3265,11 +3361,21 @@ export const createMailboxStateStoreLayer = Layer.effect(
             }
 
             return {
-              applied: true,
-              mailboxEventIds: emittedMailboxEvents.map((event) => event.id),
-            } satisfies MailboxSyncCommitResult;
-          });
-        }),
+              kind: "committed",
+              result: {
+                applied: true,
+                mailboxEventIds: emittedMailboxEvents.map((event) => event.id),
+              },
+            } satisfies MailboxSyncApplyTransactionResult;
+          }),
+        ).pipe(
+          Effect.flatMap((transactionResult) =>
+            transactionResult.kind === "failed"
+              ? Effect.fail(transactionResult.problem)
+              : Effect.succeed(transactionResult.result),
+          ),
+        );
+      },
     };
   }),
 );

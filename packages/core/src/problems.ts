@@ -109,6 +109,30 @@ export const mailboxSyncLeaseLost = (
   });
 };
 
+export const mailboxCursorRegressed = (
+  mailboxId: string,
+  params: Readonly<{
+    currentCursor: string;
+    nextCursor: string | null;
+    syncRunId: string;
+  }>,
+): ProblemDetails => {
+  return makeProblem({
+    type: "https://api.mailmon.dev/problems/mailbox-cursor-regressed",
+    title: "Mailbox cursor regressed",
+    status: 409,
+    code: "mailbox_cursor_regressed",
+    detail: `Mailbox ${mailboxId} attempted to move its cursor backward from ${params.currentCursor} to ${params.nextCursor ?? "null"}.`,
+    resource: {
+      current_cursor: params.currentCursor,
+      mailbox_id: mailboxId,
+      next_cursor: params.nextCursor ?? "null",
+      sync_run_id: params.syncRunId,
+    },
+    retryable: false,
+  });
+};
+
 export const connectSessionNotFound = (connectSessionId: string): ProblemDetails => {
   return makeProblem({
     type: "https://api.mailmon.dev/problems/connect-session-not-found",

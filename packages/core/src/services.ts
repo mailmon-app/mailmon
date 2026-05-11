@@ -252,7 +252,7 @@ export class MailboxStateStore extends Context.Tag("@mailmon/core/MailboxStateSt
         nextCursor: string | null;
         syncedAt: string;
       }>,
-    ) => Effect.Effect<MailboxSyncCommitResult>;
+    ) => Effect.Effect<MailboxSyncCommitResult, ProblemDetails>;
   }
 >() {}
 

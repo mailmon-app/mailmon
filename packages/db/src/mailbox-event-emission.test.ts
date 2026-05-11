@@ -1,6 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   MailboxStateStore,
+  MailboxSyncProvider,
+  WebhookDeliveryScheduler,
+  runMailboxSync,
   type MailboxEventEnvelope,
   type MailboxSyncSnapshot,
 } from "@mailmon/core";
@@ -123,7 +126,12 @@ const deleteOnlySnapshot: MailboxSyncSnapshot = {
   messages: [],
 };
 
-const seedMailboxFixture = async (connectionString: string) => {
+const seedMailboxFixture = async (
+  connectionString: string,
+  options: Readonly<{
+    cursor?: string | null;
+  }> = {},
+) => {
   const database = createDb(connectionString);
 
   try {
@@ -138,6 +146,7 @@ const seedMailboxFixture = async (connectionString: string) => {
       tenantExternalId,
       mailboxExternalId: "mailbox_external_events",
       emailAddress: "events@mailmon.dev",
+      ...(options.cursor === undefined ? {} : { cursor: options.cursor }),
       status: "active",
       syncState: "healthy",
       watchState: "active",
@@ -264,6 +273,19 @@ const fetchSyncRunRow = async (connectionString: string, syncRunId: string) => {
   }
 };
 
+const fetchSyncRunRows = async (connectionString: string) => {
+  const database = createDb(connectionString);
+
+  try {
+    return await database.db
+      .select()
+      .from(schema.syncRuns)
+      .orderBy(asc(schema.syncRuns.startedAt), asc(schema.syncRuns.id));
+  } finally {
+    await database.client.end();
+  }
+};
+
 const fetchCanonicalStateCounts = async (connectionString: string) => {
   const database = createDb(connectionString);
 
@@ -313,6 +335,10 @@ const expectMailboxEventPayload = (
     data: expected.data,
   });
 };
+
+const noopWebhookDeliverySchedulerLayer = Layer.succeed(WebhookDeliveryScheduler, {
+  scheduleWebhookDelivery: () => Effect.void,
+});
 
 describe("DB-backed durable mailbox event emission", () => {
   it.effect(
@@ -555,6 +581,67 @@ describe("DB-backed durable mailbox event emission", () => {
           });
           expect(new Set(storedEvents.map((event) => event.id))).toEqual(eventIdsBeforeDuplicate);
           expect(storedEvents).toHaveLength(eventIdsBeforeDuplicate.size);
+        });
+      }),
+    15_000,
+  );
+
+  it.effect(
+    "rejects sync finalization when the provider attempts to move the mailbox cursor backward",
+    () =>
+      withIsolatedDatabaseEffect(({ connectionString }) => {
+        const persistenceLayer = createCorePersistenceLayer(connectionString).pipe(
+          Layer.provide(testGmailRefreshTokenCipherLayer),
+        );
+        const regressingProviderLayer = Layer.succeed(MailboxSyncProvider, {
+          syncMailbox: () =>
+            Effect.succeed({
+              eventsEmitted: 1,
+              nextCursor: "99",
+              snapshot: updatedMessageSnapshot,
+            }),
+        });
+
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => seedMailboxFixture(connectionString, { cursor: "100" }));
+
+          const problem = yield* runMailboxSync(mailboxId).pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                persistenceLayer,
+                regressingProviderLayer,
+                noopWebhookDeliverySchedulerLayer,
+              ),
+            ),
+            Effect.flip,
+          );
+          const mailbox = yield* Effect.promise(() => fetchMailboxRow(connectionString));
+          const syncRuns = yield* Effect.promise(() => fetchSyncRunRows(connectionString));
+          const storedEvents = yield* Effect.promise(() => fetchMailboxEvents(connectionString));
+          const canonicalStateCounts = yield* Effect.promise(() =>
+            fetchCanonicalStateCounts(connectionString),
+          );
+
+          expect(problem.code).toBe("mailbox_cursor_regressed");
+          expect(mailbox?.cursor).toBe("100");
+          expect(mailbox?.syncState).toBe("lagging");
+          expect(mailbox?.lastErrorCode).toBe("mailbox_cursor_regressed");
+          expect(mailbox?.activeSyncLeaseOwner).toBeNull();
+          expect(storedEvents).toEqual([]);
+          expect(canonicalStateCounts).toEqual({
+            messages: 0,
+            threads: 0,
+          });
+          expect(syncRuns).toHaveLength(1);
+          expect(syncRuns[0]).toEqual(
+            expect.objectContaining({
+              mailboxId,
+              status: "failed_after_lease_acquired",
+              previousCursor: "100",
+              nextCursor: null,
+              detail: "mailbox_cursor_regressed",
+            }),
+          );
         });
       }),
     15_000,
