@@ -60,5 +60,11 @@
     "packages/gmail/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/gmail/tsconfig.json --fix",
     "packages/queue/**/*.{ts,tsx}": "oxlint --config ./.oxlintrc.json --tsconfig ./packages/queue/tsconfig.json --fix"
   },
-  "packageManager": "pnpm@10.32.1"
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.25.0",
+      "uuid": "^13.0.1"
+    }
+  }
 }
