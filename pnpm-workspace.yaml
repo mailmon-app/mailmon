@@ -6,15 +6,15 @@ packages:
 catalog:
   "@effect/cli": ^0.75.1
   "@effect/language-service": ^0.85.1
-  "@effect/platform-node": ^0.106.0
+  "@effect/platform-node": 4.0.0-beta.65
   "@google-cloud/pubsub": ^5.3.0
-  "@google-cloud/tasks": ^6.2.1
-  "@types/node": ^25.6.0
-  "@varlock/google-secret-manager-plugin": ^0.2.1
-  effect: ^3.21.2
+  "@google-cloud/tasks": ^6.2.2
+  "@types/node": ^25.6.2
+  "@varlock/google-secret-manager-plugin": ^1.1.0
+  effect: 4.0.0-beta.65
   google-auth-library: ^10.6.2
   typescript: ^6.0.3
-  varlock: ^0.9.1
+  varlock: ^1.1.0
 enableGlobalVirtualStore: true
 
 engineStrict: true
