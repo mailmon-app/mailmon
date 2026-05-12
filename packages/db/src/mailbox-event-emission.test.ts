@@ -439,6 +439,61 @@ describe("DB-backed durable mailbox event emission", () => {
   );
 
   it.effect(
+    "does not advance the mailbox cursor when the sync lease is lost",
+    () =>
+      withIsolatedDatabaseEffect(({ connectionString }) => {
+        const syncRunId = "sr_lost_lease";
+
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => seedMailboxFixture(connectionString, { cursor: "hist_0" }));
+          yield* Effect.promise(() =>
+            armMailboxSync(connectionString, {
+              syncRunId,
+              leaseOwnerId: "lease_current",
+            }),
+          );
+
+          const commitResult = yield* applyMailboxSyncResult(connectionString, {
+            mailboxId,
+            leaseOwnerId: "lease_stale",
+            nextCursor: "hist_1",
+            snapshot: baselineSnapshot,
+            syncRunId,
+            syncedAt: "2026-04-09T09:30:05.000Z",
+          });
+          const mailbox = yield* Effect.promise(() => fetchMailboxRow(connectionString));
+          const syncRun = yield* Effect.promise(() => fetchSyncRunRow(connectionString, syncRunId));
+          const storedEvents = yield* Effect.promise(() => fetchMailboxEvents(connectionString));
+          const canonicalStateCounts = yield* Effect.promise(() =>
+            fetchCanonicalStateCounts(connectionString),
+          );
+
+          expect(commitResult).toEqual({
+            applied: false,
+            mailboxEventIds: [],
+          });
+          expect(mailbox?.cursor).toBe("hist_0");
+          expect(mailbox?.activeSyncLeaseOwner).toBe("lease_current");
+          expect(mailbox?.activeSyncRunId).toBe(syncRunId);
+          expect(mailbox?.lastSuccessfulSyncAt).toBeNull();
+          expect(syncRun).toEqual(
+            expect.objectContaining({
+              id: syncRunId,
+              status: "running",
+              nextCursor: null,
+            }),
+          );
+          expect(storedEvents).toEqual([]);
+          expect(canonicalStateCounts).toEqual({
+            messages: 0,
+            threads: 0,
+          });
+        });
+      }),
+    15_000,
+  );
+
+  it.effect(
     "emits only real canonical changes during incremental sync finalization",
     () =>
       withIsolatedDatabaseEffect(({ connectionString }) => {

@@ -6,7 +6,7 @@ Reference plan: [plans/mailmon-architecture-deepening-refactor-plan.md](../plans
 
 ### Current Position
 
-Completed Slice 6: Mailbox Operational State Policy
+Completed Slice 7: Canonical Mailbox State Commit Module
 
 ### Slice 0 What Changed
 
@@ -197,12 +197,42 @@ Recommended first actions:
 - `pnpm typecheck`: passed with zero warnings.
 - `pnpm format:check`: passed.
 
+### Slice 7 What Changed
+
+- Added `packages/db/src/persistence/mailbox-sync-commit.ts` as the DB-internal owner of the Canonical Mailbox State commit transaction.
+- Kept `MailboxStateStore.applySyncResult(...)` as the external core service seam and kept a single top-level Drizzle transaction in `packages/db/src/persistence/mailbox-state-store.ts`.
+- Split the transaction implementation into named commit helpers for:
+  - active lease validation.
+  - Cursor regression guard.
+  - Mailbox Event identity validation.
+  - Message row lookup and canonical Message upserts.
+  - delete-only Message application and empty Thread cleanup.
+  - affected Thread calculation and Thread recalculation.
+  - Mailbox Event insertion.
+  - Mailbox and Sync Run finalization.
+- Added regression coverage proving a stale lease owner does not advance the Cursor, write canonical state, emit Mailbox Events, clear the active lease, or complete the Sync Run.
+- Preserved existing Cursor regression, duplicate event, delete-only Thread recalculation, and rollback behavior.
+
+### Slice 7 Verification
+
+- `pnpm exec effect-solutions list`: passed.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing data-modeling`: passed.
+- `pnpm --filter @mailmon/db format`: passed.
+- `pnpm --filter @mailmon/db typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/db lint`: passed with zero warnings.
+- `pnpm --filter @mailmon/db test -- src/mailbox-event-emission.test.ts`: passed; the DB package suite ran with 44 tests across 9 files.
+- `pnpm --filter @mailmon/db build`: passed.
+- `pnpm --filter @mailmon/core test`: passed; 78 tests passed across 4 files.
+- `pnpm typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/db format:check`: passed.
+- `npx fallow health`: still exits nonzero because existing repo-wide thresholds remain. Health improved to `77 B`; `packages/db/src/persistence/mailbox-state-store.ts` is now a 54-line coordinator with low risk, and the old commit transaction risk is distributed into the named `mailbox-sync-commit.ts` Module.
+
 ### Next
 
-Start Slice 7: Canonical Mailbox State Commit Module from the referenced architecture plan.
+Start Slice 8: Public Route Contract Module from the referenced architecture plan.
 
 Recommended first actions:
 
-- Extract a named DB-internal commit module around `MailboxStateStore.applySyncResult(...)`.
-- Keep cursor regression checks, canonical writes, event emission, and sync-run finalization in their current transaction ordering.
-- Add focused tests before changing any commit transaction structure.
+- Identify the current public route/OpenAPI contract duplication in `apps/api/src/server.ts`.
+- Keep Hono as the public HTTP adapter while moving route contract shape into a named module.
+- Preserve existing response schemas and generated OpenAPI behavior before changing any route implementation.
