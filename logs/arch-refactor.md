@@ -6,7 +6,7 @@ Reference plan: [plans/mailmon-architecture-deepening-refactor-plan.md](../plans
 
 ### Current Position
 
-Completed Slice 2: Webhook Delivery Request-Building Module.
+Completed Slice 3: Worker Internal HTTP Route Interpreter.
 
 ### Slice 0 What Changed
 
@@ -75,12 +75,35 @@ Completed Slice 2: Webhook Delivery Request-Building Module.
 - `pnpm typecheck`: passed with zero warnings.
 - `pnpm format:check`: passed.
 
+### Slice 3 What Changed
+
+- Added `apps/worker/src/internal-route-interpreter.ts` as the worker-local owner of internal route JSON reading, domain payload decoding, processor lookup, `ProblemDetails` mapping, and unknown failure responses.
+- Moved the `WorkerHttpProcessors` service tag into the interpreter module while keeping `ManagedRuntime` at the worker HTTP adapter edge.
+- Rebuilt the five internal routes in `apps/worker/src/server.ts` through route specs for:
+  - `/internal/sync`
+  - `/internal/sync-dead-letter`
+  - `/internal/gmail-push`
+  - `/internal/webhook-deliveries`
+  - `/internal/control-jobs`
+- Preserved route-specific behavior as spec data or small callbacks, including dead-letter invalid-envelope logging, Gmail push local-mode precondition handling, and dead-letter `ProblemDetails` status clamping.
+- Added worker server tests for local-mode Gmail push precondition behavior, invalid control job payloads, and unknown processor failures.
+
+### Slice 3 Verification
+
+- `pnpm exec effect-solutions list`: passed.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing data-modeling`: passed.
+- `pnpm --filter @mailmon/worker test -- src/server.test.ts`: passed; 33 tests passed across the matched worker test files.
+- `pnpm --filter @mailmon/worker build`: passed.
+- `pnpm --filter @mailmon/worker typecheck`: passed with zero warnings.
+- `pnpm format:check`: passed.
+- `npx fallow dupes`: passed; duplicate percentage is now 3.3%, with remaining worker duplication concentrated in GCP runtime setup inside `apps/worker/src/server.test.ts`.
+
 ### Next
 
-Start Slice 3: Worker Internal HTTP Route Interpreter from the referenced architecture plan.
+Start Slice 4: Gmail adapter internals from the referenced architecture plan.
 
 Recommended first actions:
 
-- Identify the repeated internal HTTP route interpretation shape in `apps/worker/src/server.ts`.
-- Extract request decoding, problem mapping, and workflow invocation into a route interpreter Module.
-- Keep Hono-specific response mechanics in the worker adapter.
+- Identify the `createHttpGmailApi` and `listHistoryDelta` complexity boundaries in `packages/gmail/src/index.ts`.
+- Add focused regression coverage for Gmail history pagination/error behavior before extracting internals.
+- Keep Gmail-specific behavior inside `@mailmon/gmail` and avoid widening core seams unless the adapter needs a real interface.

@@ -283,6 +283,24 @@ describe("startWorkerHttpRuntime", () => {
     });
   });
 
+  it("accepts Gmail push wake-ups without decoding in local mode", async () => {
+    const runtime = await startWorkerTestRuntime({
+      processGmailPushNotification: async () => {
+        throw new Error("local mode should not dispatch Gmail push notifications");
+      },
+    });
+    const response = await createWorkerInternalRequest(runtime, "/internal/gmail-push", {
+      malformed: true,
+    });
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      status: "accepted",
+      detail:
+        "Local mode accepts Gmail push wake-ups, but direct sync dispatch should use /internal/sync.",
+    });
+  });
+
   it("decodes GCP Pub/Sub mailbox sync dispatches", async () => {
     const syncJobs: string[] = [];
     const runtime = await startWorkerHttpRuntime({
@@ -841,6 +859,23 @@ describe("startWorkerHttpRuntime", () => {
     });
   });
 
+  it("maps unknown processor failures to worker internal errors", async () => {
+    const runtime = await startWorkerTestRuntime({
+      processControlJob: async () => {
+        throw new Error("unexpected control job failure");
+      },
+    });
+    const response = await createWorkerInternalRequest(runtime, "/internal/control-jobs", {
+      kind: "renew_watches",
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      code: "worker_internal_error",
+      detail: "The worker failed while processing the control job request.",
+    });
+  });
+
   it("accepts stuck mailbox sync recovery control jobs", async () => {
     const controlJobs: ControlJobDispatchRequest[] = [];
     const runtime = await startWorkerHttpRuntime({
@@ -959,6 +994,18 @@ describe("startWorkerHttpRuntime", () => {
       status: "completed",
     });
     expect(controlJobs).toEqual([{ kind: "recover_webhook_deliveries" }]);
+  });
+
+  it("rejects invalid control job payloads", async () => {
+    const runtime = await startWorkerTestRuntime();
+    const response = await createWorkerInternalRequest(runtime, "/internal/control-jobs", {
+      kind: "unknown",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_control_job_request",
+    });
   });
 
   it("rejects invalid webhook delivery payloads", async () => {

@@ -13,14 +13,21 @@ import {
   type GmailPushNotificationResult,
   type MailboxSyncDispatchExhaustedResult,
   type MailboxSyncJobData,
-  type ProblemDetails,
   type ProcessWebhookDeliveryResult,
   type SyncMailboxResult,
   type WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
-import { Context, Layer, ManagedRuntime } from "effect";
+import { Layer, ManagedRuntime } from "effect";
 import { OAuth2Client } from "google-auth-library";
 import { Hono } from "hono";
+
+import {
+  createJsonResponse,
+  interpretInternalRoute,
+  WorkerHttpProcessors,
+  type InternalRouteSpec,
+  type WorkerHttpServerRuntime,
+} from "./internal-route-interpreter.js";
 
 interface VerifiedGoogleOidcToken {
   readonly audience: string | ReadonlyArray<string>;
@@ -39,7 +46,7 @@ interface WorkerInternalAuthOptions {
   readonly verifier?: GoogleOidcVerifier;
 }
 
-interface WorkerHttpRuntimeOptions {
+export interface WorkerHttpRuntimeOptions {
   readonly host: string;
   readonly port: number;
   readonly asyncTransportMode: AsyncTransportMode;
@@ -63,19 +70,6 @@ interface WorkerHttpRuntimeHandle {
   readonly port: number;
   readonly transport: "http";
 }
-
-class WorkerHttpProcessors extends Context.Service<
-  WorkerHttpProcessors,
-  {
-    readonly processControlJob: WorkerHttpRuntimeOptions["processControlJob"];
-    readonly processGmailPushNotification: WorkerHttpRuntimeOptions["processGmailPushNotification"];
-    readonly processMailboxSyncDeadLetter: NonNullable<
-      WorkerHttpRuntimeOptions["processMailboxSyncDeadLetter"]
-    >;
-    readonly processSyncJob: WorkerHttpRuntimeOptions["processSyncJob"];
-    readonly processWebhookDelivery: WorkerHttpRuntimeOptions["processWebhookDelivery"];
-  }
->()("@mailmon/worker/WorkerHttpProcessors") {}
 
 type InternalAuthResult =
   | {
@@ -114,16 +108,6 @@ const createGoogleOidcVerifier = (): GoogleOidcVerifier => {
       };
     },
   };
-};
-
-const readJsonRequest = async (request: { readonly text: () => Promise<string> }) => {
-  const body = await request.text();
-
-  if (body.length === 0) {
-    return null;
-  }
-
-  return JSON.parse(body) as unknown;
 };
 
 const logInvalidMailboxSyncDeadLetter = (detail: string) => {
@@ -269,38 +253,6 @@ const authorizeInternalRequest = async (
   };
 };
 
-const isProblemDetails = (value: unknown): value is ProblemDetails => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value &&
-    "detail" in value &&
-    "status" in value &&
-    typeof value.code === "string" &&
-    typeof value.detail === "string" &&
-    typeof value.status === "number"
-  );
-};
-
-const createJsonResponse = (body: unknown, status: number) => {
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "content-type": "application/json",
-    },
-    status,
-  });
-};
-
-const createWorkerInternalErrorResponse = (detail: string) => {
-  return createJsonResponse(
-    {
-      code: "worker_internal_error",
-      detail,
-    },
-    500,
-  );
-};
-
 const closeServer = (server: ServerType) => {
   return new Promise<void>((resolve, reject) => {
     server.close((error) => {
@@ -317,12 +269,6 @@ const closeServer = (server: ServerType) => {
       resolve();
     });
   });
-};
-
-type WorkerHttpServerRuntime = Pick<ManagedRuntime.ManagedRuntime<any, any>, "runPromise">;
-
-const getWorkerHttpProcessors = (runtime: WorkerHttpServerRuntime) => {
-  return runtime.runPromise(WorkerHttpProcessors.asEffect());
 };
 
 const createWorkerApp = (
@@ -348,165 +294,118 @@ const createWorkerApp = (
     return next();
   });
 
-  app.post("/internal/sync", async (context) => {
-    try {
-      const payload = await readJsonRequest(context.req);
-      const parsed = decodeMailboxSyncWorkerRequest(payload);
+  const syncRouteSpec: InternalRouteSpec<MailboxSyncJobData, SyncMailboxResult> = {
+    decode: decodeMailboxSyncWorkerRequest,
+    internalErrorDetail: "The worker failed while processing the sync request.",
+    invalidRequest: (detail) =>
+      createJsonResponse(
+        {
+          code: "invalid_mailbox_sync_request",
+          detail,
+        },
+        400,
+      ),
+    selectProcessor: (processors) => processors.processSyncJob,
+  };
 
-      if ("error" in parsed) {
-        return createJsonResponse(
-          {
-            code: "invalid_mailbox_sync_request",
-            detail: parsed.error,
-          },
-          400,
-        );
-      }
+  const syncDeadLetterRouteSpec: InternalRouteSpec<
+    MailboxSyncJobData,
+    MailboxSyncDispatchExhaustedResult
+  > = {
+    decode: decodeMailboxSyncDeadLetterRequest,
+    internalErrorDetail: "The worker failed while processing the sync dead-letter request.",
+    invalidRequest: (detail) => {
+      logInvalidMailboxSyncDeadLetter(detail);
 
-      const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processSyncJob(parsed.value);
-
-      return context.json(result);
-    } catch (error) {
-      if (isProblemDetails(error)) {
-        return createJsonResponse(error, error.status);
-      }
-
-      return createWorkerInternalErrorResponse(
-        "The worker failed while processing the sync request.",
-      );
-    }
-  });
-
-  app.post("/internal/sync-dead-letter", async (context) => {
-    try {
-      const payload = await readJsonRequest(context.req);
-      const parsed = decodeMailboxSyncDeadLetterRequest(payload);
-
-      if ("error" in parsed) {
-        logInvalidMailboxSyncDeadLetter(parsed.error);
-
-        return context.json({
-          status: "accepted",
-          detail: parsed.error,
-        });
-      }
-
-      const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processMailboxSyncDeadLetter(parsed.value);
-
-      return context.json(result);
-    } catch (error) {
-      if (isProblemDetails(error)) {
-        return createJsonResponse(error, error.status >= 500 ? error.status : 500);
-      }
-
-      return createWorkerInternalErrorResponse(
-        "The worker failed while processing the sync dead-letter request.",
-      );
-    }
-  });
-
-  app.post("/internal/gmail-push", async (context) => {
-    if (options.asyncTransportMode === "local") {
-      return context.json(
+      return createJsonResponse(
         {
           status: "accepted",
-          detail:
-            "Local mode accepts Gmail push wake-ups, but direct sync dispatch should use /internal/sync.",
+          detail,
         },
-        202,
+        200,
       );
-    }
+    },
+    problemStatus: (problem) => (problem.status >= 500 ? problem.status : 500),
+    selectProcessor: (processors) => processors.processMailboxSyncDeadLetter,
+  };
 
-    try {
-      const payload = await readJsonRequest(context.req);
-      const parsed = decodeGmailPushNotificationPubSubEnvelope(payload);
-
-      if ("error" in parsed) {
-        return createJsonResponse(
+  const gmailPushRouteSpec: InternalRouteSpec<GmailPushNotification, GmailPushNotificationResult> =
+    {
+      decode: decodeGmailPushNotificationPubSubEnvelope,
+      internalErrorDetail: "The worker failed while processing the Gmail push request.",
+      invalidRequest: (detail) =>
+        createJsonResponse(
           {
             code: "invalid_gmail_push_request",
-            detail: parsed.error,
+            detail,
           },
           400,
-        );
-      }
+        ),
+      precondition: () =>
+        options.asyncTransportMode === "local"
+          ? createJsonResponse(
+              {
+                status: "accepted",
+                detail:
+                  "Local mode accepts Gmail push wake-ups, but direct sync dispatch should use /internal/sync.",
+              },
+              202,
+            )
+          : null,
+      selectProcessor: (processors) => processors.processGmailPushNotification,
+      successStatus: 202,
+    };
 
-      const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processGmailPushNotification(parsed.value);
+  const webhookDeliveryRouteSpec: InternalRouteSpec<
+    WebhookDeliveryScheduleRequest,
+    ProcessWebhookDeliveryResult
+  > = {
+    decode: decodeWebhookDeliveryScheduleRequest,
+    internalErrorDetail: "The worker failed while processing the webhook delivery request.",
+    invalidRequest: (detail) =>
+      createJsonResponse(
+        {
+          code: "invalid_webhook_delivery_request",
+          detail,
+        },
+        400,
+      ),
+    selectProcessor: (processors) => processors.processWebhookDelivery,
+  };
 
-      return context.json(result, 202);
-    } catch (error) {
-      if (isProblemDetails(error)) {
-        return createJsonResponse(error, error.status);
-      }
+  const controlJobRouteSpec: InternalRouteSpec<ControlJobDispatchRequest, ControlJobRunResult> = {
+    decode: decodeControlJobDispatchRequest,
+    internalErrorDetail: "The worker failed while processing the control job request.",
+    invalidRequest: (detail) =>
+      createJsonResponse(
+        {
+          code: "invalid_control_job_request",
+          detail,
+        },
+        400,
+      ),
+    selectProcessor: (processors) => processors.processControlJob,
+  };
 
-      return createWorkerInternalErrorResponse(
-        "The worker failed while processing the Gmail push request.",
-      );
-    }
-  });
+  app.post("/internal/sync", (context) =>
+    interpretInternalRoute(syncRouteSpec, runtime)(context.req),
+  );
 
-  app.post("/internal/webhook-deliveries", async (context) => {
-    try {
-      const payload = await readJsonRequest(context.req);
-      const parsed = decodeWebhookDeliveryScheduleRequest(payload);
+  app.post("/internal/sync-dead-letter", (context) =>
+    interpretInternalRoute(syncDeadLetterRouteSpec, runtime)(context.req),
+  );
 
-      if ("error" in parsed) {
-        return createJsonResponse(
-          {
-            code: "invalid_webhook_delivery_request",
-            detail: parsed.error,
-          },
-          400,
-        );
-      }
+  app.post("/internal/gmail-push", (context) =>
+    interpretInternalRoute(gmailPushRouteSpec, runtime)(context.req),
+  );
 
-      const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processWebhookDelivery(parsed.value);
+  app.post("/internal/webhook-deliveries", (context) =>
+    interpretInternalRoute(webhookDeliveryRouteSpec, runtime)(context.req),
+  );
 
-      return context.json(result);
-    } catch (error) {
-      if (isProblemDetails(error)) {
-        return createJsonResponse(error, error.status);
-      }
-
-      return createWorkerInternalErrorResponse(
-        "The worker failed while processing the webhook delivery request.",
-      );
-    }
-  });
-
-  app.post("/internal/control-jobs", async (context) => {
-    try {
-      const payload = await readJsonRequest(context.req);
-      const parsed = decodeControlJobDispatchRequest(payload);
-
-      if ("error" in parsed) {
-        return createJsonResponse(
-          {
-            code: "invalid_control_job_request",
-            detail: parsed.error,
-          },
-          400,
-        );
-      }
-
-      const processors = await getWorkerHttpProcessors(runtime);
-      const result = await processors.processControlJob(parsed.value);
-
-      return context.json(result);
-    } catch (error) {
-      if (isProblemDetails(error)) {
-        return createJsonResponse(error, error.status);
-      }
-
-      return createWorkerInternalErrorResponse(
-        "The worker failed while processing the control job request.",
-      );
-    }
-  });
+  app.post("/internal/control-jobs", (context) =>
+    interpretInternalRoute(controlJobRouteSpec, runtime)(context.req),
+  );
 
   app.notFound(() => {
     return createJsonResponse(
