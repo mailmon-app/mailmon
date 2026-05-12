@@ -1,7 +1,7 @@
-import { createHmac } from "node:crypto";
-
 import type { WorkerEnv } from "@mailmon/config";
 import {
+  buildWebhookDeliveryHttpRequest,
+  classifyWebhookDeliveryTransportFailure,
   type PreparedWebhookDelivery,
   type ProcessWebhookDeliveryResult,
   type WebhookDeliveryScheduleRequest,
@@ -18,12 +18,9 @@ import {
   createGcpMailboxSyncDispatcherLayer,
   createWorkerHttpMailboxSyncDispatcherLayer,
 } from "@mailmon/queue";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer } from "effect";
 
 const DEFAULT_WEBHOOK_DELIVERY_TIMEOUT_MS = 5_000;
-const encodeJsonString = (value: unknown) => {
-  return Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(value);
-};
 
 const requireGcpWorkerValue = (value: string | null, name: string) => {
   if (value === null) {
@@ -33,32 +30,10 @@ const requireGcpWorkerValue = (value: string | null, name: string) => {
   return value;
 };
 
-const createWebhookDeliverySignature = (
-  signingSecret: string,
-  timestampSeconds: string,
-  body: string,
-) => {
-  const signature = createHmac("sha256", signingSecret)
-    .update(`${timestampSeconds}.${body}`)
-    .digest("hex");
-
-  return `t=${timestampSeconds},v1=${signature}`;
-};
-
 const classifyWebhookDeliveryFailure = (error: unknown) => {
-  if (error instanceof Error && error.name === "AbortError") {
-    return {
-      code: "webhook_delivery_timeout",
-      message: "Webhook delivery timed out before the endpoint responded.",
-      retryable: true,
-    } as const;
-  }
-
-  return {
-    code: "webhook_delivery_transport_error",
-    message: error instanceof Error ? error.message : "Webhook delivery failed before a response.",
-    retryable: true,
-  } as const;
+  return classifyWebhookDeliveryTransportFailure(error, {
+    timeoutMessage: "Webhook delivery timed out before the endpoint responded.",
+  });
 };
 
 export const createWebhookDeliverySenderLayer = (
@@ -81,23 +56,15 @@ export const createWebhookDeliverySenderLayer = (
           }, timeoutMs);
 
           try {
-            const body = encodeJsonString(delivery.event);
-            const timestampSeconds = String(Math.floor(Date.parse(attemptedAt) / 1000));
+            const request = buildWebhookDeliveryHttpRequest({
+              attemptedAt,
+              delivery,
+              userAgent: "mailmon-worker/phase-6c",
+            });
             const response = await fetchImpl(delivery.url, {
               method: "POST",
-              headers: {
-                "content-type": "application/json",
-                "user-agent": "mailmon-worker/phase-6c",
-                "x-mailmon-attempt": String(delivery.attemptCount),
-                "x-mailmon-delivery-id": delivery.deliveryId,
-                "x-mailmon-event-id": delivery.event.id,
-                "x-mailmon-signature": createWebhookDeliverySignature(
-                  delivery.signingSecret,
-                  timestampSeconds,
-                  body,
-                ),
-              },
-              body,
+              headers: request.headers,
+              body: request.body,
               signal: abortController.signal,
             });
 

@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { createServer, type Server } from "node:http";
 
 import {
@@ -190,11 +189,7 @@ describe("createWebhookDeliverySenderLayer", () => {
     );
 
     const request = requests[0];
-    const timestampSeconds = String(Math.floor(Date.parse(attemptedAt) / 1000));
     const expectedBody = JSON.stringify(delivery.event);
-    const expectedSignature = createHmac("sha256", delivery.signingSecret)
-      .update(`${timestampSeconds}.${expectedBody}`)
-      .digest("hex");
 
     expect(result).toEqual({
       statusCode: 202,
@@ -204,7 +199,7 @@ describe("createWebhookDeliverySenderLayer", () => {
     expect(request.headers["x-mailmon-event-id"]).toBe(delivery.event.id);
     expect(request.headers["x-mailmon-attempt"]).toBe(String(delivery.attemptCount));
     expect(request.headers["x-mailmon-signature"]).toBe(
-      `t=${timestampSeconds},v1=${expectedSignature}`,
+      "t=1774310405,v1=404015d85ed172558a1f9316898c7d51e67b73c05d4402dc235031a35558026b",
     );
   });
 

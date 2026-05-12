@@ -1,7 +1,7 @@
-import { createHmac } from "node:crypto";
-
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
 import {
+  buildWebhookDeliveryHttpRequest,
+  classifyWebhookDeliveryTransportFailure,
   type ControlJobKind,
   createReplay,
   dispatchReplays,
@@ -10,7 +10,6 @@ import {
   WebhookDeliveryScheduler,
   WebhookDeliverySender,
   WebhookDeliveryStore,
-  type MailboxEventEnvelope,
   type PreparedWebhookDelivery,
   type WebhookDeliverySendFailure,
 } from "@mailmon/core";
@@ -181,63 +180,35 @@ export const parseLastDurationMs = (last: string) => {
 const encodeJsonString = (value: unknown) =>
   Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(value);
 
-const createWebhookDeliverySignature = (
-  signingSecret: string,
-  timestampSeconds: string,
-  body: string,
-) => {
-  const signature = createHmac("sha256", signingSecret)
-    .update(`${timestampSeconds}.${body}`)
-    .digest("hex");
-
-  return `t=${timestampSeconds},v1=${signature}`;
-};
-
 const classifyWebhookDeliveryFailure = (error: unknown): WebhookDeliverySendFailure => {
-  if (error instanceof Error && error.name === "AbortError") {
-    return {
-      code: "webhook_delivery_timeout",
-      message: "Webhook delivery timed out before the local endpoint responded.",
-      retryable: true,
-    };
-  }
-
-  return {
-    code: "webhook_delivery_transport_error",
-    message: error instanceof Error ? error.message : "Webhook delivery failed before a response.",
-    retryable: true,
-  };
+  return classifyWebhookDeliveryTransportFailure(error, {
+    timeoutMessage: "Webhook delivery timed out before the local endpoint responded.",
+  });
 };
 
-const sendLocalWebhookEvent = (params: {
-  readonly attemptCount: number;
-  readonly deliveryId: string;
-  readonly event: MailboxEventEnvelope;
+export const sendLocalWebhookEvent = (params: {
+  readonly attemptedAt?: string;
+  readonly delivery: PreparedWebhookDelivery;
   readonly forwardTo: string;
   readonly signingSecret: string;
-  readonly attemptedAt?: string;
 }) =>
   Effect.tryPromise({
     catch: classifyWebhookDeliveryFailure,
     try: async () => {
       const attemptedAt = params.attemptedAt ?? new Date().toISOString();
-      const body = encodeJsonString(params.event);
-      const timestampSeconds = String(Math.floor(Date.parse(attemptedAt) / 1000));
+      const request = buildWebhookDeliveryHttpRequest({
+        attemptedAt,
+        delivery: {
+          ...params.delivery,
+          signingSecret: params.signingSecret,
+          url: params.forwardTo,
+        },
+        userAgent: "mailmon-cli/phase-8",
+      });
       const response = await globalThis.fetch(params.forwardTo, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "user-agent": "mailmon-cli/phase-8",
-          "x-mailmon-attempt": String(params.attemptCount),
-          "x-mailmon-delivery-id": params.deliveryId,
-          "x-mailmon-event-id": params.event.id,
-          "x-mailmon-signature": createWebhookDeliverySignature(
-            params.signingSecret,
-            timestampSeconds,
-            body,
-          ),
-        },
-        body,
+        headers: request.headers,
+        body: request.body,
       });
 
       return {
@@ -253,10 +224,8 @@ const createLocalForwardingWebhookDeliverySenderLayer = (options: {
   Layer.succeed(WebhookDeliverySender, {
     send: (delivery: PreparedWebhookDelivery, attemptedAt: string) =>
       sendLocalWebhookEvent({
-        attemptCount: delivery.attemptCount,
         attemptedAt,
-        deliveryId: delivery.deliveryId,
-        event: delivery.event,
+        delivery,
         forwardTo: options.forwardTo,
         signingSecret: options.testSigningSecret,
       }),

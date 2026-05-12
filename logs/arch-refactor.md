@@ -6,7 +6,7 @@ Reference plan: [plans/mailmon-architecture-deepening-refactor-plan.md](../plans
 
 ### Current Position
 
-Completed Slice 1: Test Harness Deepening.
+Completed Slice 2: Webhook Delivery Request-Building Module.
 
 ### Slice 0 What Changed
 
@@ -54,12 +54,33 @@ Completed Slice 1: Test Harness Deepening.
 - `pnpm format:check`: passed.
 - `pnpm db:generate`: passed with no schema changes.
 
+### Slice 2 What Changed
+
+- Added `packages/core/src/webhook-delivery-request.ts` as the transport-neutral owner of:
+  - canonical webhook delivery JSON body encoding.
+  - HMAC signature construction.
+  - Mailmon delivery HTTP headers.
+  - shared transport failure classification with adapter-specific timeout wording.
+- Added a fixed core unit test for `PreparedWebhookDelivery` body, headers, and signature.
+- Replaced duplicate worker request body/header/signature construction with the shared core builder.
+- Replaced duplicate CLI local-forwarding request body/header/signature construction with the shared core builder while preserving the CLI test signing secret override.
+- Added CLI forwarding coverage to assert local delivery headers and signatures remain compatible with worker delivery.
+
+### Slice 2 Verification
+
+- `pnpm --filter @mailmon/core test`: passed.
+- `pnpm --filter @mailmon/core build`: passed; needed before adapter tests because worker and CLI import `@mailmon/core` through the package export.
+- `pnpm --filter @mailmon/worker test -- src/runtime.test.ts`: passed.
+- `pnpm --filter @mailmon.dev/cli test -- src/app.test.ts`: passed.
+- `pnpm typecheck`: passed with zero warnings.
+- `pnpm format:check`: passed.
+
 ### Next
 
-Start Slice 2: Webhook Delivery Request-Building Module from the referenced architecture plan.
+Start Slice 3: Worker Internal HTTP Route Interpreter from the referenced architecture plan.
 
 Recommended first actions:
 
-- Add the fixed core unit test for `PreparedWebhookDelivery` request body, signature, and headers.
-- Extract the transport-neutral signature/header builder into `@mailmon/core`.
-- Keep timeout, abort, fetch, and local-forwarding wording in the worker and CLI adapters.
+- Identify the repeated internal HTTP route interpretation shape in `apps/worker/src/server.ts`.
+- Extract request decoding, problem mapping, and workflow invocation into a route interpreter Module.
+- Keep Hono-specific response mechanics in the worker adapter.

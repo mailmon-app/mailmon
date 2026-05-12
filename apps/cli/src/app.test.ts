@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { CliConfig } from "@mailmon/config";
+import type { PreparedWebhookDelivery } from "@mailmon/core";
 import { Effect, Option } from "effect";
+import { vi } from "vitest";
 
 import {
   formatCreatedWorkspace,
@@ -11,6 +13,7 @@ import {
   getListenMessage,
   parseControlJobKind,
   parseLastDurationMs,
+  sendLocalWebhookEvent,
 } from "./app.js";
 
 describe("getListenMessage", () => {
@@ -80,6 +83,70 @@ describe("phase 8 operator helpers", () => {
     expect(formatRevokedWorkspaceApiKey({ apiKeyId: null, revoked: false })).toBe(
       "workspace API key was not found or was already revoked",
     );
+  });
+});
+
+describe("sendLocalWebhookEvent", () => {
+  it("forwards local webhook events with canonical Mailmon headers and test signatures", async () => {
+    const delivery: PreparedWebhookDelivery = {
+      deliveryId: "del_demo",
+      mailboxEventId: "evt_demo",
+      webhookEndpointId: "whe_demo",
+      attemptCount: 1,
+      processingStartedAt: "2026-03-24T00:00:05.000Z",
+      url: "https://stored.example.test/webhooks/mailmon",
+      signingSecret: "whsec_stored",
+      event: {
+        id: "evt_demo",
+        type: "message.created",
+        schemaVersion: 1,
+        occurredAt: "2026-03-24T00:00:00.000Z",
+        workspaceId: "ws_123",
+        tenantExternalId: "tenant_123",
+        mailboxId: "mbx_demo",
+        data: {
+          messageId: "msg_demo",
+          threadId: "thr_demo",
+          providerMessageId: "gmail_msg_demo",
+          providerThreadId: "gmail_thr_demo",
+          subject: "Demo thread",
+          snippet: "Mailbox message fixture",
+          receivedAt: "2026-03-24T00:00:00.000Z",
+          labelIds: ["INBOX"],
+        },
+      },
+    };
+    const fetch = vi.fn(async () => new Response("{}", { status: 202 }));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetch as typeof globalThis.fetch;
+
+    try {
+      const result = await Effect.runPromise(
+        sendLocalWebhookEvent({
+          attemptedAt: "2026-03-24T00:00:05.000Z",
+          delivery,
+          forwardTo: "http://127.0.0.1:3000/webhooks/mailmon",
+          signingSecret: "whsec_demo",
+        }),
+      );
+
+      expect(result).toEqual({ statusCode: 202 });
+      expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:3000/webhooks/mailmon", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "mailmon-cli/phase-8",
+          "x-mailmon-attempt": "1",
+          "x-mailmon-delivery-id": "del_demo",
+          "x-mailmon-event-id": "evt_demo",
+          "x-mailmon-signature":
+            "t=1774310405,v1=7d8ca193a0cb8c4b1e5501e13dca952b981f8354e21ded4dfdd562624c051fbc",
+        },
+        body: JSON.stringify(delivery.event),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
