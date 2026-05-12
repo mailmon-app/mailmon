@@ -134,3 +134,39 @@ Recommended first actions:
 - Identify low-risk adapter groups inside `packages/db/src/persistence.ts` before moving commit-critical code.
 - Partition unrelated persistence adapters first so later Canonical Mailbox State commit work has a smaller diff surface.
 - Keep existing core service seams stable unless a real adapter/testing boundary needs to change.
+
+## 2026-05-13
+
+### Slice 5 What Changed
+
+- Partitioned `packages/db/src/persistence.ts` into adapter-owned internal modules under `packages/db/src/persistence/`.
+- Kept `packages/db/src/persistence.ts` as a public compatibility barrel for existing `@mailmon/db` imports.
+- Moved common persistence pieces into:
+  - `persistence/database.ts` for `MailmonDatabase`, `createDatabaseLayer`, and scoped operator DB access.
+  - `persistence/mappers.ts` for row/resource mapping, timestamp conversion, cursor encoding/decoding, and canonical mailbox state helpers.
+  - `persistence/problems.ts` for adapter problem construction and Postgres error classification.
+  - `persistence/layers.ts` for `createPersistenceServicesLayer`, `createCorePersistenceLayer`, and `createWorkerPersistenceLayer`.
+- Moved service adapters into ownership files for workspace API keys, mailbox catalogs, connect sessions, sync runs, mailbox sync coordination, mailbox state, watch/repair/recovery stores, webhook endpoints, webhook deliveries, replays, and Gmail credentials.
+- Preserved existing core and Gmail service seams; no new service seam was added for mappers or problem helpers.
+
+### Slice 5 Verification
+
+- `pnpm exec effect-solutions list`: passed.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing data-modeling`: passed.
+- `pnpm --filter @mailmon/db format`: passed.
+- `pnpm --filter @mailmon/db lint`: passed with zero warnings.
+- `pnpm --filter @mailmon/db typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/db test`: passed; 43 tests passed across 9 test files.
+- `pnpm --filter @mailmon/db build`: passed.
+- `pnpm db:generate`: passed with no schema changes.
+- `npx fallow health`: still exits nonzero because existing repo-wide thresholds remain. `packages/db/src/persistence.ts` is no longer a monolith or hotspot; it is now a 51-line barrel. The health report now surfaces follow-up DB risk in `persistence/mappers.ts`, `persistence/mailbox-state-store.ts`, and `persistence/mailbox-observability-catalog.ts`, which aligns with later Slice 7 commit-module work.
+
+### Next
+
+Start Slice 6: Mailbox Operational State Policy.
+
+Recommended first actions:
+
+- Move Mailbox status/sync/watch/last-error classification language out of DB adapters and into core policy helpers.
+- Keep persistence adapters responsible for applying transitions, not deciding product wording.
+- Avoid changing Canonical Mailbox State commit transaction ordering until Slice 7.
