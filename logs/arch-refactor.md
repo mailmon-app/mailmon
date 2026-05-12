@@ -6,7 +6,7 @@ Reference plan: [plans/mailmon-architecture-deepening-refactor-plan.md](../plans
 
 ### Current Position
 
-Completed Slice 3: Worker Internal HTTP Route Interpreter.
+Completed Slice 4: Gmail Adapter Internals.
 
 ### Slice 0 What Changed
 
@@ -98,12 +98,39 @@ Completed Slice 3: Worker Internal HTTP Route Interpreter.
 - `pnpm format:check`: passed.
 - `npx fallow dupes`: passed; duplicate percentage is now 3.3%, with remaining worker duplication concentrated in GCP runtime setup inside `apps/worker/src/server.test.ts`.
 
+### Slice 4 What Changed
+
+- Split Gmail HTTP adapter internals out of `packages/gmail/src/index.ts` while keeping the public package exports stable.
+- Added package-private Gmail modules for:
+  - HTTP URL construction and JSON request helpers in `packages/gmail/src/http-client.ts`.
+  - ProblemDetails and Gmail rate-limit/reconnect classification in `packages/gmail/src/problems.ts`.
+  - Gmail response parsing in `packages/gmail/src/parsers.ts`.
+  - OAuth token refresh and authorization-code exchange in `packages/gmail/src/oauth.ts`.
+  - History pagination and compaction in `packages/gmail/src/history.ts`.
+  - The remaining HTTP Gmail API assembly in `packages/gmail/src/http-api.ts`.
+- Removed the large inline `listHistoryDelta` implementation from `packages/gmail/src/index.ts`; history compaction now has a named local owner.
+- Added regression coverage for:
+  - Gmail history pages with no `history` array but a higher `historyId`.
+  - changed messages that return 404 before they can be fetched.
+- Preserved initial sync behavior, incremental Cursor behavior, 404 history cursor invalid mapping, and Gmail 403/429 rate-limit mapping.
+
+### Slice 4 Verification
+
+- `pnpm exec effect-solutions list`: passed.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing data-modeling`: passed.
+- `pnpm --filter @mailmon/gmail test`: passed; 20 tests passed.
+- `pnpm --filter @mailmon/gmail build`: passed.
+- `pnpm --filter @mailmon/gmail typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/gmail format:check`: passed.
+- `pnpm typecheck`: passed with zero warnings.
+- `npx fallow health`: still exits nonzero because existing repo-wide thresholds remain, but the health score improved to `78 B`; `packages/gmail/src/index.ts` is no longer a top file-health issue, `createHttpGmailApi` dropped out of the top large-function list, and Gmail no longer appears in the refactoring-target list.
+
 ### Next
 
-Start Slice 4: Gmail adapter internals from the referenced architecture plan.
+Start Slice 5: DB Persistence Adapter Partition from the referenced architecture plan.
 
 Recommended first actions:
 
-- Identify the `createHttpGmailApi` and `listHistoryDelta` complexity boundaries in `packages/gmail/src/index.ts`.
-- Add focused regression coverage for Gmail history pagination/error behavior before extracting internals.
-- Keep Gmail-specific behavior inside `@mailmon/gmail` and avoid widening core seams unless the adapter needs a real interface.
+- Identify low-risk adapter groups inside `packages/db/src/persistence.ts` before moving commit-critical code.
+- Partition unrelated persistence adapters first so later Canonical Mailbox State commit work has a smaller diff surface.
+- Keep existing core service seams stable unless a real adapter/testing boundary needs to change.

@@ -1130,6 +1130,88 @@ describe("createHttpGmailSyncProviderLayer", () => {
       nextCursor: "hist_incremental_3",
     });
   });
+
+  it("advances the cursor when Gmail returns a higher historyId without history records", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        return gmailAccessToken();
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/history") {
+        expect(url.searchParams.get("startHistoryId")).toBe("hist_bootstrap");
+
+        return jsonResponse({
+          historyId: "hist_idle_2",
+        });
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await syncMailboxWithGmailFetch(fetchImpl, {
+      cursor: "hist_bootstrap",
+      initialized: true,
+    });
+
+    expect(result).toEqual({
+      snapshot: {
+        deletedProviderMessageIds: [],
+        messages: [],
+        threads: [],
+      },
+      eventsEmitted: 0,
+      nextCursor: "hist_idle_2",
+    });
+  });
+
+  it("skips changed messages that disappear before fetch", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(getInputUrl(input));
+
+      if (url.pathname === "/token") {
+        return gmailAccessToken();
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/history") {
+        return gmailHistoryPage("hist_incremental_2", [
+          {
+            messagesAdded: [{ message: { id: "gmail_msg_deleted_before_fetch" } }],
+          },
+        ]);
+      }
+
+      if (url.pathname === "/gmail/v1/users/me/messages/gmail_msg_deleted_before_fetch") {
+        return jsonResponse(
+          {
+            error: {
+              code: 404,
+              message: "Not found",
+            },
+          },
+          404,
+        );
+      }
+
+      throw new Error(`Unhandled fetch ${url.toString()}`);
+    };
+
+    const result = await syncMailboxWithGmailFetch(fetchImpl, {
+      cursor: "hist_bootstrap",
+      initialized: true,
+    });
+
+    expect(result).toEqual({
+      snapshot: {
+        deletedProviderMessageIds: [],
+        messages: [],
+        threads: [],
+      },
+      eventsEmitted: 0,
+      nextCursor: "hist_incremental_2",
+    });
+  });
 });
 
 describe("createHttpGmailWatchProviderLayer", () => {
