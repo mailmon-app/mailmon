@@ -818,152 +818,23 @@ const runWorkerSync = async (workerBaseUrl: string, mailboxId: string) => {
 describe("sandbox end-to-end happy path", () => {
   it("connects a sandbox mailbox, syncs a new message, and delivers a webhook through the real runtimes", async () => {
     await withIsolatedDatabasePromise(async ({ connectionString }) => {
-      const workerPort = await reservePort();
-      const workerBaseUrl = `http://127.0.0.1:${workerPort}`;
-      const sandbox = await startGmailSandbox("sandbox@mailmon.dev");
-      const webhookReceiver = await startWebhookReceiver();
-      let workerRuntime: WorkerRuntimeHandle | null = null;
-      let apiRuntime: ReturnType<typeof createApiRuntime> | null = null;
+      const harness = await startSandboxE2eHarness(connectionString, {
+        emailAddress: "sandbox@mailmon.dev",
+      });
 
       try {
-        await seedWorkspaceApiKey(connectionString);
-
-        const workerEnv: WorkerEnv = {
-          asyncTransportMode: "local",
-          databaseUrl: connectionString,
-          gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
-          gmailOauthClientId: "sandbox-client-id",
-          gmailOauthClientSecret: "sandbox-client-secret",
-          gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
-          gmailRefreshTokenEncryptionKeyId: "primary",
-          gmailRefreshTokenPreviousEncryptionKeys: [],
-          gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
-          gmailPubSubTopicName: null,
-          syncDispatchPubSubTopicName: null,
-          gcpProjectId: null,
-          gcpRegion: null,
-          gcpSchedulerServiceAccountEmail: null,
-          gcpTasksAudience: null,
-          gcpTasksServiceAccountEmail: null,
-          gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
-          host: "127.0.0.1",
-          nodeEnv: "test",
-          port: workerPort,
-          redisUrl: null,
-          workerBaseUrl,
-        };
-
-        workerRuntime = await startWorkerRuntime(workerEnv);
-
-        const apiEnv: Pick<
-          ApiEnv,
-          | "asyncTransportMode"
-          | "databaseUrl"
-          | "gmailApiBaseUrl"
-          | "gmailOauthAuthorizeUrl"
-          | "gmailOauthClientId"
-          | "gmailOauthClientSecret"
-          | "gmailRefreshTokenEncryptionKey"
-          | "gmailRefreshTokenEncryptionKeyId"
-          | "gmailRefreshTokenPreviousEncryptionKeys"
-          | "gmailOauthTokenUrl"
-          | "nodeEnv"
-          | "syncDispatchPubSubTopicName"
-          | "workerBaseUrl"
-        > = {
-          asyncTransportMode: "local",
-          databaseUrl: connectionString,
-          gmailApiBaseUrl: `${sandbox.baseUrl}/gmail/v1`,
-          gmailOauthAuthorizeUrl: `${sandbox.baseUrl}/oauth/authorize`,
-          gmailOauthClientId: "sandbox-client-id",
-          gmailOauthClientSecret: "sandbox-client-secret",
-          gmailRefreshTokenEncryptionKey: testRefreshTokenEncryptionKey,
-          gmailRefreshTokenEncryptionKeyId: "primary",
-          gmailRefreshTokenPreviousEncryptionKeys: [],
-          gmailOauthTokenUrl: `${sandbox.baseUrl}/oauth/token`,
-          nodeEnv: "test",
-          syncDispatchPubSubTopicName: null,
-          workerBaseUrl,
-        };
-
-        apiRuntime = createApiRuntime(apiEnv);
-
-        const app = createApp(apiRuntime);
-        const apiHeaders = {
-          authorization: `Bearer ${primaryApiKey}`,
-          "content-type": "application/json",
-        };
-        const apiOrigin = "http://api.mailmon.test";
-
-        const connectSessionResponse = await app.request(
-          `${apiOrigin}/v1/mailboxes/connect-sessions`,
-          {
-            method: "POST",
-            headers: apiHeaders,
-            body: JSON.stringify({
-              provider: "gmail",
-              tenantExternalId: "tenant_sandbox",
-              mailboxExternalId: "mailbox_sandbox",
-              redirectUrl: "https://app.example.com/settings/gmail/callback",
-            }),
-          },
-        );
-
-        expect(connectSessionResponse.status).toBe(201);
-
-        const connectSession = parseConnectSessionResponse(
-          await readJsonResponse(connectSessionResponse),
-        );
-
-        const hostedConnectResponse = await app.request(connectSession.connectUrl);
-
-        expect(hostedConnectResponse.status).toBe(302);
-
-        const authorizationUrl = hostedConnectResponse.headers.get("location");
-
-        expect(authorizationUrl).not.toBeNull();
-
-        const sandboxAuthorizationResponse = await fetch(authorizationUrl!, {
-          redirect: "manual",
+        const mailboxId = await connectSandboxMailbox(harness, {
+          tenantExternalId: "tenant_sandbox",
+          mailboxExternalId: "mailbox_sandbox",
         });
 
-        expect(sandboxAuthorizationResponse.status).toBe(302);
-        expect(sandbox.authorizationRequests).toHaveLength(1);
-        expect(sandbox.authorizationRequests[0]?.searchParams.get("client_id")).toBe(
+        expect(harness.sandbox.authorizationRequests).toHaveLength(1);
+        expect(harness.sandbox.authorizationRequests[0]?.searchParams.get("client_id")).toBe(
           "sandbox-client-id",
         );
-        expect(sandbox.authorizationRequests[0]?.searchParams.get("state")).toBe(connectSession.id);
 
-        const callbackUrl = sandboxAuthorizationResponse.headers.get("location");
-
-        expect(callbackUrl).not.toBeNull();
-
-        if (callbackUrl === null) {
-          throw new Error("Expected the sandbox authorization step to redirect to the callback.");
-        }
-
-        const callbackResponse = await app.request(callbackUrl);
-
-        expect(callbackResponse.status).toBe(302);
-
-        const frontendRedirectLocation = callbackResponse.headers.get("location");
-
-        if (frontendRedirectLocation === null) {
-          throw new Error("Expected the callback to redirect back to the client redirect URL.");
-        }
-
-        const frontendRedirectUrl = new URL(frontendRedirectLocation);
-        const mailboxId = frontendRedirectUrl.searchParams.get("mailbox_id");
-
-        expect(frontendRedirectUrl.searchParams.get("status")).toBe("success");
-        expect(frontendRedirectUrl.searchParams.get("created")).toBe("true");
-
-        if (mailboxId === null) {
-          throw new Error("Expected the hosted connect callback to return a mailbox_id.");
-        }
-
-        const initialMessagesResponse = await app.request(
-          `${apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
+        const initialMessagesResponse = await harness.app.request(
+          `${harness.apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
           {
             headers: {
               authorization: `Bearer ${primaryApiKey}`,
@@ -978,55 +849,20 @@ describe("sandbox end-to-end happy path", () => {
           nextCursor: null,
         });
 
-        const webhookEndpointResponse = await app.request(`${apiOrigin}/v1/webhook-endpoints`, {
-          method: "POST",
-          headers: apiHeaders,
-          body: JSON.stringify({
-            url: webhookReceiver.url,
-            description: "sandbox e2e",
-          }),
-        });
+        await createMessageCreatedSubscription(harness, mailboxId);
 
-        expect(webhookEndpointResponse.status).toBe(201);
-
-        const webhookEndpoint = parseCreatedWebhookEndpointResponse(
-          await readJsonResponse(webhookEndpointResponse),
-        );
-
-        const subscriptionResponse = await app.request(
-          `${apiOrigin}/v1/webhook-endpoints/${webhookEndpoint.id}/subscriptions`,
-          {
-            method: "POST",
-            headers: apiHeaders,
-            body: JSON.stringify({
-              mailbox_ids: [mailboxId],
-              event_types: ["message.created"],
-            }),
-          },
-        );
-
-        expect(subscriptionResponse.status).toBe(201);
-
-        const sentMessage = await sandbox.sendEmail({
-          to: sandbox.emailAddress,
+        const sentMessage = await harness.sandbox.sendEmail({
+          to: harness.sandbox.emailAddress,
           fromEmail: "alerts@sandbox.mailmon.dev",
           fromName: "Sandbox Alerts",
           subject: "Sandbox hello",
           snippet: "Hello from the sandbox mailbox.",
         });
 
-        const syncResponse = await fetch(`${workerBaseUrl}/internal/sync`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            mailboxId,
-          }),
-        });
+        const syncResponse = await runWorkerSync(harness.workerBaseUrl, mailboxId);
 
         expect(syncResponse.status).toBe(200);
-        await expect(syncResponse.json()).resolves.toMatchObject({
+        expect(syncResponse.body).toMatchObject({
           mailboxId,
           status: "completed",
           eventsEmitted: 2,
@@ -1034,7 +870,7 @@ describe("sandbox end-to-end happy path", () => {
         });
 
         const deliveredWebhook = await waitFor(
-          async () => webhookReceiver.deliveries[0] ?? null,
+          async () => harness.webhookReceiver.deliveries[0] ?? null,
           (value) => value !== null,
         );
 
@@ -1078,8 +914,8 @@ describe("sandbox end-to-end happy path", () => {
           }),
         ]);
 
-        const messagesResponse = await app.request(
-          `${apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
+        const messagesResponse = await harness.app.request(
+          `${harness.apiOrigin}/v1/messages?mailboxId=${mailboxId}`,
           {
             headers: {
               authorization: `Bearer ${primaryApiKey}`,
@@ -1109,12 +945,7 @@ describe("sandbox end-to-end happy path", () => {
           nextCursor: null,
         });
       } finally {
-        await Promise.all([
-          apiRuntime?.dispose(),
-          workerRuntime?.close(),
-          webhookReceiver.close(),
-          sandbox.close(),
-        ]);
+        await harness.close();
       }
     });
   }, 30_000);

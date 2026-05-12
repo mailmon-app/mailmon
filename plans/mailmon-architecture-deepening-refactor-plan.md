@@ -541,6 +541,30 @@ pnpm --filter @mailmon/gmail test
 npx fallow dupes
 ```
 
+### Slice 1 Result
+
+Completed on 2026-05-12.
+
+- Added package-local API route, sandbox, worker internal HTTP, and Gmail HTTP test harness
+  helpers without introducing a global `@mailmon/test` package.
+- `npx fallow dupes` now reports 971 duplicated lines, 3.4 percent, 22 clone groups, and 3
+  clone families.
+- The previous 403-line API/core clone family is no longer present. The remaining API/core
+  overlap is a 47-line fixture-shaped clone between `apps/api/src/test-harness.ts` and
+  `packages/core/src/use-cases.test.ts`; keep it package-local for now because `@mailmon/core`
+  does not export test utilities and only this slice needs the shared shape.
+- Verification passed:
+  `pnpm --filter @mailmon/api test`,
+  `pnpm --filter @mailmon/worker test`,
+  `pnpm --filter @mailmon/core test`,
+  `pnpm --filter @mailmon/gmail test`,
+  `pnpm build`,
+  `pnpm lint`,
+  `pnpm typecheck`,
+  `pnpm test`,
+  `pnpm format:check`, and
+  `pnpm db:generate`.
+
 ---
 
 ## Slice 2: Webhook Delivery Request-Building Module

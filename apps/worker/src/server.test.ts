@@ -147,13 +147,57 @@ const gcpAuthorizationHeaders = {
   "content-type": "application/json",
 };
 
+type WorkerHttpRuntimeOptions = Parameters<typeof startWorkerHttpRuntime>[0];
+
+const startWorkerTestRuntime = async (overrides: Partial<WorkerHttpRuntimeOptions> = {}) => {
+  const runtime = await startWorkerHttpRuntime({
+    asyncTransportMode: workerEnvFixture.asyncTransportMode,
+    host: workerEnvFixture.host,
+    port: workerEnvFixture.port,
+    processGmailPushNotification: defaultProcessGmailPushNotification,
+    processControlJob: defaultProcessControlJob,
+    processSyncJob: async ({ mailboxId }) => ({
+      mailboxId,
+      syncRunId: "sr_sync",
+      startedAt: "2026-03-25T00:00:00.000Z",
+      status: "completed",
+      completedAt: "2026-03-25T00:00:01.000Z",
+      eventsEmitted: 2,
+      nextCursor: "hist_456",
+    }),
+    processWebhookDelivery: async ({ deliveryId }) => ({
+      deliveryId,
+      status: "delivered",
+      attemptCount: 1,
+      nextAttemptAt: null,
+    }),
+    ...overrides,
+  });
+
+  activeRuntimeClosers.push(runtime.close);
+
+  return runtime;
+};
+
+const createWorkerInternalRequest = (
+  runtime: Awaited<ReturnType<typeof startWorkerHttpRuntime>>,
+  path: string,
+  body: unknown,
+  options: Readonly<{
+    headers?: HeadersInit;
+  }> = {},
+) =>
+  fetch(`http://${runtime.host}:${runtime.port}${path}`, {
+    method: "POST",
+    headers: options.headers ?? {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
 describe("startWorkerHttpRuntime", () => {
   it("serves a health response in local mode", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
+    const runtime = await startWorkerTestRuntime({
       processControlJob: defaultProcessControlJob,
       processSyncJob: async ({ mailboxId }) => ({
         mailboxId,
@@ -164,14 +208,7 @@ describe("startWorkerHttpRuntime", () => {
         eventsEmitted: 1,
         nextCursor: "hist_123",
       }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/health`);
 
@@ -183,38 +220,9 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("runs the mailbox sync workflow through /internal/sync", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
-    activeRuntimeClosers.push(runtime.close);
-
-    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        mailboxId: "mbx_demo",
-      }),
+    const runtime = await startWorkerTestRuntime();
+    const response = await createWorkerInternalRequest(runtime, "/internal/sync", {
+      mailboxId: "mbx_demo",
     });
 
     expect(response.status).toBe(200);
@@ -226,38 +234,9 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("rejects invalid sync payloads", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
-    activeRuntimeClosers.push(runtime.close);
-
-    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        mailboxId: "",
-      }),
+    const runtime = await startWorkerTestRuntime();
+    const response = await createWorkerInternalRequest(runtime, "/internal/sync", {
+      mailboxId: "",
     });
 
     expect(response.status).toBe(400);
@@ -267,21 +246,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("accepts mailbox sync dead-letter envelopes and records exhaustion", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 1,
-        nextCursor: "hist_123",
-      }),
+    const runtime = await startWorkerTestRuntime({
       processMailboxSyncDeadLetter: async ({ mailboxId }) => ({
         mailboxId,
         status: "recorded",
@@ -289,29 +254,12 @@ describe("startWorkerHttpRuntime", () => {
         recordedAt: "2026-03-25T00:00:02.000Z",
         detail: "mailbox_sync_dispatch_retry_exhausted",
       }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
-
-    const response = await fetch(
-      `http://${runtime.host}:${runtime.port}/internal/sync-dead-letter`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          message: {
-            data: Buffer.from(JSON.stringify({ mailboxId: "mbx_demo" }), "utf8").toString("base64"),
-          },
-        }),
+    const response = await createWorkerInternalRequest(runtime, "/internal/sync-dead-letter", {
+      message: {
+        data: Buffer.from(JSON.stringify({ mailboxId: "mbx_demo" }), "utf8").toString("base64"),
       },
-    );
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -322,44 +270,12 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("acknowledges malformed mailbox sync dead-letter envelopes", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 1,
-        nextCursor: "hist_123",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
-    activeRuntimeClosers.push(runtime.close);
-
-    const response = await fetch(
-      `http://${runtime.host}:${runtime.port}/internal/sync-dead-letter`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          message: {
-            data: "not-valid-json",
-          },
-        }),
+    const runtime = await startWorkerTestRuntime();
+    const response = await createWorkerInternalRequest(runtime, "/internal/sync-dead-letter", {
+      message: {
+        data: "not-valid-json",
       },
-    );
+    });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({

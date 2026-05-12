@@ -6,9 +6,9 @@ Reference plan: [plans/mailmon-architecture-deepening-refactor-plan.md](../plans
 
 ### Current Position
 
-Completed Slice 0: Baseline Hygiene After v4 Migration.
+Completed Slice 1: Test Harness Deepening.
 
-### What Changed
+### Slice 0 What Changed
 
 - Fixed the API OpenAPI response helper in `apps/api/src/server.ts` by removing the unnecessary generic and unsafe `schema as never` assertion.
 - Tightened worker processor runtime typing in `apps/worker/src/processor.ts` so each processor accepts a runtime for the exact Effect it executes.
@@ -22,8 +22,31 @@ Completed Slice 0: Baseline Hygiene After v4 Migration.
   - `packages/db/src/bootstrap.ts`
   - `packages/db/src/replay.test.ts`
 
-### Verification
+### Slice 0 Verification
 
+- `pnpm build`: passed.
+- `pnpm lint`: passed with zero warnings.
+- `pnpm typecheck`: passed with zero warnings.
+- `pnpm test`: passed.
+- `pnpm format:check`: passed.
+- `pnpm db:generate`: passed with no schema changes.
+
+### Slice 1 What Changed
+
+- Added `apps/api/src/test-harness.ts` with package-local API route fixtures and `createApiRouteTestRuntime(...)`.
+- Replaced the duplicate runtime setup in `apps/api/src/server.test.ts` with the API route harness.
+- Reused the sandbox e2e harness in the happy-path test instead of re-declaring API/worker runtime environment setup.
+- Added worker internal HTTP test helpers for default runtime startup and JSON internal requests.
+- Added Gmail test response builders and a Gmail sync provider invocation helper.
+- Kept the remaining API/core fixture overlap package-local. The previous 403-line API/core clone family is reduced to a 47-line fixture-shaped overlap, which is not worth a shared package yet because `@mailmon/core` does not export test utilities and Slice 1 explicitly avoids a global `@mailmon/test` package.
+
+### Slice 1 Verification
+
+- `pnpm --filter @mailmon/api test`: passed.
+- `pnpm --filter @mailmon/worker test`: passed.
+- `pnpm --filter @mailmon/core test`: passed.
+- `pnpm --filter @mailmon/gmail test`: passed.
+- `npx fallow dupes`: passed; duplicate percentage dropped from 7.1% to 3.4%.
 - `pnpm build`: passed.
 - `pnpm lint`: passed with zero warnings.
 - `pnpm typecheck`: passed with zero warnings.
@@ -33,11 +56,10 @@ Completed Slice 0: Baseline Hygiene After v4 Migration.
 
 ### Next
 
-Start Slice 1: Test Harness Deepening from the referenced architecture plan.
+Start Slice 2: Webhook Delivery Request-Building Module from the referenced architecture plan.
 
 Recommended first actions:
 
-- Extract shared API/core Workspace and Mailbox fixture data.
-- Extract API route runtime construction from `apps/api/src/server.test.ts`.
-- Keep helpers package-local unless at least two packages need the same interface.
-- After the first helper extraction, run the affected package tests before continuing.
+- Add the fixed core unit test for `PreparedWebhookDelivery` request body, signature, and headers.
+- Extract the transport-neutral signature/header builder into `@mailmon/core`.
+- Keep timeout, abort, fetch, and local-forwarding wording in the worker and CLI adapters.

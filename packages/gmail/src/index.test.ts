@@ -39,6 +39,98 @@ const mailboxFixture = {
 const primaryEncryptionKey = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
 const rotatedEncryptionKey = "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg=";
 
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    headers: { "content-type": "application/json" },
+    status,
+  });
+
+const gmailAccessToken = () => jsonResponse({ access_token: "access-token" });
+
+const gmailProfile = (historyId: string) =>
+  jsonResponse({
+    emailAddress: mailboxFixture.emailAddress,
+    historyId,
+  });
+
+const gmailHistoryPage = (
+  historyId: string,
+  history: ReadonlyArray<Record<string, unknown>> = [],
+) =>
+  jsonResponse({
+    history,
+    historyId,
+  });
+
+const gmailMessage = (
+  id: string,
+  options: Readonly<{
+    internalDate: string;
+    labelIds: ReadonlyArray<string>;
+    snippet: string;
+    subject: string;
+    threadId?: string;
+  }>,
+) =>
+  jsonResponse({
+    id,
+    internalDate: String(Date.parse(options.internalDate)),
+    labelIds: options.labelIds,
+    payload: {
+      headers: [
+        { name: "From", value: "Mailmon <hello@mailmon.dev>" },
+        { name: "Subject", value: options.subject },
+      ],
+    },
+    snippet: options.snippet,
+    threadId: options.threadId ?? "gmail_thread_1",
+  });
+
+const syncMailboxWithGmailFetch = (
+  fetchImpl: typeof fetch,
+  params: Readonly<{
+    cursor: string | null;
+    initialized?: boolean;
+  }>,
+) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const provider = yield* MailboxSyncProvider;
+
+      return yield* provider.syncMailbox({
+        mailbox:
+          params.initialized === true
+            ? {
+                ...mailboxFixture,
+                initializedAt: "2026-03-29T09:30:00.000Z",
+                lastSuccessfulSyncAt: "2026-03-29T09:30:00.000Z",
+              }
+            : mailboxFixture,
+        cursor: params.cursor,
+      });
+    }).pipe(
+      Effect.provide(
+        createHttpGmailSyncProviderLayer({
+          apiBaseUrl: "http://gmail.mock/gmail/v1",
+          fetchImpl,
+          oauthClientId: "client-id",
+          oauthClientSecret: "client-secret",
+          oauthTokenUrl: "http://gmail.mock/token",
+        }).pipe(
+          Layer.provide(
+            Layer.succeed(GmailMailboxCredentialStore, {
+              getGmailMailboxCredential: () =>
+                Effect.succeed({
+                  mailboxId: mailboxFixture.id,
+                  refreshToken: "refresh-token",
+                }),
+            }),
+          ),
+        ),
+      ),
+    ),
+  );
+
 describe("createStubMailboxSyncProviderLayer", () => {
   it("returns a stable bootstrap sync result when no cursor is stored", async () => {
     const result = await Effect.runPromise(
@@ -309,86 +401,38 @@ describe("createHttpGmailSyncProviderLayer", () => {
       const url = new URL(getInputUrl(input));
 
       if (url.pathname === "/token") {
-        return new Response(JSON.stringify({ access_token: "access-token" }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        });
+        return gmailAccessToken();
       }
 
       if (url.pathname === "/gmail/v1/users/me/profile") {
-        return new Response(
-          JSON.stringify({
-            emailAddress: mailboxFixture.emailAddress,
-            historyId: "hist_bootstrap",
-          }),
-          {
-            headers: { "content-type": "application/json" },
-            status: 200,
-          },
-        );
+        return gmailProfile("hist_bootstrap");
       }
 
       if (url.pathname === "/gmail/v1/users/me/messages") {
-        return new Response(JSON.stringify({ messages: [{ id: "gmail_msg_1" }] }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        });
+        return jsonResponse({ messages: [{ id: "gmail_msg_1" }] });
       }
 
       if (url.pathname === "/gmail/v1/users/me/history") {
         expect(url.searchParams.get("startHistoryId")).toBe("hist_bootstrap");
 
-        return new Response(JSON.stringify({ historyId: "hist_bootstrap" }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        });
+        return gmailHistoryPage("hist_bootstrap");
       }
 
       if (url.pathname === "/gmail/v1/users/me/messages/gmail_msg_1") {
-        return new Response(
-          JSON.stringify({
-            id: "gmail_msg_1",
-            internalDate: String(Date.parse("2026-03-29T09:30:00.000Z")),
-            labelIds: ["INBOX"],
-            payload: {
-              headers: [
-                { name: "From", value: "Mailmon <hello@mailmon.dev>" },
-                { name: "Subject", value: "Welcome to Mailmon" },
-              ],
-            },
-            snippet: "Baseline message",
-            threadId: "gmail_thread_1",
-          }),
-          {
-            headers: { "content-type": "application/json" },
-            status: 200,
-          },
-        );
+        return gmailMessage("gmail_msg_1", {
+          internalDate: "2026-03-29T09:30:00.000Z",
+          labelIds: ["INBOX"],
+          snippet: "Baseline message",
+          subject: "Welcome to Mailmon",
+        });
       }
 
       throw new Error(`Unhandled fetch ${url.toString()}`);
     };
 
-    const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const provider = yield* MailboxSyncProvider;
-
-        return yield* provider.syncMailbox({
-          mailbox: mailboxFixture,
-          cursor: null,
-        });
-      }).pipe(
-        Effect.provide(
-          createHttpGmailSyncProviderLayer({
-            apiBaseUrl: "http://gmail.mock/gmail/v1",
-            fetchImpl,
-            oauthClientId: "client-id",
-            oauthClientSecret: "client-secret",
-            oauthTokenUrl: "http://gmail.mock/token",
-          }).pipe(Layer.provide(credentialStoreLayer)),
-        ),
-      ),
-    );
+    const result = await syncMailboxWithGmailFetch(fetchImpl, {
+      cursor: null,
+    });
 
     expect(result).toEqual({
       snapshot: {
