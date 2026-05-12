@@ -230,10 +230,7 @@ const createMailboxSyncHeartbeat = (execution: AcquiredMailboxSyncExecution) =>
         mailboxId: execution.mailbox.id,
         leaseOwnerId: execution.leaseOwnerId,
         heartbeatAt,
-        expiresAt: addMillisecondsToIsoTimestamp(
-          heartbeatAt,
-          DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS,
-        ),
+        expiresAt: addMillisecondsToIsoTimestamp(heartbeatAt, DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS),
       });
 
       if (!renewal.renewed) {

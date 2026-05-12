@@ -39,7 +39,9 @@ The migration families below were the main sources of churn during the v4 move:
 4. renamed or removed v3 effect combinators and runtime helpers
 5. type inference fallout after the mechanical API updates
 
-Residual non-blocking cleanup still visible in the workspace:
+Historical breakage inventory below is retained as the migration execution record, not as an
+active blocker list. The residual non-blocking cleanup that was visible after the migration
+was resolved on 2026-05-12:
 
 - [apps/api/src/server.ts](/home/satty/projects/mailmon-dev/apps/api/src/server.ts:525)
   - `typescript(no-unnecessary-type-parameters)`

@@ -522,12 +522,12 @@ const mailboxObservabilitySchema = {
   additionalProperties: false,
 } as const;
 
-const jsonResponse = <TSchema extends object>(description: string, schema: TSchema) => {
+const jsonResponse = (description: string, schema: object) => {
   return {
     description,
     content: {
       "application/json": {
-        schema: schema as never,
+        schema,
       },
     },
   } as const;

@@ -7,7 +7,12 @@ export const MailboxSyncStateSchema = Schema.Literals([
   "lagging",
   "failed",
 ]);
-export const MailboxWatchStateSchema = Schema.Literals(["active", "expiring", "expired", "unhealthy"]);
+export const MailboxWatchStateSchema = Schema.Literals([
+  "active",
+  "expiring",
+  "expired",
+  "unhealthy",
+]);
 export const MailboxEventTypeSchema = Schema.Literals([
   "message.created",
   "message.updated",
@@ -18,7 +23,11 @@ export const WebhookEventTypeSchema = Schema.Literals([
   "message.updated",
   "thread.updated",
 ]);
-export const WebhookEndpointDeliveryStateSchema = Schema.Literals(["healthy", "degraded", "failing"]);
+export const WebhookEndpointDeliveryStateSchema = Schema.Literals([
+  "healthy",
+  "degraded",
+  "failing",
+]);
 export const ReplayStatusSchema = Schema.Literals([
   "queued",
   "running",

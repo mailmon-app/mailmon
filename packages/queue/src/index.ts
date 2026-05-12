@@ -395,7 +395,9 @@ export const createLocalAsyncTransportLayer = (options: LocalAsyncTransportOptio
             Ref.update(snapshotRef, (snapshot) => ({
               ...snapshot,
               mailboxSyncMailboxIds: [...snapshot.mailboxSyncMailboxIds, mailboxId],
-            })).pipe(Effect.andThen(dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId))),
+            })).pipe(
+              Effect.andThen(dispatchMailboxSyncToWorker(fetchImpl, workerBaseUrl, mailboxId)),
+            ),
         }),
         Layer.succeed(WebhookDeliveryScheduler, {
           scheduleWebhookDelivery: (request: WebhookDeliveryScheduleRequest) =>

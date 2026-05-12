@@ -1,6 +1,5 @@
 import { createHmac } from "node:crypto";
 
-import { Argument, Command, Flag } from "effect/unstable/cli";
 import { CliConfig as MailmonCliConfig } from "@mailmon/config";
 import {
   type ControlJobKind,
@@ -34,6 +33,7 @@ import {
 import { createAesGcmGmailRefreshTokenCipherLayer } from "@mailmon/gmail";
 import { createLocalAsyncTransportLayer } from "@mailmon/queue";
 import { Console, Data, Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
+import { Argument, Command, Flag } from "effect/unstable/cli";
 
 class CliError extends Data.TaggedError("CliError")<{
   readonly message: string;

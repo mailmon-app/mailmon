@@ -17,7 +17,9 @@ const loadGcpRegion = Config.option(Config.nonEmptyString("GCP_REGION"));
 const loadGmailApiBaseUrl = Config.nonEmptyString("MAILMON_GMAIL_API_BASE_URL").pipe(
   Config.orElse(() => Config.succeed("https://gmail.googleapis.com/gmail/v1")),
 );
-const loadGmailOauthClientId = Config.option(Config.nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_ID"));
+const loadGmailOauthClientId = Config.option(
+  Config.nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_ID"),
+);
 const loadGmailOauthClientSecret = Config.option(
   Config.nonEmptyString("MAILMON_GMAIL_OAUTH_CLIENT_SECRET"),
 );
@@ -218,10 +220,7 @@ const apiConfig = Config.all({
       port: config.port,
       syncDispatchPubSubTopicName:
         config.asyncTransportMode === "gcp"
-          ? requireGcpValue(
-              syncDispatchPubSubTopicName,
-              "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-            )
+          ? requireGcpValue(syncDispatchPubSubTopicName, "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME")
           : syncDispatchPubSubTopicName,
       workerBaseUrl,
     };
@@ -271,9 +270,7 @@ const workerConfig = Config.all({
           ? requireGcpValue(gcpProjectId, "GCP_PROJECT_ID")
           : gcpProjectId,
       gcpRegion:
-        config.asyncTransportMode === "gcp"
-          ? requireGcpValue(gcpRegion, "GCP_REGION")
-          : gcpRegion,
+        config.asyncTransportMode === "gcp" ? requireGcpValue(gcpRegion, "GCP_REGION") : gcpRegion,
       gcpSchedulerServiceAccountEmail:
         config.asyncTransportMode === "gcp"
           ? requireGcpValue(
@@ -284,10 +281,7 @@ const workerConfig = Config.all({
       gcpTasksAudience,
       gcpTasksServiceAccountEmail:
         config.asyncTransportMode === "gcp"
-          ? requireGcpValue(
-              gcpTasksServiceAccountEmail,
-              "MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL",
-            )
+          ? requireGcpValue(gcpTasksServiceAccountEmail, "MAILMON_GCP_TASKS_SERVICE_ACCOUNT_EMAIL")
           : gcpTasksServiceAccountEmail,
       gcpWebhookDeliveryQueueId: config.gcpWebhookDeliveryQueueId,
       gmailApiBaseUrl: config.gmailApiBaseUrl,
@@ -312,10 +306,7 @@ const workerConfig = Config.all({
       redisUrl: normalizeOptional(config.redisUrl),
       syncDispatchPubSubTopicName:
         config.asyncTransportMode === "gcp"
-          ? requireGcpValue(
-              syncDispatchPubSubTopicName,
-              "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-            )
+          ? requireGcpValue(syncDispatchPubSubTopicName, "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME")
           : syncDispatchPubSubTopicName,
       workerBaseUrl: resolveWorkerBaseUrl(
         config.asyncTransportMode,
@@ -334,20 +325,22 @@ const cliConfig = Config.all({
   nodeEnv: loadNodeEnv,
   workerBaseUrl: loadMailboxWorkerBaseUrl,
 }).pipe(
-  Config.map((config): CliEnv => ({
-    asyncTransportMode: config.asyncTransportMode,
-    databaseUrl: normalizeOptional(config.databaseUrl),
-    gmailRefreshTokenEncryptionKey: normalizeOptional(config.gmailRefreshTokenEncryptionKey),
-    gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
-    gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
-      normalizeOptional(config.gmailRefreshTokenPreviousEncryptionKeys),
-    ),
-    nodeEnv: config.nodeEnv,
-    workerBaseUrl: resolveWorkerBaseUrl(
-      config.asyncTransportMode,
-      normalizeOptional(config.workerBaseUrl),
-    ),
-  })),
+  Config.map(
+    (config): CliEnv => ({
+      asyncTransportMode: config.asyncTransportMode,
+      databaseUrl: normalizeOptional(config.databaseUrl),
+      gmailRefreshTokenEncryptionKey: normalizeOptional(config.gmailRefreshTokenEncryptionKey),
+      gmailRefreshTokenEncryptionKeyId: config.gmailRefreshTokenEncryptionKeyId,
+      gmailRefreshTokenPreviousEncryptionKeys: parsePreviousEncryptionKeys(
+        normalizeOptional(config.gmailRefreshTokenPreviousEncryptionKeys),
+      ),
+      nodeEnv: config.nodeEnv,
+      workerBaseUrl: resolveWorkerBaseUrl(
+        config.asyncTransportMode,
+        normalizeOptional(config.workerBaseUrl),
+      ),
+    }),
+  ),
 );
 
 export class CommonConfig extends Context.Service<CommonConfig, CommonEnv>()(

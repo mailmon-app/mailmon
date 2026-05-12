@@ -10,6 +10,8 @@ import {
   createProcessWebhookDelivery,
 } from "./processor.js";
 
+type ProcessorRuntime<T extends (...args: any) => any> = Parameters<T>[0];
+
 describe("processSyncJob", () => {
   it("runs the mailbox-scoped sync workflow", async () => {
     const runtime = ManagedRuntime.make(
@@ -47,12 +49,9 @@ describe("processSyncJob", () => {
       leaseOwnerId: "lease_active",
       nextCursor: null,
     };
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed sync result.
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed exhaustion result.
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed exhaustion result.
     const runtime = {
       runPromise: async () => result,
-    } as unknown as Parameters<typeof createProcessSyncJob>[0];
+    } satisfies ProcessorRuntime<typeof createProcessSyncJob>;
 
     const processSyncJob = createProcessSyncJob(runtime, {
       log: (event) => logs.push(event),
@@ -76,9 +75,6 @@ describe("processSyncJob", () => {
 
   it("emits a structured lease-loss log before rethrowing lease loss failures", async () => {
     const logs: unknown[] = [];
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and throws a fixed problem.
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed webhook delivery result.
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test runtime ignores the Effect input and returns a fixed webhook delivery result.
     const runtime = {
       runPromise: async () => {
         throw {
@@ -95,7 +91,7 @@ describe("processSyncJob", () => {
           retryable: true,
         };
       },
-    } as unknown as Parameters<typeof createProcessSyncJob>[0];
+    } satisfies ProcessorRuntime<typeof createProcessSyncJob>;
 
     const processSyncJob = createProcessSyncJob(runtime, {
       log: (event) => logs.push(event),
@@ -130,7 +126,7 @@ describe("processMailboxSyncDeadLetter", () => {
     };
     const runtime = {
       runPromise: async () => result,
-    } as unknown as Parameters<typeof createProcessMailboxSyncDeadLetter>[0];
+    } satisfies ProcessorRuntime<typeof createProcessMailboxSyncDeadLetter>;
 
     const processMailboxSyncDeadLetter = createProcessMailboxSyncDeadLetter(runtime, {
       log: (event) => logs.push(event),
@@ -162,7 +158,7 @@ describe("processWebhookDelivery", () => {
     };
     const runtime = {
       runPromise: async () => result,
-    } as unknown as Parameters<typeof createProcessWebhookDelivery>[0];
+    } satisfies ProcessorRuntime<typeof createProcessWebhookDelivery>;
 
     const processWebhookDelivery = createProcessWebhookDelivery(runtime, {
       log: (event) => logs.push(event),

@@ -326,9 +326,7 @@ describe("Replay persistence", () => {
 
       expect(attempts.filter(Exit.isSuccess)).toHaveLength(1);
       expect(
-        attempts
-          .filter(Exit.isFailure)
-          .map((attempt) => Cause.findErrorOption(attempt.cause)),
+        attempts.filter(Exit.isFailure).map((attempt) => Cause.findErrorOption(attempt.cause)),
       ).toEqual([
         Option.some(
           expect.objectContaining({

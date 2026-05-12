@@ -985,16 +985,18 @@ export const renewExpiringMailboxWatches = (
           };
         }).pipe(
           Effect.catch((problem) =>
-            mailboxWatchStore.failMailboxWatchRenewal({
-              mailboxId: target.mailbox.id,
-              observedAt,
-              problem,
-            }).pipe(
-              Effect.as({
-                expired,
-                status: "failed" as const,
-              }),
-            ),
+            mailboxWatchStore
+              .failMailboxWatchRenewal({
+                mailboxId: target.mailbox.id,
+                observedAt,
+                problem,
+              })
+              .pipe(
+                Effect.as({
+                  expired,
+                  status: "failed" as const,
+                }),
+              ),
           ),
         );
       },

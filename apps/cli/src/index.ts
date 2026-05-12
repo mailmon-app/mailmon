@@ -12,9 +12,6 @@ const MainLayer = Layer.mergeAll(CliConfig.layer, NodeServices.layer);
 
 const main = Command.run(appCommand, {
   version: "0.0.0",
-}).pipe(
-  Effect.provide(MainLayer),
-  Effect.scoped,
-);
+}).pipe(Effect.provide(MainLayer), Effect.scoped);
 
 NodeRuntime.runMain(main);

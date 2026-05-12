@@ -50,7 +50,7 @@ const hasEffectJsonSchema = (value: unknown): value is EffectStandardSchemaWithJ
 const toEffectJsonSchema = (
   schema: unknown,
   options?: Readonly<Record<string, unknown>>,
-) : JsonSchemaObject => {
+): JsonSchemaObject => {
   if (!hasEffectJsonSchema(schema)) {
     throw new Error("Effect Standard Schema is missing JSON Schema support.");
   }
