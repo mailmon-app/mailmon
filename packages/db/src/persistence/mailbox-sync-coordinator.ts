@@ -1,6 +1,7 @@
 import {
   MailboxSyncCoordinator,
   MailboxSyncDispatchExhaustionStore,
+  transitionForDispatchRetryExhausted,
   type MailboxSyncDispatchExhaustedResult,
   type MailboxSyncLeaseAcquisition,
   type MailboxSyncLeaseRenewal,
@@ -10,7 +11,7 @@ import { Effect, Layer } from "effect";
 
 import { mailboxes, syncRuns } from "../schema.js";
 import { MailmonDatabase } from "./database.js";
-import { toDate, toIsoString } from "./mappers.js";
+import { toDate, toIsoString, toMailboxOperationalTransitionUpdate } from "./mappers.js";
 
 export const createMailboxSyncDispatchExhaustionStoreLayer = Layer.effect(
   MailboxSyncDispatchExhaustionStore,
@@ -23,6 +24,9 @@ export const createMailboxSyncDispatchExhaustionStoreLayer = Layer.effect(
           const recordedAtDate = toDate(recordedAt);
 
           return database.db.transaction(async (transaction) => {
+            const mailboxTransitionUpdate = toMailboxOperationalTransitionUpdate(
+              transitionForDispatchRetryExhausted({ occurredAt: recordedAt }),
+            );
             const [mailbox] = await transaction
               .select({
                 cursor: mailboxes.cursor,
@@ -56,12 +60,7 @@ export const createMailboxSyncDispatchExhaustionStoreLayer = Layer.effect(
             await transaction
               .update(mailboxes)
               .set({
-                lastErrorCode: "mailbox_sync_dispatch_retry_exhausted",
-                lastErrorMessage:
-                  "Mailbox sync dispatch exhausted transport retries before a worker could process it.",
-                lastErrorOccurredAt: recordedAtDate,
-                lastErrorRetryable: true,
-                syncState: "failed",
+                ...mailboxTransitionUpdate,
                 updatedAt: recordedAtDate,
               })
               .where(eq(mailboxes.id, mailboxId));

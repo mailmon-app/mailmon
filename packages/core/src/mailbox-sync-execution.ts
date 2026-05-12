@@ -9,6 +9,7 @@ import type {
   SyncRunOutcome,
 } from "./contracts.js";
 import { scheduleMailboxEventDeliveries } from "./mailbox-event-delivery-scheduling.js";
+import { isTerminalMailboxSyncProblem } from "./mailbox-operational-state.js";
 import { mailboxNotFound, mailboxSyncLeaseLost } from "./problems.js";
 import {
   MailboxCatalog,
@@ -20,12 +21,6 @@ import {
 
 const DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS = 90_000;
 const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
-
-const TERMINAL_MAILBOX_SYNC_PROBLEM_CODES = new Set([
-  "gmail_mailbox_credentials_missing",
-  "gmail_mailbox_credential_unreadable",
-  "gmail_token_refresh_reconnect_required",
-]);
 
 interface AcquiredMailboxSyncExecution {
   readonly cursor: string | null;
@@ -60,10 +55,6 @@ const createSyncRunCompletion = (
     nextCursor: params.nextCursor,
     detail: params.detail ?? null,
   };
-};
-
-const isTerminalMailboxSyncProblem = (code: string) => {
-  return TERMINAL_MAILBOX_SYNC_PROBLEM_CODES.has(code);
 };
 
 const getMailboxOrFail = (mailboxId: string) =>

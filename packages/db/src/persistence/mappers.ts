@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 
 import {
   invalidPaginationCursor,
+  transitionForCompletedSyncRun,
   type CanonicalMessageRecord,
   type CanonicalThreadRecord,
   type CompletedSyncRun,
   type CreatedWebhookEndpointResource,
   type MailboxEventEnvelope,
   type MailboxEventType,
+  type MailboxOperationalTransition,
   type MailboxOperationalError,
   type MailboxRepairTarget,
   type MailboxResource,
@@ -69,11 +71,6 @@ export type MailboxSyncApplyTransactionResult =
     };
 
 export const WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS = 30_000;
-export const TERMINAL_GMAIL_CREDENTIAL_PROBLEM_CODES = new Set([
-  "gmail_mailbox_credentials_missing",
-  "gmail_mailbox_credential_unreadable",
-  "gmail_token_refresh_reconnect_required",
-]);
 
 export const hashApiKey = (apiKey: string) => {
   return createHash("sha256").update(apiKey).digest("hex");
@@ -944,12 +941,8 @@ export const getLatestCompletedAt = (
   }, null);
 };
 
-export const isTerminalGmailCredentialProblem = (code: string) => {
-  return TERMINAL_GMAIL_CREDENTIAL_PROBLEM_CODES.has(code);
-};
-
-export const getMailboxSyncFailureState = (
-  result: CompletedSyncRun,
+export const toMailboxOperationalTransitionUpdate = (
+  transition: MailboxOperationalTransition,
 ): Partial<
   Pick<
     MailboxRow,
@@ -960,102 +953,29 @@ export const getMailboxSyncFailureState = (
     | "status"
     | "syncState"
   >
-> | null => {
-  if (
-    result.status === "completed" ||
-    result.status === "skipped_due_to_active_lease" ||
-    (result.status === "reconnect_required" && result.detail === "mailbox_reconnect_required")
-  ) {
-    return null;
-  }
-
-  if (result.detail === "gmail_token_refresh_reconnect_required") {
-    return {
-      lastErrorCode: result.detail,
-      lastErrorMessage:
-        "Refreshing the Gmail access token failed because the stored Gmail refresh token is invalid or revoked. The mailbox must be reconnected.",
-      lastErrorOccurredAt: toDate(result.completedAt),
-      lastErrorRetryable: false,
-      status: "reconnect_required",
-      syncState: "failed",
-    };
-  }
-
-  if (result.detail === "gmail_mailbox_credential_unreadable") {
-    return {
-      lastErrorCode: result.detail,
-      lastErrorMessage:
-        "Mailbox has a stored Gmail refresh token that could not be decrypted. The mailbox must be reconnected.",
-      lastErrorOccurredAt: toDate(result.completedAt),
-      lastErrorRetryable: false,
-      status: "reconnect_required",
-      syncState: "failed",
-    };
-  }
-
-  if (result.detail === "gmail_mailbox_credentials_missing") {
-    return {
-      lastErrorCode: result.detail,
-      lastErrorMessage:
-        "Mailbox has no stored Gmail refresh token. The mailbox must be reconnected.",
-      lastErrorOccurredAt: toDate(result.completedAt),
-      lastErrorRetryable: false,
-      status: "reconnect_required",
-      syncState: "failed",
-    };
-  }
-
-  if (result.detail === "gmail_history_cursor_invalid") {
-    return {
-      lastErrorCode: result.detail,
-      lastErrorMessage:
-        "Mailbox requires a repair sync because the stored Gmail history cursor is invalid or expired.",
-      lastErrorOccurredAt: toDate(result.completedAt),
-      lastErrorRetryable: true,
-      syncState: "lagging",
-    };
-  }
-
-  if (result.detail === "mailbox_cursor_regressed") {
-    return {
-      lastErrorCode: result.detail,
-      lastErrorMessage:
-        "Mailbox sync produced a cursor older than the stored mailbox cursor. The cursor was not advanced.",
-      lastErrorOccurredAt: toDate(result.completedAt),
-      lastErrorRetryable: false,
-      syncState: "lagging",
-    };
-  }
-
-  if (result.detail === "gmail_rate_limited") {
-    return {
-      lastErrorCode: result.detail,
-      lastErrorMessage: "Gmail temporarily rate-limited sync operations for this mailbox.",
-      lastErrorOccurredAt: toDate(result.completedAt),
-      lastErrorRetryable: true,
-      syncState: "lagging",
-    };
-  }
-
-  if (result.detail === "mailbox_sync_dispatch_retry_exhausted") {
-    return {
-      lastErrorCode: result.detail,
-      lastErrorMessage:
-        "Mailbox sync dispatch exhausted transport retries before a worker could process it.",
-      lastErrorOccurredAt: toDate(result.completedAt),
-      lastErrorRetryable: true,
-      syncState: "failed",
-    };
-  }
-
+> => {
   return {
-    lastErrorCode: result.detail ?? result.status,
-    lastErrorMessage:
-      result.status === "lease_lost"
-        ? "Mailbox sync lost the active mailbox lease while processing."
-        : "Mailbox sync failed after the mailbox lease was acquired.",
-    lastErrorOccurredAt: toDate(result.completedAt),
-    lastErrorRetryable: true,
-    syncState: "failed",
+    ...(transition.lastError === null
+      ? {
+          lastErrorCode: null,
+          lastErrorMessage: null,
+          lastErrorOccurredAt: null,
+          lastErrorRetryable: null,
+        }
+      : {
+          lastErrorCode: transition.lastError.code,
+          lastErrorMessage: transition.lastError.message,
+          lastErrorOccurredAt: toDate(transition.lastError.occurredAt),
+          lastErrorRetryable: transition.lastError.retryable,
+        }),
+    ...(transition.status === undefined ? {} : { status: transition.status }),
+    ...(transition.syncState === undefined ? {} : { syncState: transition.syncState }),
+    ...(transition.watchState === undefined ? {} : { watchState: transition.watchState }),
   };
+};
+
+export const toCompletedSyncRunMailboxTransitionUpdate = (result: CompletedSyncRun) => {
+  const transition = transitionForCompletedSyncRun(result);
+
+  return transition === null ? null : toMailboxOperationalTransitionUpdate(transition);
 };

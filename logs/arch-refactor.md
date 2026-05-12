@@ -6,7 +6,7 @@ Reference plan: [plans/mailmon-architecture-deepening-refactor-plan.md](../plans
 
 ### Current Position
 
-Completed Slice 4: Gmail Adapter Internals.
+Completed Slice 6: Mailbox Operational State Policy
 
 ### Slice 0 What Changed
 
@@ -161,12 +161,48 @@ Recommended first actions:
 - `pnpm db:generate`: passed with no schema changes.
 - `npx fallow health`: still exits nonzero because existing repo-wide thresholds remain. `packages/db/src/persistence.ts` is no longer a monolith or hotspot; it is now a 51-line barrel. The health report now surfaces follow-up DB risk in `persistence/mappers.ts`, `persistence/mailbox-state-store.ts`, and `persistence/mailbox-observability-catalog.ts`, which aligns with later Slice 7 commit-module work.
 
+### Slice 6 What Changed
+
+- Added `packages/core/src/mailbox-operational-state.ts` as the transport-neutral owner of Mailbox operational transition policy.
+- Moved terminal Gmail credential/sync problem classification into core policy helpers.
+- Added core transition coverage for:
+  - terminal Gmail token/credential failures.
+  - missing Gmail credentials.
+  - invalid Gmail history cursor.
+  - Gmail rate limiting.
+  - mailbox cursor regression.
+  - dispatch retry exhaustion.
+  - lease loss and generic failed-after-lease-acquired sync failures.
+  - watch renewal failures before and after watch expiration.
+  - unreadable credential rewrap handling.
+  - stuck execution recovery.
+- Replaced DB-side `getMailboxSyncFailureState` product policy with `transitionForCompletedSyncRun(...)`.
+- Replaced inline DB Last Error/status/sync/watch policy updates in sync dispatch exhaustion, watch renewal failure, Gmail credential rewrap, and stuck execution recovery with core transitions plus DB-only update mapping.
+- Preserved Canonical Mailbox State commit ordering; Slice 7 remains responsible for extracting that transaction.
+
+### Slice 6 Verification
+
+- `pnpm exec effect-solutions list`: passed.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing data-modeling`: passed.
+- `pnpm --filter @mailmon/core test -- src/mailbox-operational-state.test.ts`: passed; 78 tests passed across 4 core test files.
+- `pnpm --filter @mailmon/core typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/core build`: passed.
+- `pnpm --filter @mailmon/core format:check`: passed.
+- `pnpm --filter @mailmon/db typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/db test -- src/mailbox-repair.test.ts`: passed; the DB package suite ran with 43 tests across 9 files.
+- `pnpm --filter @mailmon/db test -- src/gmail-credentials.test.ts`: passed; the DB package suite ran with 43 tests across 9 files.
+- `pnpm --filter @mailmon/db test -- src/mailbox-sync-dispatch-exhaustion.test.ts`: passed; the DB package suite ran with 43 tests across 9 files.
+- `pnpm --filter @mailmon/db build`: passed.
+- `pnpm --filter @mailmon/db format:check`: passed.
+- `pnpm typecheck`: passed with zero warnings.
+- `pnpm format:check`: passed.
+
 ### Next
 
-Start Slice 6: Mailbox Operational State Policy.
+Start Slice 7: Canonical Mailbox State Commit Module from the referenced architecture plan.
 
 Recommended first actions:
 
-- Move Mailbox status/sync/watch/last-error classification language out of DB adapters and into core policy helpers.
-- Keep persistence adapters responsible for applying transitions, not deciding product wording.
-- Avoid changing Canonical Mailbox State commit transaction ordering until Slice 7.
+- Extract a named DB-internal commit module around `MailboxStateStore.applySyncResult(...)`.
+- Keep cursor regression checks, canonical writes, event emission, and sync-run finalization in their current transaction ordering.
+- Add focused tests before changing any commit transaction structure.

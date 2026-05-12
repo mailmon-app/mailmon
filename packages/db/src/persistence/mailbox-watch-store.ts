@@ -1,12 +1,13 @@
-import { MailboxWatchStore } from "@mailmon/core";
+import { MailboxWatchStore, transitionForWatchRenewalFailure } from "@mailmon/core";
 import { and, asc, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes } from "../schema.js";
 import { MailmonDatabase } from "./database.js";
 import {
-  isTerminalGmailCredentialProblem,
   toDate,
+  toIsoString,
+  toMailboxOperationalTransitionUpdate,
   toMailboxWatchRenewalTarget,
 } from "./mappers.js";
 
@@ -107,27 +108,18 @@ export const createMailboxWatchStoreLayer = Layer.effect(
             .from(mailboxes)
             .where(eq(mailboxes.id, mailboxId))
             .limit(1);
-          const watchState =
-            row?.watchExpirationAt !== null &&
-            row?.watchExpirationAt !== undefined &&
-            row.watchExpirationAt <= observedAtDate
-              ? "expired"
-              : "unhealthy";
+          const mailboxTransitionUpdate = toMailboxOperationalTransitionUpdate(
+            transitionForWatchRenewalFailure({
+              observedAt,
+              problem,
+              watchExpiresAt: toIsoString(row?.watchExpirationAt ?? null),
+            }),
+          );
 
           await database.db
             .update(mailboxes)
             .set({
-              lastErrorCode: problem.code,
-              lastErrorMessage: problem.detail,
-              lastErrorOccurredAt: observedAtDate,
-              lastErrorRetryable: problem.retryable,
-              ...(isTerminalGmailCredentialProblem(problem.code)
-                ? {
-                    status: "reconnect_required",
-                    syncState: "failed",
-                  }
-                : {}),
-              watchState,
+              ...mailboxTransitionUpdate,
               updatedAt: observedAtDate,
             })
             .where(eq(mailboxes.id, mailboxId));

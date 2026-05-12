@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { type MailboxEventEnvelope } from "@mailmon/core";
+import { transitionForCredentialUnreadable, type MailboxEventEnvelope } from "@mailmon/core";
 import { GmailRefreshTokenCipher, type GmailRefreshTokenInspection } from "@mailmon/gmail";
 import { and, asc, eq, gte, isNull, lte } from "drizzle-orm";
 import { Effect } from "effect";
@@ -14,7 +14,7 @@ import {
   workspaces,
 } from "../schema.js";
 import { MailmonDatabase, withDatabase } from "./database.js";
-import { toDate } from "./mappers.js";
+import { toDate, toMailboxOperationalTransitionUpdate } from "./mappers.js";
 
 export interface CreatedWorkspaceOperatorResult {
   readonly workspaceId: string;
@@ -180,17 +180,15 @@ export const rewrapGmailMailboxCredentials = (options?: {
 
       if (rewrappedRefreshToken._tag === "Failure") {
         if (markUnreadableReconnectRequired) {
+          const mailboxTransitionUpdate = toMailboxOperationalTransitionUpdate(
+            transitionForCredentialUnreadable({ occurredAt: observedAt.toISOString() }),
+          );
+
           yield* Effect.promise(() =>
             database.db
               .update(mailboxes)
               .set({
-                lastErrorCode: "gmail_mailbox_credential_unreadable",
-                lastErrorMessage:
-                  "Mailbox has a stored Gmail refresh token that could not be decrypted or migrated. The mailbox must be reconnected.",
-                lastErrorOccurredAt: observedAt,
-                lastErrorRetryable: false,
-                status: "reconnect_required",
-                syncState: "failed",
+                ...mailboxTransitionUpdate,
                 updatedAt: observedAt,
               })
               .where(eq(mailboxes.id, credential.mailboxId)),

@@ -4,7 +4,11 @@ import { Effect, Layer } from "effect";
 
 import { mailboxes, syncRuns } from "../schema.js";
 import { MailmonDatabase } from "./database.js";
-import { createStartedSyncRun, getMailboxSyncFailureState, toDate } from "./mappers.js";
+import {
+  createStartedSyncRun,
+  toCompletedSyncRunMailboxTransitionUpdate,
+  toDate,
+} from "./mappers.js";
 
 export const createSyncRunStoreLayer = Layer.effect(
   SyncRunStore,
@@ -36,7 +40,7 @@ export const createSyncRunStoreLayer = Layer.effect(
       completeSyncRun: (result: CompletedSyncRun) =>
         Effect.promise(async () => {
           const completedAt = toDate(result.completedAt);
-          const mailboxFailureState = getMailboxSyncFailureState(result);
+          const mailboxTransitionUpdate = toCompletedSyncRunMailboxTransitionUpdate(result);
 
           await database.db.transaction(async (transaction) => {
             await transaction
@@ -58,11 +62,11 @@ export const createSyncRunStoreLayer = Layer.effect(
               return;
             }
 
-            if (mailboxFailureState !== null) {
+            if (mailboxTransitionUpdate !== null) {
               await transaction
                 .update(mailboxes)
                 .set({
-                  ...mailboxFailureState,
+                  ...mailboxTransitionUpdate,
                   updatedAt: completedAt,
                 })
                 .where(eq(mailboxes.id, result.mailboxId));

@@ -1,10 +1,14 @@
-import { MailboxExecutionRecoveryStore } from "@mailmon/core";
+import { MailboxExecutionRecoveryStore, transitionForStuckExecutionRecovery } from "@mailmon/core";
 import { and, asc, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes, syncRuns } from "../schema.js";
 import { MailmonDatabase } from "./database.js";
-import { toDate, toStuckMailboxSyncExecution } from "./mappers.js";
+import {
+  toDate,
+  toMailboxOperationalTransitionUpdate,
+  toStuckMailboxSyncExecution,
+} from "./mappers.js";
 
 export const createMailboxExecutionRecoveryStoreLayer = Layer.effect(
   MailboxExecutionRecoveryStore,
@@ -35,6 +39,9 @@ export const createMailboxExecutionRecoveryStoreLayer = Layer.effect(
       recoverStuckMailboxSyncExecution: ({ mailboxId, observedAt, syncRunId }) =>
         Effect.promise(async () => {
           const observedAtDate = toDate(observedAt);
+          const mailboxTransitionUpdate = toMailboxOperationalTransitionUpdate(
+            transitionForStuckExecutionRecovery({ occurredAt: observedAt }),
+          );
 
           return database.db.transaction(async (transaction) => {
             const [lockedMailbox] = await transaction
@@ -88,12 +95,7 @@ export const createMailboxExecutionRecoveryStoreLayer = Layer.effect(
                 activeSyncLeaseHeartbeatAt: null,
                 activeSyncLeaseOwner: null,
                 activeSyncRunId: null,
-                lastErrorCode: "stuck_mailbox_execution_recovered",
-                lastErrorMessage:
-                  "Mailbox sync execution was recovered after its active lease expired.",
-                lastErrorOccurredAt: observedAtDate,
-                lastErrorRetryable: true,
-                syncState: "lagging",
+                ...mailboxTransitionUpdate,
                 updatedAt: observedAtDate,
               })
               .where(eq(mailboxes.id, mailboxId));
