@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { generateOpenApiDocument } from "./generate-openapi.js";
+import { normalizeOpenApiDocument } from "./http/openapi-normalization.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -136,5 +137,165 @@ describe("public API contract", () => {
     ]) {
       expect(publicDocs).not.toContain(deprecatedToken);
     }
+  });
+});
+
+describe("OpenAPI normalization policy", () => {
+  it("prefers camelCase request schemas over snake_case compatibility aliases", () => {
+    const document = normalizeOpenApiDocument({
+      paths: {
+        "/v1/mailboxes/connect-sessions": {
+          post: {
+            requestBody: {
+              content: {
+                "application/json": {
+                  schema: {
+                    anyOf: [
+                      {
+                        type: "object",
+                        required: ["tenant_external_id"],
+                        properties: {
+                          tenant_external_id: { type: "string" },
+                        },
+                      },
+                      {
+                        type: "object",
+                        required: ["tenantExternalId"],
+                        properties: {
+                          tenantExternalId: { type: "string" },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const requestSchema = schemaAt(document, [
+      "paths",
+      "/v1/mailboxes/connect-sessions",
+      "post",
+      "requestBody",
+      "content",
+      "application/json",
+      "schema",
+    ]);
+
+    expect(requestSchema).toEqual({
+      type: "object",
+      required: ["tenantExternalId"],
+      properties: {
+        tenantExternalId: { type: "string" },
+      },
+    });
+  });
+
+  it("keeps nullable anyOf schemas intact", () => {
+    const document = normalizeOpenApiDocument({
+      components: {
+        schemas: {
+          NullableRedirectUrl: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+          },
+        },
+      },
+    });
+
+    expect(schemaAt(document, ["components", "schemas", "NullableRedirectUrl"])).toEqual({
+      anyOf: [{ type: "string" }, { type: "null" }],
+    });
+  });
+
+  it("removes snake_case mailbox query aliases and normalizes limit parameters", () => {
+    const document = normalizeOpenApiDocument({
+      paths: {
+        "/v1/messages": {
+          get: {
+            parameters: [
+              { name: "mailbox_id", in: "query", schema: { type: "string" } },
+              { name: "mailboxId", in: "query", required: false, schema: { type: "string" } },
+              {
+                name: "limit",
+                in: "query",
+                description: "Generated limit description",
+                schema: { type: "number" },
+              },
+            ],
+          },
+        },
+        "/v1/replays": {
+          get: {
+            parameters: [
+              { name: "mailboxId", in: "query", required: false, schema: { type: "string" } },
+            ],
+          },
+        },
+      },
+    });
+
+    const messageOperation = schemaAt(document, ["paths", "/v1/messages", "get"]);
+    const replayOperation = schemaAt(document, ["paths", "/v1/replays", "get"]);
+
+    expect(messageOperation.parameters).toEqual([
+      { name: "mailboxId", in: "query", required: true, schema: { type: "string" } },
+      { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+    ]);
+    expect(replayOperation.parameters).toEqual([
+      { name: "mailboxId", in: "query", required: false, schema: { type: "string" } },
+    ]);
+  });
+
+  it("lifts JSON Schema $defs into OpenAPI components", () => {
+    const document = normalizeOpenApiDocument({
+      paths: {
+        "/v1/messages": {
+          get: {
+            responses: {
+              "200": {
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      $defs: {
+                        Message: {
+                          type: "object",
+                          $defs: {
+                            Label: { type: "string" },
+                          },
+                        },
+                      },
+                      properties: {
+                        data: { $ref: "#/$defs/Message" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const responseSchema = schemaAt(document, [
+      "paths",
+      "/v1/messages",
+      "get",
+      "responses",
+      "200",
+      "content",
+      "application/json",
+      "schema",
+    ]);
+
+    expect(responseSchema).not.toHaveProperty("$defs");
+    expect(schemaAt(document, ["components", "schemas", "Message"])).toEqual({
+      type: "object",
+    });
+    expect(schemaAt(document, ["components", "schemas", "Label"])).toEqual({ type: "string" });
   });
 });

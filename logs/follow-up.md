@@ -233,3 +233,39 @@ Notes:
 - Public JSON route behavior and response statuses remain covered by the existing server tests.
 - Hono remains adapter-local; no HTTP details moved into `@mailmon/core`.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 6: Public Contract Generation Policy Module
+
+Completed the OpenAPI normalization policy extraction from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Added `apps/api/src/http/openapi-normalization.ts` as the API-local owner for generated
+  OpenAPI compatibility policy:
+  - camelCase request schema preference over snake_case compatibility aliases.
+  - snake_case `mailbox_id` query alias removal.
+  - `limit` query parameter integer/min/max normalization.
+  - required `mailboxId` query parameters for message and thread list routes.
+  - JSON Schema `$defs` lifting into OpenAPI components.
+- Reduced `apps/api/src/generate-openapi.ts` to generator orchestration: create app, generate
+  specs, normalize specs, and write the target file.
+- Added focused synthetic-fragment tests in `apps/api/src/public-contract.test.ts` for the
+  normalization policies while keeping the generated-document equality test.
+- Regenerated `apps/docs/api-reference/openapi.json` with the existing generator.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice; no new Effect pattern was
+  introduced.
+- `pnpm --filter @mailmon/api test -- src/public-contract.test.ts` passes: 5 test files, 42 tests.
+- `pnpm --filter @mailmon/api openapi:generate` passes and writes the docs OpenAPI artifact.
+- `pnpm --filter @mailmon/api typecheck` passes with zero warnings and zero errors.
+- `pnpm --filter @mailmon/api format:check` passes.
+- `npx fallow dead-code` passes with no issues.
+
+Notes:
+
+- `apps/docs/api-reference/openapi.json` was already modified by prior public contract work; this
+  slice keeps the regenerated artifact deterministic against `generateOpenApiDocument()`.
+- No product behavior changes were intended.
