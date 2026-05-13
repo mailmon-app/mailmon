@@ -385,6 +385,123 @@ describe("createAesGcmGmailRefreshTokenCipherLayer", () => {
       storage: "encrypted",
     });
   });
+
+  it("leaves active-key envelopes unchanged when rewrapping is not required", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+        const encryptedRefreshToken = yield* cipher.encryptRefreshToken("refresh-token");
+        const rewrappedRefreshToken = yield* cipher.rewrapRefreshToken(encryptedRefreshToken);
+
+        return {
+          encryptedRefreshToken,
+          rewrappedRefreshToken,
+        };
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "key_active",
+            encryptionKey: primaryEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    const inspected = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+
+        return yield* cipher.inspectRefreshToken(result.rewrappedRefreshToken);
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "key_active",
+            encryptionKey: primaryEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    expect(result.rewrappedRefreshToken).toBe(result.encryptedRefreshToken);
+    expect(inspected).toEqual({
+      keyId: "key_active",
+      rewrapRequired: false,
+      storage: "encrypted",
+    });
+  });
+
+  it("rejects encrypted envelopes with unknown key IDs", async () => {
+    const encryptedRefreshToken = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+
+        return yield* cipher.encryptRefreshToken("refresh-token");
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "unknown_key",
+            encryptionKey: primaryEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+
+        return yield* cipher.decryptRefreshToken(encryptedRefreshToken).pipe(
+          Effect.match({
+            onFailure: (error) => error,
+            onSuccess: () => {
+              throw new Error("Expected decryptRefreshToken to fail for an unknown key ID.");
+            },
+          }),
+        );
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            activeKeyId: "key_active",
+            encryptionKey: rotatedEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    expect(result).toEqual({
+      _tag: "GmailRefreshTokenCipherError",
+      message: "Stored Gmail refresh token references unknown encryption key ID: unknown_key",
+      operation: "decrypt",
+    });
+  });
+
+  it("rejects invalid encrypted envelopes", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const cipher = yield* GmailRefreshTokenCipher;
+
+        return yield* cipher.decryptRefreshToken("mmrt_v1:invalid-envelope").pipe(
+          Effect.match({
+            onFailure: (error) => error,
+            onSuccess: () => {
+              throw new Error("Expected decryptRefreshToken to fail for invalid envelopes.");
+            },
+          }),
+        );
+      }).pipe(
+        Effect.provide(
+          createAesGcmGmailRefreshTokenCipherLayer({
+            encryptionKey: primaryEncryptionKey,
+          }),
+        ),
+      ),
+    );
+
+    expect(result).toMatchObject({
+      _tag: "GmailRefreshTokenCipherError",
+      operation: "decrypt",
+    });
+  });
 });
 
 describe("createHttpGmailSyncProviderLayer", () => {

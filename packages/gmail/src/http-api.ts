@@ -2,7 +2,6 @@ import type { MailboxWatchRenewalResult } from "@mailmon/core";
 
 import { listGmailHistoryDelta } from "./history.js";
 import { createGmailHttpClient } from "./http-client.js";
-import type { GmailSyncProviderConfig } from "./index.js";
 import { createGmailOAuthClient } from "./oauth.js";
 import {
   type GmailMessageResponse,
@@ -19,6 +18,7 @@ import {
   makeGmailProblem,
   makeGmailRateLimitedProblem,
 } from "./problems.js";
+import type { GmailSyncProviderConfig } from "./services.js";
 
 const DEFAULT_GMAIL_API_BASE_URL = "https://gmail.googleapis.com/gmail/v1";
 const DEFAULT_GMAIL_OAUTH_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth";

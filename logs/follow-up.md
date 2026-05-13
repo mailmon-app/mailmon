@@ -61,3 +61,46 @@ Notes:
 
 - No package-level exports were added.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 2: Gmail Package Internal Ownership
+
+Completed the Gmail package internal ownership split from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Reduced `packages/gmail/src/index.ts` to a shallow public entry point that re-exports the
+  existing service tags, public types, and layer factory functions.
+- Added `packages/gmail/src/services.ts` for the public Gmail service tags and public
+  configuration/types.
+- Added `packages/gmail/src/refresh-token-cipher.ts` for AES-GCM refresh-token envelope parsing,
+  key-ring creation, encryption, decryption, inspection, and rewrap behavior.
+- Added `packages/gmail/src/canonical-projection.ts` for Gmail message projection, Canonical
+  Mailbox State snapshot construction, and Initial Sync merge rules.
+- Added `packages/gmail/src/sync-workflows.ts`, `connect-workflows.ts`, and `watch-workflows.ts`
+  for HTTP Gmail provider workflow assembly.
+- Added `packages/gmail/src/stub-sync-provider.ts` for deterministic local sync behavior.
+- Updated `packages/gmail/src/http-api.ts` to depend on the Gmail config type from the focused
+  services module instead of the package entry point.
+- Added direct refresh-token cipher coverage for active-key rewrap no-op behavior, unknown key
+  IDs, and invalid encrypted envelopes.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice.
+- `pnpm exec effect-solutions show services-and-layers data-modeling error-handling basics`
+  consulted before changing Effect service/layer code.
+- `pnpm --filter @mailmon/gmail test` passes: 1 test file, 23 tests.
+- `pnpm --filter @mailmon/gmail typecheck` passes with zero warnings and zero errors.
+- `pnpm --filter @mailmon/gmail build` passes.
+- `pnpm --filter @mailmon/gmail format:check` passes.
+- `npx fallow dead-code` passes with no issues.
+- `npx fallow health` still fails the configured threshold at `78 B`, but dead exports remain
+  `0.0%`, high-complexity findings decreased from 17 to 16, and `packages/gmail/src/index.ts` is
+  no longer reported as a meaningful hotspot or high-complexity file.
+
+Notes:
+
+- Public imports from `@mailmon/gmail` remain stable.
+- No new `Context.Service` seam was introduced.
+- No product behavior changes were intended.
