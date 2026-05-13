@@ -179,6 +179,13 @@ const startWorkerTestRuntime = async (overrides: Partial<WorkerHttpRuntimeOption
   return runtime;
 };
 
+const startGcpWorkerTestRuntime = (overrides: Partial<WorkerHttpRuntimeOptions> = {}) =>
+  startWorkerTestRuntime({
+    asyncTransportMode: "gcp",
+    internalAuth: gcpInternalAuth,
+    ...overrides,
+  });
+
 const createWorkerInternalRequest = (
   runtime: Awaited<ReturnType<typeof startWorkerHttpRuntime>>,
   path: string,
@@ -303,13 +310,7 @@ describe("startWorkerHttpRuntime", () => {
 
   it("decodes GCP Pub/Sub mailbox sync dispatches", async () => {
     const syncJobs: string[] = [];
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: "gcp",
-      host: workerEnvFixture.host,
-      internalAuth: gcpInternalAuth,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
+    const runtime = await startGcpWorkerTestRuntime({
       processSyncJob: async ({ mailboxId }) => {
         syncJobs.push(mailboxId);
 
@@ -323,14 +324,7 @@ describe("startWorkerHttpRuntime", () => {
           nextCursor: "hist_456",
         };
       },
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
       method: "POST",
@@ -384,30 +378,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("rejects unauthenticated internal requests in gcp mode", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: "gcp",
-      host: workerEnvFixture.host,
-      internalAuth: gcpInternalAuth,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
-    activeRuntimeClosers.push(runtime.close);
+    const runtime = await startGcpWorkerTestRuntime();
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
       method: "POST",
@@ -426,30 +397,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("rejects internal requests from unauthorized service accounts in gcp mode", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: "gcp",
-      host: workerEnvFixture.host,
-      internalAuth: gcpInternalAuth,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
-    activeRuntimeClosers.push(runtime.close);
+    const runtime = await startGcpWorkerTestRuntime();
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
       method: "POST",
@@ -469,12 +417,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("preserves retryable sync failures across the internal http boundary", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
+    const runtime = await startWorkerTestRuntime({
       processSyncJob: async () => {
         throw {
           code: "gmail_history_fetch_failed",
@@ -485,14 +428,7 @@ describe("startWorkerHttpRuntime", () => {
           type: "https://api.mailmon.dev/problems/gmail-history-fetch-failed",
         };
       },
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
       method: "POST",
@@ -514,28 +450,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("allows the runtime to close more than once", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
+    const runtime = await startWorkerTestRuntime();
 
     await expect(runtime.close()).resolves.toBeUndefined();
     await expect(runtime.close()).resolves.toBeUndefined();
@@ -543,11 +458,7 @@ describe("startWorkerHttpRuntime", () => {
 
   it("decodes GCP Pub/Sub Gmail pushes and dispatches mailbox sync wake-ups", async () => {
     const notifications: GmailPushNotification[] = [];
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: "gcp",
-      host: workerEnvFixture.host,
-      internalAuth: gcpInternalAuth,
-      port: workerEnvFixture.port,
+    const runtime = await startGcpWorkerTestRuntime({
       processGmailPushNotification: async (notification) => {
         notifications.push(notification);
 
@@ -559,24 +470,7 @@ describe("startWorkerHttpRuntime", () => {
           status: "accepted",
         };
       },
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/gmail-push`, {
       method: "POST",
@@ -614,30 +508,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("rejects malformed GCP Gmail push envelopes", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: "gcp",
-      host: workerEnvFixture.host,
-      internalAuth: gcpInternalAuth,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
-    activeRuntimeClosers.push(runtime.close);
+    const runtime = await startGcpWorkerTestRuntime();
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/gmail-push`, {
       method: "POST",
@@ -658,21 +529,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("runs the webhook delivery workflow through /internal/webhook-deliveries", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
+    const runtime = await startWorkerTestRuntime({
       processWebhookDelivery: async ({ deliveryId }) => ({
         deliveryId,
         status: "scheduled_for_retry",
@@ -680,7 +537,6 @@ describe("startWorkerHttpRuntime", () => {
         nextAttemptAt: "2026-03-25T00:00:10.000Z",
       }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(
       `http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`,
@@ -706,21 +562,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("preserves retryable webhook delivery failures across the internal http boundary", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
+    const runtime = await startWorkerTestRuntime({
       processWebhookDelivery: async () => {
         throw {
           code: "webhook_delivery_timeout",
@@ -732,7 +574,6 @@ describe("startWorkerHttpRuntime", () => {
         };
       },
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(
       `http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`,
@@ -758,11 +599,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("runs the control job workflow through /internal/control-jobs", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
+    const runtime = await startWorkerTestRuntime({
       processControlJob: async (request) =>
         request.kind === "renew_watches"
           ? {
@@ -823,23 +660,7 @@ describe("startWorkerHttpRuntime", () => {
                       kind: request.kind,
                       status: "noop" as const,
                     },
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/control-jobs`, {
       method: "POST",
@@ -878,11 +699,7 @@ describe("startWorkerHttpRuntime", () => {
 
   it("accepts stuck mailbox sync recovery control jobs", async () => {
     const controlJobs: ControlJobDispatchRequest[] = [];
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
+    const runtime = await startWorkerTestRuntime({
       processControlJob: async (request) => {
         controlJobs.push(request);
 
@@ -903,23 +720,7 @@ describe("startWorkerHttpRuntime", () => {
           status: "completed",
         };
       },
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/control-jobs`, {
       method: "POST",
@@ -944,11 +745,7 @@ describe("startWorkerHttpRuntime", () => {
 
   it("accepts webhook delivery recovery control jobs", async () => {
     const controlJobs: ControlJobDispatchRequest[] = [];
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
+    const runtime = await startWorkerTestRuntime({
       processControlJob: async (request) => {
         controlJobs.push(request);
 
@@ -959,23 +756,7 @@ describe("startWorkerHttpRuntime", () => {
           status: "completed",
         };
       },
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
     });
-    activeRuntimeClosers.push(runtime.close);
 
     const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/control-jobs`, {
       method: "POST",
@@ -1009,29 +790,7 @@ describe("startWorkerHttpRuntime", () => {
   });
 
   it("rejects invalid webhook delivery payloads", async () => {
-    const runtime = await startWorkerHttpRuntime({
-      asyncTransportMode: workerEnvFixture.asyncTransportMode,
-      host: workerEnvFixture.host,
-      port: workerEnvFixture.port,
-      processGmailPushNotification: defaultProcessGmailPushNotification,
-      processControlJob: defaultProcessControlJob,
-      processSyncJob: async ({ mailboxId }) => ({
-        mailboxId,
-        syncRunId: "sr_sync",
-        startedAt: "2026-03-25T00:00:00.000Z",
-        status: "completed",
-        completedAt: "2026-03-25T00:00:01.000Z",
-        eventsEmitted: 2,
-        nextCursor: "hist_456",
-      }),
-      processWebhookDelivery: async ({ deliveryId }) => ({
-        deliveryId,
-        status: "delivered",
-        attemptCount: 1,
-        nextAttemptAt: null,
-      }),
-    });
-    activeRuntimeClosers.push(runtime.close);
+    const runtime = await startWorkerTestRuntime();
 
     const response = await fetch(
       `http://${runtime.host}:${runtime.port}/internal/webhook-deliveries`,

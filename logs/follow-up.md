@@ -269,3 +269,41 @@ Notes:
 - `apps/docs/api-reference/openapi.json` was already modified by prior public contract work; this
   slice keeps the regenerated artifact deterministic against `generateOpenApiDocument()`.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 7: Test Harness Surface Trim
+
+Completed the test harness surface trim from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Added a worker-local `startGcpWorkerTestRuntime(...)` scenario helper in
+  `apps/worker/src/server.test.ts`.
+- Rewired repeated worker internal HTTP tests to use the existing local runtime helper and the new
+  GCP-authenticated runtime helper instead of spelling out the full runtime dependencies in each
+  test.
+- Kept the worker test helper package-local and behavior-centered; no shared `@mailmon/test`
+  package was introduced.
+
+Verification:
+
+- `./node_modules/.bin/effect-solutions list` passed before test helper edits.
+- `./node_modules/.bin/effect-solutions show testing basics` consulted before changing
+  Effect-adjacent tests. `pnpm exec effect-solutions list` is currently blocked by pnpm's
+  `ERR_PNPM_VERIFY_DEPS_BEFORE_RUN` lockfile checksum check and asks for `pnpm install`.
+- `pnpm --filter @mailmon/worker test -- src/server.test.ts` passes: 4 test files, 33 tests.
+- `pnpm --filter @mailmon/worker typecheck` passes with zero warnings and zero errors.
+- `pnpm test` passes: 17 tasks successful.
+- `pnpm format:check` passes: 8 tasks successful.
+- `npx fallow dead-code` passes with no issues.
+- `npx fallow dupes` reports 651 duplicated lines, 2.1 percent, 13 clone groups, and 2 clone
+  families. This improves from the Slice 7 baseline of 939 duplicated lines, 3.1 percent, 21 clone
+  groups, and 3 clone families.
+
+Notes:
+
+- The worker `server.test.ts` clone family was eliminated from the duplication report.
+- Remaining clone families are in `packages/core/src/use-cases.test.ts` and
+  `packages/gmail/src/index.test.ts`; duplication is now below the slice's 2.5 percent ideal
+  target.
+- No product behavior changes were intended.
