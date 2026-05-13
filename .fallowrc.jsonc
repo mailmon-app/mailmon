@@ -25,6 +25,12 @@
     // hono-openapi wires this validator integration indirectly.
     "@hono/standard-validator"
   ],
+  "ignoreDependencyOverrides": [
+    // Root pnpm override pins the transitive esbuild version used by tsx/vite/vitest.
+    { "package": "esbuild", "source": "package.json" },
+    // Root pnpm override pins the transitive uuid version used by Effect tooling.
+    { "package": "uuid", "source": "package.json" }
+  ],
   "rules": {
     "unresolved-imports": "error",
     "unlisted-dependencies": "error",
