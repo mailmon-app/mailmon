@@ -13,8 +13,9 @@ import {
   workspaceApiKeys,
   workspaces,
 } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase, withDatabase } from "./database.js";
-import { toDate, toMailboxOperationalTransitionUpdate } from "./mappers.js";
+import { toMailboxOperationalTransitionUpdate } from "./operational-state-mappers.js";
 
 export interface CreatedWorkspaceOperatorResult {
   readonly workspaceId: string;

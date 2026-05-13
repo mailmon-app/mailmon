@@ -8,15 +8,10 @@ import { and, eq, or } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 
 import { gmailMailboxCredentials, mailboxConnectSessions, mailboxes } from "../schema.js";
+import { createMailboxId, normalizeEmailAddress, toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import {
-  createMailboxId,
-  normalizeEmailAddress,
-  toDate,
-  toMailboxResource,
-  toStoredConnectSession,
-} from "./mappers.js";
 import { gmailMailboxCredentialEncryptionFailed, isProblemDetails } from "./problems.js";
+import { toMailboxResource, toStoredConnectSession } from "./public-resource-mappers.js";
 
 export const createMailboxConnectSessionStoreLayer = Layer.effect(
   MailboxConnectSessionStore,

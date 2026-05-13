@@ -3,9 +3,9 @@ import { eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
 import { applyMailboxSyncCommit } from "./mailbox-sync-commit.js";
-import { toDate } from "./mappers.js";
 
 export const createMailboxStateStoreLayer = Layer.effect(
   MailboxStateStore,

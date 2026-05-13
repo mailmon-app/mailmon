@@ -7,22 +7,24 @@ import {
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { mailboxEvents, mailboxes, messages, syncRuns, threads } from "../schema.js";
+import {
+  isMailboxCursorRegression,
+  isSameCanonicalMessage,
+  isSameCanonicalThread,
+  toCanonicalThreadFromMessageRow,
+  toMessageInsert,
+  toMessageUpdateSet,
+  toThreadInsert,
+  toThreadUpdateSet,
+} from "./canonical-state-mappers.js";
 import type { DatabaseHandle } from "./database.js";
 import {
   createMessageCreatedMailboxEvent,
   createMessageUpdatedMailboxEvent,
   createThreadUpdatedMailboxEvent,
-  isMailboxCursorRegression,
-  isSameCanonicalMessage,
-  isSameCanonicalThread,
-  toCanonicalThreadFromMessageRow,
   toMailboxEventInsert,
-  toMessageInsert,
-  toMessageUpdateSet,
-  toThreadInsert,
-  toThreadUpdateSet,
   type MailboxSyncApplyTransactionResult,
-} from "./mappers.js";
+} from "./mailbox-event-mappers.js";
 
 type MailboxSyncCommitTransaction = Parameters<
   Parameters<DatabaseHandle["db"]["transaction"]>[0]

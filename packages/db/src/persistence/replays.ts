@@ -3,13 +3,14 @@ import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 
 import { mailboxEvents, replays } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import { toDate, toReplayResource } from "./mappers.js";
 import {
   isPostgresDeadlockDetected,
   isProblemDetails,
   isReplayActiveOverlapConstraintViolation,
 } from "./problems.js";
+import { toReplayResource } from "./public-resource-mappers.js";
 
 export const createReplayStoreLayer = Layer.effect(
   ReplayStore,

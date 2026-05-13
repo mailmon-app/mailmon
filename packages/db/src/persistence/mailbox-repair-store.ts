@@ -3,8 +3,9 @@ import { and, asc, desc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import { toDate, toMailboxRepairTarget } from "./mappers.js";
+import { toMailboxRepairTarget } from "./public-resource-mappers.js";
 
 export const createMailboxRepairStoreLayer = Layer.effect(
   MailboxRepairStore,

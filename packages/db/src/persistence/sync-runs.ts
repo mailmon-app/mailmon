@@ -3,12 +3,12 @@ import { eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes, syncRuns } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
 import {
   createStartedSyncRun,
   toCompletedSyncRunMailboxTransitionUpdate,
-  toDate,
-} from "./mappers.js";
+} from "./operational-state-mappers.js";
 
 export const createSyncRunStoreLayer = Layer.effect(
   SyncRunStore,

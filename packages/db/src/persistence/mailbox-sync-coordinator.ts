@@ -10,8 +10,9 @@ import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes, syncRuns } from "../schema.js";
+import { toDate, toIsoString } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import { toDate, toIsoString, toMailboxOperationalTransitionUpdate } from "./mappers.js";
+import { toMailboxOperationalTransitionUpdate } from "./operational-state-mappers.js";
 
 export const createMailboxSyncDispatchExhaustionStoreLayer = Layer.effect(
   MailboxSyncDispatchExhaustionStore,

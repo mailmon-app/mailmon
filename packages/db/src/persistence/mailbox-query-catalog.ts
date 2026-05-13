@@ -10,16 +10,15 @@ import { and, asc, desc, eq, lt, or } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 
 import { mailboxes, messages, threads } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
+import { decodePaginationCursor, encodePaginationCursor } from "./pagination-cursors.js";
+import { isProblemDetails } from "./problems.js";
 import {
-  decodePaginationCursor,
-  encodePaginationCursor,
-  toDate,
   toMessageResource,
   toThreadListItemResource,
   toThreadResource,
-} from "./mappers.js";
-import { isProblemDetails } from "./problems.js";
+} from "./public-resource-mappers.js";
 
 export const createMailboxQueryCatalogLayer = Layer.effect(
   MailboxQueryCatalog,

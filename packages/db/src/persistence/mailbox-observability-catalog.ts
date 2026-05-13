@@ -15,20 +15,20 @@ import {
   webhookEndpointSubscriptions,
   webhookEndpoints,
 } from "../schema.js";
+import { getLatestCompletedAt, toDate, toIsoString } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
 import {
   decodeSyncRunPaginationCursor,
   encodeSyncRunPaginationCursor,
-  getLatestCompletedAt,
-  toDate,
-  toIsoString,
+} from "./pagination-cursors.js";
+import { isProblemDetails } from "./problems.js";
+import {
   toMailboxStatus,
   toMailboxSyncState,
   toMailboxSyncRunInspectionResource,
   toMailboxWatchState,
   toMailboxWebhookDeliveryDegradationResource,
-} from "./mappers.js";
-import { isProblemDetails } from "./problems.js";
+} from "./public-resource-mappers.js";
 
 export const createMailboxObservabilityCatalogLayer = Layer.effect(
   MailboxObservabilityCatalog,

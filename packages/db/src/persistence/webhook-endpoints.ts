@@ -11,14 +11,14 @@ import { and, eq } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 
 import { webhookEndpointSubscriptions, webhookEndpoints } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
+import { isProblemDetails } from "./problems.js";
 import {
   toCreatedWebhookEndpointResource,
-  toDate,
   toWebhookEndpointResource,
   toWebhookEndpointSubscriptionResource,
-} from "./mappers.js";
-import { isProblemDetails } from "./problems.js";
+} from "./public-resource-mappers.js";
 
 export const createWebhookEndpointCatalogLayer = Layer.effect(
   WebhookEndpointCatalog,

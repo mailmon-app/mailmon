@@ -12,14 +12,14 @@ import {
   webhookEndpointSubscriptions,
   webhookEndpoints,
 } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
 import {
   WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS,
   createStableWebhookDeliveryId,
-  toDate,
   toPreparedWebhookDelivery,
   toWebhookDeliveryRecoverySchedule,
-} from "./mappers.js";
+} from "./webhook-delivery-mappers.js";
 
 export const createWebhookDeliveryStoreLayer = Layer.effect(
   WebhookDeliveryStore,

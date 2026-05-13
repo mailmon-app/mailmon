@@ -29,3 +29,35 @@ Notes:
 
 - The remaining health failures are the known large-function and complexity targets reserved for later slices.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 1: DB Persistence Mapper Partition
+
+Completed the DB persistence mapper partition from `plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Deleted the broad `packages/db/src/persistence/mappers.ts` implementation module.
+- Added focused mapper modules under `packages/db/src/persistence/`:
+  - `common-mappers.ts` for shared timestamp, hashing, mailbox ID, and API-key identity helpers.
+  - `pagination-cursors.ts` for message, thread, and sync-run cursor encoding/decoding.
+  - `public-resource-mappers.ts` for Mailbox, Message, Thread, Replay, Webhook Endpoint, Subscription, Connect Session, Sync Run inspection, and observability resource mapping.
+  - `canonical-state-mappers.ts` for Canonical Message/Thread insert/update sets, cursor regression detection, comparison helpers, and label normalization.
+  - `mailbox-event-mappers.ts` for stable Mailbox Event identity construction and insert mapping.
+  - `webhook-delivery-mappers.ts` for stable Webhook Delivery IDs, prepared delivery mapping, and recovery scheduling.
+  - `operational-state-mappers.ts` for Sync Run creation and Mailbox operational transition update mapping.
+- Updated DB persistence adapters to import only the focused mapper modules relevant to their work.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice; no new Effect pattern was introduced.
+- `pnpm --filter @mailmon/db test` passes: 9 test files, 44 tests.
+- `pnpm --filter @mailmon/db typecheck` passes with zero warnings and zero errors.
+- `npx fallow dead-code` passes with no issues.
+- `npx fallow health` still fails the configured threshold at `78 B`; dead exports remain `0.0%`, and the remaining complexity findings are the planned later slices.
+- `pnpm db:generate` passes; Drizzle reports 14 tables and no schema changes.
+- `pnpm format:check` passes after formatting the DB package.
+
+Notes:
+
+- No package-level exports were added.
+- No product behavior changes were intended.

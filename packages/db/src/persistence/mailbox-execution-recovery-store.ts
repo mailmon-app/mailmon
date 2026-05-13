@@ -3,12 +3,10 @@ import { and, asc, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes, syncRuns } from "../schema.js";
+import { toDate } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import {
-  toDate,
-  toMailboxOperationalTransitionUpdate,
-  toStuckMailboxSyncExecution,
-} from "./mappers.js";
+import { toMailboxOperationalTransitionUpdate } from "./operational-state-mappers.js";
+import { toStuckMailboxSyncExecution } from "./public-resource-mappers.js";
 
 export const createMailboxExecutionRecoveryStoreLayer = Layer.effect(
   MailboxExecutionRecoveryStore,

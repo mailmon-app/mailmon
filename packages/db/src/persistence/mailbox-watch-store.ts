@@ -3,13 +3,10 @@ import { and, asc, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { mailboxes } from "../schema.js";
+import { toDate, toIsoString } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import {
-  toDate,
-  toIsoString,
-  toMailboxOperationalTransitionUpdate,
-  toMailboxWatchRenewalTarget,
-} from "./mappers.js";
+import { toMailboxOperationalTransitionUpdate } from "./operational-state-mappers.js";
+import { toMailboxWatchRenewalTarget } from "./public-resource-mappers.js";
 
 export const createMailboxWatchStoreLayer = Layer.effect(
   MailboxWatchStore,

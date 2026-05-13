@@ -3,8 +3,9 @@ import { and, asc, eq } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 
 import { mailboxes } from "../schema.js";
+import { normalizeEmailAddress } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import { normalizeEmailAddress, toMailboxResource } from "./mappers.js";
+import { toMailboxResource } from "./public-resource-mappers.js";
 
 export const createMailboxCatalogLayer = Layer.effect(
   MailboxCatalog,

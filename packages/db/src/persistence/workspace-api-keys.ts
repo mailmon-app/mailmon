@@ -3,8 +3,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";
 
 import { workspaceApiKeys } from "../schema.js";
+import { hashApiKey, toWorkspaceApiKeyIdentity } from "./common-mappers.js";
 import { MailmonDatabase } from "./database.js";
-import { hashApiKey, toWorkspaceApiKeyIdentity } from "./mappers.js";
 
 export const createWorkspaceApiKeyStoreLayer = Layer.effect(
   WorkspaceApiKeyStore,
