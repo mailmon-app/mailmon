@@ -194,3 +194,42 @@ Notes:
 - The remaining health failures are the known later-slice targets: large test bodies, API route
   declaration, OpenAPI normalization, mailbox observability reads, and worker internal auth.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 5: Public Route Declaration Module
+
+Completed the public route declaration module extraction from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Reduced `apps/api/src/server.ts` to app setup, health, OAuth redirects, and OpenAPI serving.
+- Added `apps/api/src/http/route-runtime.ts` for shared authenticated route execution:
+  authorization, request origin calculation, typed Problem response mapping, success status
+  handling, validated request access, and path parameter access.
+- Added `apps/api/src/http/openapi-responses.ts` for public response schema construction and
+  shared OpenAPI response helpers.
+- Added `apps/api/src/http/route-specs.ts` for the CRUD-style public route registrations across
+  Mailboxes, Sync Runs, Observability, Messages, Threads, Replays, Webhook Endpoints, and Webhook
+  Subscriptions.
+- Kept Gmail OAuth redirect routes explicit in `server.ts` because their redirect result behavior
+  is different from the JSON public routes.
+- Regenerated `apps/docs/api-reference/openapi.json` with the existing generator.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice.
+- `pnpm exec effect-solutions show basics error-handling services-and-layers testing` consulted
+  before changing Effect-adjacent route workflow code.
+- `pnpm --filter @mailmon/api typecheck` passes with zero warnings and zero errors.
+- `pnpm --filter @mailmon/api test` passes: 5 test files, 38 tests.
+- `pnpm --filter @mailmon/api openapi:generate` passes and writes the docs OpenAPI artifact.
+- `pnpm --filter @mailmon/api test -- src/public-contract.test.ts` passes against the regenerated
+  OpenAPI artifact.
+- `pnpm format:check` passes: 8 tasks successful.
+- `npx fallow dead-code` passes with no issues.
+
+Notes:
+
+- Public JSON route behavior and response statuses remain covered by the existing server tests.
+- Hono remains adapter-local; no HTTP details moved into `@mailmon/core`.
+- No product behavior changes were intended.
