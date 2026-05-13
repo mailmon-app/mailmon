@@ -348,3 +348,41 @@ Notes:
   ownership, lag and Cursor reporting, lease metrics, shared endpoint delivery counts, zero-count
   subscribed endpoints, and non-advanced Cursor behavior.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 9: Worker Internal Auth Module
+
+Completed the Worker Internal Auth module split from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Added `apps/worker/src/internal-auth.ts` as the worker-local module for internal request
+  authorization.
+- Moved bearer token extraction, Google OIDC verification wrapping, trusted issuer/audience checks,
+  verified service account checks, allow-list matching, and auth failure response bodies out of
+  `apps/worker/src/server.ts`.
+- Kept route registration and internal route specs in `apps/worker/src/server.ts`, which now only
+  calls `authorizeInternalRequest(...)` from the middleware.
+- Extended `apps/worker/src/server.test.ts` coverage for invalid tokens, untrusted issuers,
+  untrusted audiences, unverified service account emails, and unauthorized service accounts while
+  preserving local-mode bypass and non-local startup auth requirements.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice.
+- `pnpm exec effect-solutions show basics error-handling testing` consulted before moving
+  Effect-adjacent worker server code.
+- `pnpm --filter @mailmon/worker test -- src/server.test.ts` passes: 4 test files, 37 tests.
+- `pnpm --filter @mailmon/worker typecheck` passes with zero warnings and zero errors.
+- `pnpm --filter @mailmon/worker format:check` passes.
+- `npx fallow health` still fails the configured threshold at `78 B`; after the test fixture
+  cleanup it reports 13 high-complexity functions, with no new `server.test.ts` verifier
+  complexity finding from this slice.
+
+Notes:
+
+- The local-mode auth bypass remains in `authorizeInternalRequest(...)` so internal routes continue
+  to run unauthenticated for local transport.
+- The default Google OIDC verifier remains worker-local and is only used when tests or callers do
+  not inject a verifier.
+- No product behavior changes were intended.

@@ -111,6 +111,46 @@ const defaultProcessGmailPushNotification = async (notification: GmailPushNotifi
   };
 };
 
+interface GcpVerifiedTokenFixture {
+  readonly audience: string;
+  readonly email: string;
+  readonly emailVerified: boolean;
+  readonly issuer: string;
+}
+
+const gcpVerifiedTokens: Readonly<Record<string, GcpVerifiedTokenFixture>> = {
+  "untrusted-audience-token": {
+    audience: "https://other-worker.example.com",
+    email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
+    emailVerified: true,
+    issuer: "https://accounts.google.com",
+  },
+  "untrusted-issuer-token": {
+    audience: "https://worker.example.com",
+    email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
+    emailVerified: true,
+    issuer: "https://issuer.example.com",
+  },
+  "unverified-email-token": {
+    audience: "https://worker.example.com",
+    email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
+    emailVerified: false,
+    issuer: "https://accounts.google.com",
+  },
+  "valid-scheduler-token": {
+    audience: "https://worker.example.com",
+    email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
+    emailVerified: true,
+    issuer: "https://accounts.google.com",
+  },
+  "valid-unauthorized-token": {
+    audience: "https://worker.example.com",
+    email: "other@mailmon-staging.iam.gserviceaccount.com",
+    emailVerified: true,
+    issuer: "https://accounts.google.com",
+  },
+} as const;
+
 const gcpInternalAuth = {
   allowedServiceAccountEmails: [
     "scheduler@mailmon-staging.iam.gserviceaccount.com",
@@ -119,25 +159,11 @@ const gcpInternalAuth = {
   audience: "https://worker.example.com",
   verifier: {
     verify: async (idToken: string, audience: string) => {
-      if (idToken === "valid-scheduler-token" && audience === "https://worker.example.com") {
-        return {
-          audience,
-          email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
-          emailVerified: true,
-          issuer: "https://accounts.google.com",
-        };
-      }
+      const token = gcpVerifiedTokens[idToken];
 
-      if (idToken === "valid-unauthorized-token" && audience === "https://worker.example.com") {
-        return {
-          audience,
-          email: "other@mailmon-staging.iam.gserviceaccount.com",
-          emailVerified: true,
-          issuer: "https://accounts.google.com",
-        };
-      }
-
-      throw new Error("invalid token");
+      return token !== undefined && audience === "https://worker.example.com"
+        ? token
+        : Promise.reject(new Error("invalid token"));
     },
   },
 };
@@ -396,6 +422,69 @@ describe("startWorkerHttpRuntime", () => {
     });
   });
 
+  it("rejects invalid internal auth tokens in gcp mode", async () => {
+    const runtime = await startGcpWorkerTestRuntime();
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer invalid-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxId: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      code: "worker_internal_auth_invalid",
+      detail: "The internal worker authorization token is invalid.",
+    });
+  });
+
+  it("rejects untrusted internal auth tokens in gcp mode", async () => {
+    const runtime = await startGcpWorkerTestRuntime();
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer untrusted-issuer-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxId: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: "worker_internal_auth_forbidden",
+      detail: "The internal worker authorization token is not trusted for this worker.",
+    });
+  });
+
+  it("rejects internal auth tokens with an untrusted audience in gcp mode", async () => {
+    const runtime = await startGcpWorkerTestRuntime();
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer untrusted-audience-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxId: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: "worker_internal_auth_forbidden",
+      detail: "The internal worker authorization token is not trusted for this worker.",
+    });
+  });
+
   it("rejects internal requests from unauthorized service accounts in gcp mode", async () => {
     const runtime = await startGcpWorkerTestRuntime();
 
@@ -413,6 +502,27 @@ describe("startWorkerHttpRuntime", () => {
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toMatchObject({
       code: "worker_internal_auth_forbidden",
+    });
+  });
+
+  it("rejects internal auth tokens without a verified service account in gcp mode", async () => {
+    const runtime = await startGcpWorkerTestRuntime();
+
+    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer unverified-email-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        mailboxId: "mbx_demo",
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      code: "worker_internal_auth_forbidden",
+      detail: "The internal worker authorization token is missing a verified service account.",
     });
   });
 
