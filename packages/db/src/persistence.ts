@@ -1,9 +1,5 @@
 export { createMailboxConnectSessionStoreLayer } from "./persistence/connect-sessions.js";
-export {
-  MailmonDatabase,
-  createDatabaseLayer,
-  type DatabaseHandle,
-} from "./persistence/database.js";
+export { MailmonDatabase, createDatabaseLayer } from "./persistence/database.js";
 export { createGmailMailboxCredentialStoreLayer } from "./persistence/gmail-credentials.js";
 export {
   createCorePersistenceLayer,

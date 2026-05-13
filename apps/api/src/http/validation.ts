@@ -47,7 +47,7 @@ const hasEffectJsonSchema = (value: unknown): value is EffectStandardSchemaWithJ
   );
 };
 
-export const toEffectJsonSchema = (
+const toEffectJsonSchema = (
   schema: unknown,
   options?: Readonly<Record<string, unknown>>,
 ): JsonSchemaObject => {

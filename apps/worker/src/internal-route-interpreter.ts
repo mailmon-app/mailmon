@@ -18,7 +18,7 @@ export class WorkerHttpProcessors extends Context.Service<
   WorkerHttpProcessorHandlers
 >()("@mailmon/worker/WorkerHttpProcessors") {}
 
-export interface JsonRequestReader {
+interface JsonRequestReader {
   readonly text: () => Promise<string>;
 }
 
@@ -45,7 +45,7 @@ export const createJsonResponse = (body: unknown, status: number): Response => {
   });
 };
 
-export const createWorkerInternalErrorResponse = (detail: string): Response => {
+const createWorkerInternalErrorResponse = (detail: string): Response => {
   return createJsonResponse(
     {
       code: "worker_internal_error",

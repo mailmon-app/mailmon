@@ -80,7 +80,7 @@ export const normalizeEmailAddress = (emailAddress: string) => {
   return emailAddress.trim().toLowerCase();
 };
 
-export const parseDecimalHistoryCursor = (cursor: string): bigint | null => {
+const parseDecimalHistoryCursor = (cursor: string): bigint | null => {
   if (!/^\d+$/.test(cursor)) {
     return null;
   }
@@ -88,7 +88,7 @@ export const parseDecimalHistoryCursor = (cursor: string): bigint | null => {
   return BigInt(cursor);
 };
 
-export const parseTrailingOrdinalCursor = (cursor: string) => {
+const parseTrailingOrdinalCursor = (cursor: string) => {
   const match = /^(.*\D)(\d+)$/.exec(cursor);
 
   if (match === null) {
@@ -147,7 +147,7 @@ export const createMailboxId = () => {
   return `mbx_${globalThis.crypto.randomUUID()}`;
 };
 
-export const toMailboxProvider = (provider: string): MailboxResource["provider"] => {
+const toMailboxProvider = (provider: string): MailboxResource["provider"] => {
   switch (provider) {
     case "gmail":
       return provider;
@@ -191,9 +191,7 @@ export const toMailboxWatchState = (watchState: string): MailboxResource["watchS
   }
 };
 
-export const toWebhookEndpointDeliveryState = (
-  deliveryState: string,
-): WebhookEndpointDeliveryState => {
+const toWebhookEndpointDeliveryState = (deliveryState: string): WebhookEndpointDeliveryState => {
   switch (deliveryState) {
     case "degraded":
     case "failing":
@@ -204,7 +202,7 @@ export const toWebhookEndpointDeliveryState = (
   }
 };
 
-export const toWebhookEventTypes = (
+const toWebhookEventTypes = (
   eventTypes: ReadonlyArray<string>,
 ): ReadonlyArray<WebhookEventType> => {
   return eventTypes.map((eventType) => {
@@ -229,7 +227,7 @@ export const toDate = (value: string) => {
   return date;
 };
 
-export const addMillisecondsToIsoTimestamp = (timestamp: string, milliseconds: number) => {
+const addMillisecondsToIsoTimestamp = (timestamp: string, milliseconds: number) => {
   return new Date(Date.parse(timestamp) + milliseconds).toISOString();
 };
 
@@ -237,7 +235,7 @@ export const toIsoString = (value: Date | null) => {
   return value === null ? null : value.toISOString();
 };
 
-export const toOperationalError = (row: {
+const toOperationalError = (row: {
   readonly lastErrorCode: string | null;
   readonly lastErrorMessage: string | null;
   readonly lastErrorOccurredAt: Date | null;
@@ -260,11 +258,11 @@ export const toOperationalError = (row: {
   };
 };
 
-export const toMailboxOperationalError = (row: MailboxRow): MailboxOperationalError | null => {
+const toMailboxOperationalError = (row: MailboxRow): MailboxOperationalError | null => {
   return toOperationalError(row);
 };
 
-export const toWebhookEndpointOperationalError = (
+const toWebhookEndpointOperationalError = (
   row: WebhookEndpointRow,
 ): WebhookEndpointOperationalError | null => {
   return toOperationalError(row);
@@ -368,7 +366,7 @@ export const toReplayResource = (row: ReplayRow): ReplayResource => {
   };
 };
 
-export const toSyncRunInspectionStatus = (status: string): MailboxSyncRunInspectionStatus => {
+const toSyncRunInspectionStatus = (status: string): MailboxSyncRunInspectionStatus => {
   switch (status) {
     case "running":
     case "completed":
@@ -470,7 +468,7 @@ export const toThreadListItemResource = (row: ThreadRow): ThreadListItemResource
   };
 };
 
-export const toThreadMessageSummaryResource = (
+const toThreadMessageSummaryResource = (
   row: Pick<MessageRow, "id" | "receivedAt" | "subject">,
 ): ThreadMessageSummaryResource => {
   return {
@@ -671,18 +669,15 @@ export const toMessageUpdateSet = (message: CanonicalMessageRecord) => {
   };
 };
 
-export const normalizeLabelIds = (labelIds: ReadonlyArray<string>) => {
+const normalizeLabelIds = (labelIds: ReadonlyArray<string>) => {
   return [...new Set(labelIds)].toSorted();
 };
 
-export const hasSameStringArrayValues = (
-  left: ReadonlyArray<string>,
-  right: ReadonlyArray<string>,
-) => {
+const hasSameStringArrayValues = (left: ReadonlyArray<string>, right: ReadonlyArray<string>) => {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 };
 
-export const toMailboxMessageEventData = (message: CanonicalMessageRecord) => {
+const toMailboxMessageEventData = (message: CanonicalMessageRecord) => {
   return {
     messageId: message.id,
     threadId: message.threadId,
@@ -695,7 +690,7 @@ export const toMailboxMessageEventData = (message: CanonicalMessageRecord) => {
   };
 };
 
-export const toMailboxThreadEventData = (thread: CanonicalThreadRecord) => {
+const toMailboxThreadEventData = (thread: CanonicalThreadRecord) => {
   return {
     threadId: thread.id,
     providerThreadId: thread.providerThreadId,
@@ -739,7 +734,7 @@ export const isSameCanonicalThread = (row: ThreadRow, thread: CanonicalThreadRec
   );
 };
 
-export const createStableMailboxEventId = (
+const createStableMailboxEventId = (
   syncRunId: string,
   eventType: MailboxEventType,
   mailboxId: string,
@@ -886,7 +881,7 @@ export const toPreparedWebhookDelivery = (
   };
 };
 
-export const maxIsoTimestamp = (left: string, right: string) => {
+const maxIsoTimestamp = (left: string, right: string) => {
   return Date.parse(left) >= Date.parse(right) ? left : right;
 };
 

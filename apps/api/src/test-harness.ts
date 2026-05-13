@@ -19,15 +19,13 @@ import { Effect, Layer, ManagedRuntime, Option } from "effect";
 
 import { createApp } from "./server.js";
 
-export const createWorkspaceAuthFixture = () => ({
+const createWorkspaceAuthFixture = () => ({
   foreignWorkspaceId: "ws_foreign",
   primaryApiKey: "test-api-key",
   primaryWorkspaceId: "ws_123",
 });
 
-export const createMailboxFixture = (
-  overrides: Partial<MailboxResource> = {},
-): MailboxResource => ({
+const createMailboxFixture = (overrides: Partial<MailboxResource> = {}): MailboxResource => ({
   id: "mbx_demo",
   object: "mailbox",
   provider: "gmail",
@@ -41,7 +39,7 @@ export const createMailboxFixture = (
   ...overrides,
 });
 
-export const createWebhookEndpointFixture = (
+const createWebhookEndpointFixture = (
   overrides: Partial<WebhookEndpointResource> = {},
 ): WebhookEndpointResource => ({
   id: "whe_demo",
@@ -55,7 +53,7 @@ export const createWebhookEndpointFixture = (
   ...overrides,
 });
 
-export const createReplayFixture = (overrides: Partial<ReplayResource> = {}): ReplayResource => ({
+const createReplayFixture = (overrides: Partial<ReplayResource> = {}): ReplayResource => ({
   id: "rpl_demo",
   object: "replay",
   status: "queued",
@@ -72,12 +70,12 @@ export const createReplayFixture = (overrides: Partial<ReplayResource> = {}): Re
 });
 
 export const mailboxFixture = createMailboxFixture();
-export const foreignMailboxFixture = createMailboxFixture({
+const foreignMailboxFixture = createMailboxFixture({
   id: "mbx_foreign",
   emailAddress: "foreign@mailmon.dev",
 });
-export const webhookEndpointFixture = createWebhookEndpointFixture();
-export const foreignWebhookEndpointFixture = createWebhookEndpointFixture({
+const webhookEndpointFixture = createWebhookEndpointFixture();
+const foreignWebhookEndpointFixture = createWebhookEndpointFixture({
   id: "whe_foreign",
   url: "https://foreign.example.com/webhooks/mailmon",
 });

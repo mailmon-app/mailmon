@@ -41,6 +41,7 @@
     "varlock": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@mailmon/config": "workspace:*",
     "@mailmon/core": "workspace:*",
     "@mailmon/db": "workspace:*",

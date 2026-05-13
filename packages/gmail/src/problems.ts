@@ -11,7 +11,7 @@ export const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
 
-export const isReadonlyRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
+const isReadonlyRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
   return typeof value === "object" && value !== null;
 };
 

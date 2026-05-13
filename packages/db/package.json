@@ -27,6 +27,7 @@
     "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:"
   }
 }
