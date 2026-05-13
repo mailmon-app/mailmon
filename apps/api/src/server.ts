@@ -14,6 +14,18 @@ import {
   listMailboxSyncRuns,
   listMailboxMessages,
   listMailboxThreads,
+  PublicConnectSessionResourceSchema,
+  PublicCreatedWebhookEndpointResourceSchema,
+  PublicListResourceSchema,
+  PublicMailboxObservabilitySnapshotResourceSchema,
+  PublicMailboxResourceSchema,
+  PublicMailboxSyncRunInspectionResourceSchema,
+  PublicMessageResourceSchema,
+  PublicProblemDetailsSchema,
+  PublicReplayResourceSchema,
+  PublicThreadListItemResourceSchema,
+  PublicThreadResourceSchema,
+  PublicWebhookEndpointSubscriptionResourceSchema,
   type MailboxSyncRunInspectionResource,
 } from "@mailmon/core";
 import { Hono } from "hono";
@@ -46,7 +58,12 @@ import {
   type MailboxListQueryParams,
   invalidRequest,
 } from "./http/parsers.js";
-import { mailboxListQueryDetail, subscriptionBodyDetail, validate } from "./http/validation.js";
+import {
+  mailboxListQueryDetail,
+  subscriptionBodyDetail,
+  toOpenApiJsonSchema,
+  validate,
+} from "./http/validation.js";
 
 const getRequestOrigin = (req: HonoRequest) => {
   const forwardedProto = req.header("x-forwarded-proto");
@@ -105,423 +122,6 @@ const redirectToConnectResult = (
   return Response.redirect(buildConnectRedirectUrl(redirectUrl, params), 302);
 };
 
-const nonEmptyStringSchema = {
-  type: "string",
-  minLength: 1,
-} as const;
-
-const dateTimeStringSchema = {
-  type: "string",
-  format: "date-time",
-} as const;
-
-const nullable = <TSchema extends object>(schema: TSchema) => {
-  return {
-    anyOf: [schema, { type: "null" }],
-  } as const;
-};
-
-const stringArraySchema = {
-  type: "array",
-  items: nonEmptyStringSchema,
-} as const;
-
-const webhookEventTypeSchema = {
-  type: "string",
-  enum: ["message.created", "message.updated", "thread.updated"],
-} as const;
-
-const lastErrorSchema = {
-  type: "object",
-  required: ["code", "message", "occurredAt", "retryable"],
-  properties: {
-    code: nonEmptyStringSchema,
-    message: nonEmptyStringSchema,
-    occurredAt: dateTimeStringSchema,
-    retryable: { type: "boolean" },
-  },
-  additionalProperties: false,
-} as const;
-
-const problemDetailsSchema = {
-  type: "object",
-  required: ["type", "title", "status", "code", "detail", "retryable"],
-  properties: {
-    type: nonEmptyStringSchema,
-    title: nonEmptyStringSchema,
-    status: { type: "integer" },
-    code: nonEmptyStringSchema,
-    detail: nonEmptyStringSchema,
-    resource: {
-      type: "object",
-      additionalProperties: { type: "string" },
-    },
-    retryable: { type: "boolean" },
-  },
-  additionalProperties: false,
-} as const;
-
-const connectSessionSchema = {
-  type: "object",
-  required: ["id", "object", "connectUrl", "expiresAt"],
-  properties: {
-    id: nonEmptyStringSchema,
-    object: { type: "string", enum: ["connect_session"] },
-    connectUrl: nonEmptyStringSchema,
-    expiresAt: dateTimeStringSchema,
-  },
-  additionalProperties: false,
-} as const;
-
-const mailboxSchema = {
-  type: "object",
-  required: [
-    "id",
-    "object",
-    "provider",
-    "emailAddress",
-    "status",
-    "syncState",
-    "watchState",
-    "initializedAt",
-    "lastSuccessfulSyncAt",
-    "lastError",
-  ],
-  properties: {
-    id: nonEmptyStringSchema,
-    object: { type: "string", enum: ["mailbox"] },
-    provider: { type: "string", enum: ["gmail"] },
-    emailAddress: nonEmptyStringSchema,
-    status: { type: "string", enum: ["active", "reconnect_required", "disabled"] },
-    syncState: { type: "string", enum: ["initializing", "healthy", "lagging", "failed"] },
-    watchState: { type: "string", enum: ["active", "expiring", "expired", "unhealthy"] },
-    initializedAt: nullable(dateTimeStringSchema),
-    lastSuccessfulSyncAt: nullable(dateTimeStringSchema),
-    lastError: nullable(lastErrorSchema),
-  },
-  additionalProperties: false,
-} as const;
-
-const webhookEndpointSchema = {
-  type: "object",
-  required: [
-    "id",
-    "object",
-    "url",
-    "description",
-    "deliveryState",
-    "lastDeliveryAt",
-    "lastDeliveryError",
-    "createdAt",
-  ],
-  properties: {
-    id: nonEmptyStringSchema,
-    object: { type: "string", enum: ["webhook_endpoint"] },
-    url: nonEmptyStringSchema,
-    description: nullable(nonEmptyStringSchema),
-    deliveryState: { type: "string", enum: ["healthy", "degraded", "failing"] },
-    lastDeliveryAt: nullable(dateTimeStringSchema),
-    lastDeliveryError: nullable(lastErrorSchema),
-    createdAt: dateTimeStringSchema,
-  },
-  additionalProperties: false,
-} as const;
-
-const createdWebhookEndpointSchema = {
-  ...webhookEndpointSchema,
-  required: [...webhookEndpointSchema.required, "secret"],
-  properties: {
-    ...webhookEndpointSchema.properties,
-    secret: nonEmptyStringSchema,
-  },
-} as const;
-
-const webhookEndpointSubscriptionSchema = {
-  type: "object",
-  required: ["id", "object", "webhookEndpointId", "mailboxId", "eventTypes", "createdAt"],
-  properties: {
-    id: nonEmptyStringSchema,
-    object: { type: "string", enum: ["webhook_endpoint_subscription"] },
-    webhookEndpointId: nonEmptyStringSchema,
-    mailboxId: nonEmptyStringSchema,
-    eventTypes: {
-      type: "array",
-      items: webhookEventTypeSchema,
-    },
-    createdAt: dateTimeStringSchema,
-  },
-  additionalProperties: false,
-} as const;
-
-const replaySchema = {
-  type: "object",
-  required: [
-    "id",
-    "object",
-    "status",
-    "mailboxId",
-    "webhookEndpointId",
-    "startTime",
-    "endTime",
-    "eventsReplayed",
-    "createdAt",
-    "startedAt",
-    "completedAt",
-    "lastError",
-  ],
-  properties: {
-    id: nonEmptyStringSchema,
-    object: { type: "string", enum: ["replay"] },
-    status: { type: "string", enum: ["queued", "running", "completed", "failed", "cancelled"] },
-    mailboxId: nonEmptyStringSchema,
-    webhookEndpointId: nonEmptyStringSchema,
-    startTime: dateTimeStringSchema,
-    endTime: dateTimeStringSchema,
-    eventsReplayed: nullable({ type: "integer" }),
-    createdAt: dateTimeStringSchema,
-    startedAt: nullable(dateTimeStringSchema),
-    completedAt: nullable(dateTimeStringSchema),
-    lastError: nullable({ type: "string" }),
-  },
-  additionalProperties: false,
-} as const;
-
-const messageSenderSchema = {
-  type: "object",
-  required: ["name", "email"],
-  properties: {
-    name: nullable({ type: "string" }),
-    email: nonEmptyStringSchema,
-  },
-  additionalProperties: false,
-} as const;
-
-const messageSchema = {
-  type: "object",
-  required: [
-    "id",
-    "mailboxId",
-    "threadId",
-    "providerMessageId",
-    "subject",
-    "from",
-    "snippet",
-    "receivedAt",
-    "labelIds",
-  ],
-  properties: {
-    id: nonEmptyStringSchema,
-    mailboxId: nonEmptyStringSchema,
-    threadId: nonEmptyStringSchema,
-    providerMessageId: nonEmptyStringSchema,
-    subject: { type: "string" },
-    from: messageSenderSchema,
-    snippet: { type: "string" },
-    receivedAt: dateTimeStringSchema,
-    labelIds: stringArraySchema,
-  },
-  additionalProperties: false,
-} as const;
-
-const threadListItemSchema = {
-  type: "object",
-  required: ["id", "object", "mailboxId", "providerThreadId", "subject", "lastMessageAt"],
-  properties: {
-    id: nonEmptyStringSchema,
-    object: { type: "string", enum: ["thread"] },
-    mailboxId: nonEmptyStringSchema,
-    providerThreadId: nonEmptyStringSchema,
-    subject: { type: "string" },
-    lastMessageAt: dateTimeStringSchema,
-  },
-  additionalProperties: false,
-} as const;
-
-const threadMessageSummarySchema = {
-  type: "object",
-  required: ["id", "subject", "receivedAt"],
-  properties: {
-    id: nonEmptyStringSchema,
-    subject: { type: "string" },
-    receivedAt: dateTimeStringSchema,
-  },
-  additionalProperties: false,
-} as const;
-
-const threadSchema = {
-  ...threadListItemSchema,
-  required: [...threadListItemSchema.required, "messages"],
-  properties: {
-    ...threadListItemSchema.properties,
-    messages: {
-      type: "array",
-      items: threadMessageSummarySchema,
-    },
-  },
-} as const;
-
-const syncRunSchema = {
-  type: "object",
-  required: [
-    "syncRunId",
-    "mailboxId",
-    "startedAt",
-    "completedAt",
-    "status",
-    "detail",
-    "eventsEmitted",
-    "leaseOwnerId",
-    "previousCursor",
-    "nextCursor",
-    "cursorAdvanced",
-  ],
-  properties: {
-    syncRunId: nonEmptyStringSchema,
-    mailboxId: nonEmptyStringSchema,
-    startedAt: dateTimeStringSchema,
-    completedAt: nullable(dateTimeStringSchema),
-    status: {
-      type: "string",
-      enum: [
-        "running",
-        "completed",
-        "skipped_due_to_active_lease",
-        "reconnect_required",
-        "dispatch_retry_exhausted",
-        "failed_after_lease_acquired",
-        "lease_lost",
-      ],
-    },
-    detail: nullable({ type: "string" }),
-    eventsEmitted: nullable({ type: "integer" }),
-    leaseOwnerId: nullable({ type: "string" }),
-    previousCursor: nullable({ type: "string" }),
-    nextCursor: nullable({ type: "string" }),
-    cursorAdvanced: nullable({ type: "boolean" }),
-  },
-  additionalProperties: false,
-} as const;
-
-const listSchema = <TItem extends object>(item: TItem) => {
-  return {
-    type: "object",
-    required: ["object", "data", "nextCursor"],
-    properties: {
-      object: { type: "string", enum: ["list"] },
-      data: {
-        type: "array",
-        items: item,
-      },
-      nextCursor: nullable({ type: "string" }),
-    },
-    additionalProperties: false,
-  } as const;
-};
-
-const mailboxLagSchema = {
-  type: "object",
-  required: ["status", "syncState", "watchState", "lastSuccessfulSyncAt", "lagSeconds"],
-  properties: {
-    status: { type: "string", enum: ["active", "reconnect_required", "disabled"] },
-    syncState: { type: "string", enum: ["initializing", "healthy", "lagging", "failed"] },
-    watchState: { type: "string", enum: ["active", "expiring", "expired", "unhealthy"] },
-    lastSuccessfulSyncAt: nullable(dateTimeStringSchema),
-    lagSeconds: nullable({ type: "integer" }),
-  },
-  additionalProperties: false,
-} as const;
-
-const mailboxCursorSchema = {
-  type: "object",
-  required: ["currentCursor", "previousCursor", "nextCursor", "advanced", "advancedAt"],
-  properties: {
-    currentCursor: nullable({ type: "string" }),
-    previousCursor: nullable({ type: "string" }),
-    nextCursor: nullable({ type: "string" }),
-    advanced: nullable({ type: "boolean" }),
-    advancedAt: nullable(dateTimeStringSchema),
-  },
-  additionalProperties: false,
-} as const;
-
-const mailboxLeaseSchema = {
-  type: "object",
-  required: [
-    "activeLeaseOwner",
-    "activeLeaseHeartbeatAt",
-    "activeLeaseExpiresAt",
-    "contentionCount24h",
-    "latestContentionAt",
-    "leaseLossCount24h",
-    "latestLeaseLossAt",
-  ],
-  properties: {
-    activeLeaseOwner: nullable({ type: "string" }),
-    activeLeaseHeartbeatAt: nullable(dateTimeStringSchema),
-    activeLeaseExpiresAt: nullable(dateTimeStringSchema),
-    contentionCount24h: { type: "integer" },
-    latestContentionAt: nullable(dateTimeStringSchema),
-    leaseLossCount24h: { type: "integer" },
-    latestLeaseLossAt: nullable(dateTimeStringSchema),
-  },
-  additionalProperties: false,
-} as const;
-
-const mailboxWebhookDeliveryDegradationSchema = {
-  type: "object",
-  required: [
-    "webhookEndpointId",
-    "webhookEndpointUrl",
-    "deliveryState",
-    "consecutiveFailures",
-    "pendingDeliveries",
-    "processingDeliveries",
-    "failedDeliveries",
-    "lastDeliveryAt",
-    "lastDeliveryError",
-  ],
-  properties: {
-    webhookEndpointId: nonEmptyStringSchema,
-    webhookEndpointUrl: nonEmptyStringSchema,
-    deliveryState: { type: "string", enum: ["healthy", "degraded", "failing"] },
-    consecutiveFailures: { type: "integer" },
-    pendingDeliveries: { type: "integer" },
-    processingDeliveries: { type: "integer" },
-    failedDeliveries: { type: "integer" },
-    lastDeliveryAt: nullable(dateTimeStringSchema),
-    lastDeliveryError: nullable(lastErrorSchema),
-  },
-  additionalProperties: false,
-} as const;
-
-const mailboxObservabilitySchema = {
-  type: "object",
-  required: [
-    "object",
-    "mailboxId",
-    "generatedAt",
-    "lag",
-    "cursor",
-    "lease",
-    "webhookDeliveries",
-    "latestSyncRun",
-  ],
-  properties: {
-    object: { type: "string", enum: ["mailbox_observability"] },
-    mailboxId: nonEmptyStringSchema,
-    generatedAt: dateTimeStringSchema,
-    lag: mailboxLagSchema,
-    cursor: mailboxCursorSchema,
-    lease: mailboxLeaseSchema,
-    webhookDeliveries: {
-      type: "array",
-      items: mailboxWebhookDeliveryDegradationSchema,
-    },
-    latestSyncRun: nullable(syncRunSchema),
-  },
-  additionalProperties: false,
-} as const;
-
 const jsonResponse = (description: string, schema: object) => {
   return {
     description,
@@ -533,14 +133,36 @@ const jsonResponse = (description: string, schema: object) => {
   } as const;
 };
 
-const problemResponse = (description: string) => jsonResponse(description, problemDetailsSchema);
+const publicJsonSchema = toOpenApiJsonSchema;
+
+const connectSessionSchema = publicJsonSchema(PublicConnectSessionResourceSchema);
+const createdWebhookEndpointSchema = publicJsonSchema(PublicCreatedWebhookEndpointResourceSchema);
+const webhookEndpointSubscriptionListSchema = publicJsonSchema(
+  PublicListResourceSchema(PublicWebhookEndpointSubscriptionResourceSchema),
+);
+const mailboxSchema = publicJsonSchema(PublicMailboxResourceSchema);
+const syncRunListSchema = publicJsonSchema(
+  PublicListResourceSchema(PublicMailboxSyncRunInspectionResourceSchema),
+);
+const mailboxObservabilitySchema = publicJsonSchema(
+  PublicMailboxObservabilitySnapshotResourceSchema,
+);
+const replaySchema = publicJsonSchema(PublicReplayResourceSchema);
+const messageSchema = publicJsonSchema(PublicMessageResourceSchema);
+const messageListSchema = publicJsonSchema(PublicListResourceSchema(PublicMessageResourceSchema));
+const threadListItemListSchema = publicJsonSchema(
+  PublicListResourceSchema(PublicThreadListItemResourceSchema),
+);
+const threadSchema = publicJsonSchema(PublicThreadResourceSchema);
+const problemResponse = (description: string) =>
+  jsonResponse(description, publicJsonSchema(PublicProblemDetailsSchema));
 
 const pathParameter = (name: string) => {
   return {
     in: "path",
     name,
     required: true,
-    schema: nonEmptyStringSchema,
+    schema: { type: "string", minLength: 1 },
   } as const;
 };
 
@@ -714,10 +336,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
     describeRoute({
       summary: "Create mailbox-scoped webhook subscriptions",
       responses: {
-        201: jsonResponse(
-          "Webhook subscriptions created",
-          listSchema(webhookEndpointSubscriptionSchema),
-        ),
+        201: jsonResponse("Webhook subscriptions created", webhookEndpointSubscriptionListSchema),
         400: problemResponse("Invalid request"),
         404: problemResponse("Mailbox or webhook endpoint not found"),
       },
@@ -787,7 +406,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
     describeRoute({
       summary: "List mailbox sync runs",
       responses: {
-        200: jsonResponse("Mailbox sync runs", listSchema(syncRunSchema)),
+        200: jsonResponse("Mailbox sync runs", syncRunListSchema),
         400: problemResponse("Invalid request"),
       },
     }),
@@ -922,7 +541,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
     describeRoute({
       summary: "List mailbox messages",
       responses: {
-        200: jsonResponse("Mailbox messages", listSchema(messageSchema)),
+        200: jsonResponse("Mailbox messages", messageListSchema),
         400: problemResponse("Invalid request"),
       },
     }),
@@ -992,7 +611,7 @@ export const createApp = (runtime: ApiServerRuntime) => {
     describeRoute({
       summary: "List mailbox threads",
       responses: {
-        200: jsonResponse("Mailbox threads", listSchema(threadListItemSchema)),
+        200: jsonResponse("Mailbox threads", threadListItemListSchema),
         400: problemResponse("Invalid request"),
       },
     }),

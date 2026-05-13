@@ -6,7 +6,7 @@ Reference plan: [plans/mailmon-architecture-deepening-refactor-plan.md](../plans
 
 ### Current Position
 
-Completed Slice 7: Canonical Mailbox State Commit Module
+Completed Slice 8: Public Route Contract Module
 
 ### Slice 0 What Changed
 
@@ -236,3 +236,30 @@ Recommended first actions:
 - Identify the current public route/OpenAPI contract duplication in `apps/api/src/server.ts`.
 - Keep Hono as the public HTTP adapter while moving route contract shape into a named module.
 - Preserve existing response schemas and generated OpenAPI behavior before changing any route implementation.
+
+### Slice 8 What Changed
+
+- Added `packages/core/src/public-http-contracts.ts` as the core owner of public HTTP response schemas for Problem Details, Connect Sessions, Mailboxes, Observability, Messages, Threads, Webhook Endpoints, Subscriptions, Replays, Sync Runs, and list envelopes.
+- Exported the public contract schemas from `@mailmon/core` while preserving the existing public TypeScript resource interfaces.
+- Replaced the large hand-written OpenAPI response schema block in `apps/api/src/server.ts` with Effect schema imports and a small Hono/OpenAPI conversion adapter.
+- Kept Hono-specific transport shaping in `apps/api`, including path params, request validation, query alias compatibility, auth extraction, and response mapping.
+- Exposed the OpenAPI generator as `generateOpenApiDocument()` so tests can compare the generated document with the checked-in docs artifact without writing files.
+- Strengthened `apps/api/src/public-contract.test.ts` to fail when generated OpenAPI drifts from `apps/docs/api-reference/openapi.json`.
+- Regenerated `apps/docs/api-reference/openapi.json` from the schema-first contract source.
+
+### Slice 8 Verification
+
+- `pnpm exec effect-solutions list`: passed.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing data-modeling`: passed.
+- `pnpm --filter @mailmon/core build`: passed.
+- `pnpm --filter @mailmon/core typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/core format:check`: passed.
+- `pnpm --filter @mailmon/api openapi:generate`: passed and updated the checked-in OpenAPI artifact.
+- `pnpm --filter @mailmon/api test`: passed; 38 tests passed across 5 files.
+- `pnpm --filter @mailmon/api typecheck`: passed with zero warnings.
+- `pnpm --filter @mailmon/api lint`: passed with zero warnings.
+- `pnpm --filter @mailmon/api build`: passed.
+- `pnpm --filter @mailmon/api format:check`: passed.
+- `pnpm typecheck`: passed with zero warnings across the workspace.
+- `pnpm format:check`: passed.
+- `pnpm build`: passed.

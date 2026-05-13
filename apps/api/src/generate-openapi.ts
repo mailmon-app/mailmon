@@ -137,7 +137,7 @@ const preferCamelCaseQueryParameters = (specs: JsonObject) => {
   }
 };
 
-const normalizeOpenApiDocument = (specs: JsonObject) => {
+export const normalizeOpenApiDocument = (specs: JsonObject) => {
   const components = isJsonObject(specs.components) ? specs.components : {};
   const schemas = isJsonObject(components.schemas) ? components.schemas : {};
 
@@ -151,15 +151,22 @@ const normalizeOpenApiDocument = (specs: JsonObject) => {
   return specs;
 };
 
-const main = async () => {
-  const outputPath = process.argv[2] ?? defaultOutputPath;
+export const generateOpenApiDocument = async () => {
   const app = createApp(openApiOnlyRuntime);
   const specs = await generateSpecs(app, mailmonOpenApiOptions);
-  const normalizedSpecs = normalizeOpenApiDocument(specs);
+
+  return normalizeOpenApiDocument(specs);
+};
+
+const main = async () => {
+  const outputPath = process.argv[2] ?? defaultOutputPath;
+  const normalizedSpecs = await generateOpenApiDocument();
 
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(normalizedSpecs, null, 2)}\n`);
   console.log(`Wrote OpenAPI spec to ${outputPath}`);
 };
 
-await main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await main();
+}

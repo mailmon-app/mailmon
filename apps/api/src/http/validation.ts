@@ -47,7 +47,7 @@ const hasEffectJsonSchema = (value: unknown): value is EffectStandardSchemaWithJ
   );
 };
 
-const toEffectJsonSchema = (
+export const toEffectJsonSchema = (
   schema: unknown,
   options?: Readonly<Record<string, unknown>>,
 ): JsonSchemaObject => {
@@ -58,6 +58,10 @@ const toEffectJsonSchema = (
   return schema["~standard"].jsonSchema.input({
     target: isJsonSchemaTarget(options?.target) ? options.target : DEFAULT_JSON_SCHEMA_TARGET,
   });
+};
+
+export const toOpenApiJsonSchema = (schema: Schema.Decoder<any>) => {
+  return toEffectJsonSchema(Schema.toStandardJSONSchemaV1(Schema.toStandardSchemaV1(schema)));
 };
 
 loadVendor("effect", {

@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { generateOpenApiDocument } from "./generate-openapi.js";
+
 type JsonObject = Record<string, unknown>;
 
 const repoFile = (path: string) => {
@@ -36,6 +38,14 @@ const schemaAt = (document: JsonObject, path: ReadonlyArray<string>) => {
 };
 
 describe("public API contract", () => {
+  it("keeps generated OpenAPI in sync with the checked-in docs artifact", async () => {
+    const checkedInDocument = asObject(
+      JSON.parse(readRepoText("apps/docs/api-reference/openapi.json")),
+    );
+
+    await expect(generateOpenApiDocument()).resolves.toEqual(checkedInDocument);
+  });
+
   it("keeps the checked-in OpenAPI document on the v1 camelCase JSON shape", () => {
     const document = asObject(JSON.parse(readRepoText("apps/docs/api-reference/openapi.json")));
 
