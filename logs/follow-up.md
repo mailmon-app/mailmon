@@ -144,3 +144,53 @@ Notes:
 - `packages/core/src/use-cases.ts` dropped roughly 250 lines and now delegates delivery execution
   to the named Module.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 4: Core Workflow Partition
+
+Completed the core workflow partition from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Reduced `packages/core/src/use-cases.ts` to a compatibility export module for the stable public
+  use-case surface.
+- Added focused core workflow modules:
+  - `packages/core/src/replay-dispatch.ts` for Replay dispatch target scanning, delivery creation,
+    scheduling, and completion summaries.
+  - `packages/core/src/mailbox-repair.ts` for Mailbox repair candidate preparation and sync
+    dispatch.
+  - `packages/core/src/mailbox-execution-recovery.ts` for stuck Mailbox Sync Execution recovery
+    and reconnect-required skip accounting.
+  - `packages/core/src/mailbox-watch-renewal.ts` for watch renewal, Gmail history Cursor
+    comparison, renewal failure recording, and catch-up sync dispatch.
+  - `packages/core/src/control-jobs.ts` for Control Job routing plus Webhook Delivery scheduling
+    recovery control-job behavior.
+- Moved the remaining public use-case implementations out of `use-cases.ts` into focused modules
+  so the file is no longer an implementation owner:
+  - `resource-queries.ts`
+  - `mailbox-connect-sessions.ts`
+  - `webhook-endpoints.ts`
+  - `replay-management.ts`
+  - `mailbox-dispatch.ts`
+- Kept existing service seams unchanged; no new core services or transport dependencies were
+  introduced.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing` consulted
+  before moving Effect workflows.
+- `pnpm --filter @mailmon/core typecheck` passes with zero warnings and zero errors.
+- `pnpm --filter @mailmon/core test` passes: 5 test files, 85 tests.
+- `pnpm --filter @mailmon/core format:check` passes.
+- `npx fallow dead-code` passes with no issues.
+- `pnpm test` passes: 17 tasks successful.
+- `npx fallow health` still fails the configured threshold at `78 B`, but `use-cases.ts` is no
+  longer in the hotspot list or the lowest file-health scores; churn hotspots dropped to `0`, and
+  file coverage improved to `94.3%`.
+
+Notes:
+
+- The remaining health failures are the known later-slice targets: large test bodies, API route
+  declaration, OpenAPI normalization, mailbox observability reads, and worker internal auth.
+- No product behavior changes were intended.
