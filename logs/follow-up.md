@@ -307,3 +307,44 @@ Notes:
   `packages/gmail/src/index.test.ts`; duplication is now below the slice's 2.5 percent ideal
   target.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 8: Mailbox Observability Read-model Module
+
+Completed the Mailbox Observability read-model module split from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Reduced `packages/db/src/persistence/mailbox-observability-catalog.ts` so
+  `getMailboxObservability(...)` coordinates named read-model pieces instead of owning every query
+  and snapshot detail inline.
+- Added `packages/db/src/persistence/mailbox-observability-queries.ts` for DB-internal query
+  groups:
+  - Mailbox operational row loading.
+  - latest and latest-completed Sync Run loading.
+  - 24-hour lease contention/loss metrics.
+  - subscribed Webhook Endpoint rows and delivery state aggregation.
+- Added `packages/db/src/persistence/mailbox-observability-read-model.ts` for pure snapshot
+  assembly, including lag, Cursor movement, lease metrics, Webhook Delivery degradation rows, and
+  latest Sync Run inspection mapping.
+- Kept `MailboxObservabilityCatalog` and all `@mailmon/db` package exports unchanged.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice.
+- `pnpm exec effect-solutions show basics services-and-layers testing` consulted before changing
+  Effect-adjacent DB layer code.
+- `pnpm --filter @mailmon/db test -- src/read-model.test.ts` passes: 9 test files, 44 tests.
+- `pnpm --filter @mailmon/db typecheck` passes with zero warnings and zero errors.
+- `pnpm --filter @mailmon/db format:check` passes.
+- `npx fallow dead-code` passes with no issues.
+- `npx fallow health` still fails the configured threshold at `78 B`; the observability adapter is
+  no longer reported as a high-complexity function, while the remaining findings are the known
+  later-slice and test-size targets.
+
+Notes:
+
+- Existing read-model tests already covered the important observability edges: workspace
+  ownership, lag and Cursor reporting, lease metrics, shared endpoint delivery counts, zero-count
+  subscribed endpoints, and non-advanced Cursor behavior.
+- No product behavior changes were intended.
