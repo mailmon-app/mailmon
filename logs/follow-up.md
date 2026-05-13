@@ -104,3 +104,43 @@ Notes:
 - Public imports from `@mailmon/gmail` remain stable.
 - No new `Context.Service` seam was introduced.
 - No product behavior changes were intended.
+
+## 2026-05-14 - Slice 3: Webhook Delivery Execution Module
+
+Completed the Webhook Delivery execution module extraction from
+`plans/mailmon-architecture-follow-up-refactor-plan.md`.
+
+Changes:
+
+- Added `packages/core/src/webhook-delivery-execution.ts` to own Webhook Delivery retry policy,
+  endpoint response classification, transport failure classification, completion construction,
+  compare-and-swap finalization, and retry rescheduling.
+- Kept `runWebhookDelivery(...)` available from `packages/core/src/use-cases.ts` as a forwarding
+  export, preserving existing imports from `@mailmon/core`.
+- Added direct classifier coverage in `packages/core/src/webhook-delivery-execution.test.ts` for
+  successful responses, retryable 5xx responses, max-attempt exhaustion, non-retryable 4xx
+  responses, retryable transport failures, and capped exponential retry delay behavior.
+- Left the existing `WebhookDeliveryStore`, `WebhookDeliverySender`, and
+  `WebhookDeliveryScheduler` service seams unchanged.
+
+Verification:
+
+- `pnpm exec effect-solutions list` passed before starting the slice.
+- `pnpm exec effect-solutions show basics services-and-layers error-handling testing` consulted
+  before changing Effect workflow and test code.
+- `pnpm --filter @mailmon/core test` passes: 5 test files, 85 tests.
+- `pnpm --filter @mailmon/core typecheck` passes with zero warnings and zero errors.
+- `pnpm --filter @mailmon/worker test -- src/runtime.test.ts` passes: 4 test files, 33 tests.
+- `pnpm --filter @mailmon.dev/cli test -- src/app.test.ts` passes: 1 test file, 10 tests.
+- `pnpm typecheck` passes: 13 tasks successful.
+- `npx fallow dead-code` passes with no issues.
+- `pnpm format:check` passes: 8 tasks successful.
+- `npx fallow health` still fails the configured threshold at `78 B`, but high-complexity
+  findings decreased from 16 to 15 and the Webhook Delivery execution policy no longer appears as
+  a complexity finding in `packages/core/src/use-cases.ts`.
+
+Notes:
+
+- `packages/core/src/use-cases.ts` dropped roughly 250 lines and now delegates delivery execution
+  to the named Module.
+- No product behavior changes were intended.
