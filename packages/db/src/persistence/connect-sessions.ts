@@ -1,6 +1,5 @@
 import {
   MailboxConnectSessionStore,
-  mailboxAlreadyConnected,
   type CompletedMailboxConnectSession,
 } from "@mailmon/core";
 import { GmailRefreshTokenCipher } from "@mailmon/gmail";
@@ -121,11 +120,72 @@ export const createMailboxConnectSessionStoreLayer = Layer.effect(
                   )
                   .limit(1);
 
+                const createdAt = toDate(params.connectedAt);
+
                 if (existingMailbox !== undefined) {
-                  throw mailboxAlreadyConnected(existingMailbox.id);
+                  const [updatedMailbox] = await transaction
+                    .update(mailboxes)
+                    .set({
+                      activeSyncLeaseAcquiredAt: null,
+                      activeSyncLeaseExpiresAt: null,
+                      activeSyncLeaseHeartbeatAt: null,
+                      activeSyncLeaseOwner: null,
+                      activeSyncRunId: null,
+                      emailAddress: normalizedEmailAddress,
+                      lastErrorCode: null,
+                      lastErrorMessage: null,
+                      lastErrorOccurredAt: null,
+                      lastErrorRetryable: null,
+                      mailboxExternalId: connectSession.mailboxExternalId,
+                      status: "active",
+                      syncState: "initializing",
+                      tenantExternalId: connectSession.tenantExternalId,
+                      updatedAt: createdAt,
+                      watchExpirationAt: null,
+                      watchLastRenewedAt: null,
+                      watchState: "expired",
+                    })
+                    .where(eq(mailboxes.id, existingMailbox.id))
+                    .returning();
+
+                  if (updatedMailbox === undefined) {
+                    throw new Error(`Mailbox ${existingMailbox.id} was not updated.`);
+                  }
+
+                  const [updatedCredential] = await transaction
+                    .update(gmailMailboxCredentials)
+                    .set({
+                      refreshTokenCiphertext: encryptedRefreshToken,
+                      updatedAt: createdAt,
+                    })
+                    .where(eq(gmailMailboxCredentials.mailboxId, existingMailbox.id))
+                    .returning();
+
+                  if (updatedCredential === undefined) {
+                    await transaction.insert(gmailMailboxCredentials).values({
+                      mailboxId: existingMailbox.id,
+                      refreshTokenCiphertext: encryptedRefreshToken,
+                      createdAt,
+                      updatedAt: createdAt,
+                    });
+                  }
+
+                  await transaction
+                    .update(mailboxConnectSessions)
+                    .set({
+                      mailboxId: existingMailbox.id,
+                      completedAt: createdAt,
+                      updatedAt: createdAt,
+                    })
+                    .where(eq(mailboxConnectSessions.id, connectSession.id));
+
+                  return {
+                    mailbox: toMailboxResource(updatedMailbox),
+                    redirectUrl: connectSession.redirectUrl,
+                    created: false,
+                  } satisfies CompletedMailboxConnectSession;
                 }
 
-                const createdAt = toDate(params.connectedAt);
                 const mailboxId = createMailboxId();
 
                 const [createdMailbox] = await transaction

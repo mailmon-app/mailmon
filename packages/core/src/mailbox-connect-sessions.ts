@@ -166,9 +166,7 @@ export const completeGmailMailboxConnectSession = (
       refreshToken: authorization.refreshToken,
     });
 
-    if (completedSession.created) {
-      yield* dispatcher.dispatchMailboxSync(completedSession.mailbox.id);
-    }
+    yield* dispatcher.dispatchMailboxSync(completedSession.mailbox.id);
 
     return completedSession;
   });
