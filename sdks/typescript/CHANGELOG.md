@@ -1,5 +1,11 @@
 # @mailmon.dev/sdk
 
+## 0.0.4
+
+### Patch Changes
+
+- 12bfebc: Fix generated SDK request types from OpenAPI query parameter normalization and preserve the SDK changelog during Fern generation.
+
 ## 0.0.3
 
 ### Patch Changes
