@@ -1,7 +1,4 @@
-import {
-  MailboxConnectSessionStore,
-  type CompletedMailboxConnectSession,
-} from "@mailmon/core";
+import { MailboxConnectSessionStore, type CompletedMailboxConnectSession } from "@mailmon/core";
 import { GmailRefreshTokenCipher } from "@mailmon/gmail";
 import { and, eq, or } from "drizzle-orm";
 import { Effect, Layer, Option } from "effect";

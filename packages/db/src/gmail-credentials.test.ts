@@ -123,132 +123,134 @@ describe("gmail mailbox credentials", () => {
     ),
   );
 
-  it.effect("reconnects an existing Gmail mailbox by rotating credentials and clearing errors", () =>
-    withIsolatedDatabaseEffect((database) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => seedWorkspace(database.connectionString));
+  it.effect(
+    "reconnects an existing Gmail mailbox by rotating credentials and clearing errors",
+    () =>
+      withIsolatedDatabaseEffect((database) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => seedWorkspace(database.connectionString));
 
-        const oldEncryptedRefreshToken = yield* createEncryptedRefreshToken(
-          "old-refresh-token",
-        ).pipe(Effect.provide(testGmailRefreshTokenCipherLayer));
+          const oldEncryptedRefreshToken = yield* createEncryptedRefreshToken(
+            "old-refresh-token",
+          ).pipe(Effect.provide(testGmailRefreshTokenCipherLayer));
 
-        yield* Effect.promise(async () => {
-          const seededDatabase = createDb(database.connectionString);
-          const createdAt = new Date("2026-04-13T08:30:00.000Z");
-          const failedAt = new Date("2026-04-13T08:45:00.000Z");
+          yield* Effect.promise(async () => {
+            const seededDatabase = createDb(database.connectionString);
+            const createdAt = new Date("2026-04-13T08:30:00.000Z");
+            const failedAt = new Date("2026-04-13T08:45:00.000Z");
 
-          try {
-            await seededDatabase.db.insert(schema.mailboxes).values({
-              id: "mbx_reconnect_existing",
-              workspaceId,
-              provider: "gmail",
-              tenantExternalId: "tenant_old",
-              mailboxExternalId: "mailbox_old",
-              emailAddress: "demo@mailmon.dev",
-              status: "reconnect_required",
-              syncState: "failed",
-              watchState: "active",
-              lastErrorCode: "gmail_token_refresh_reconnect_required",
-              lastErrorMessage:
-                "Refreshing the Gmail access token failed because the stored Gmail refresh token is invalid or revoked. The mailbox must be reconnected.",
-              lastErrorOccurredAt: failedAt,
-              lastErrorRetryable: false,
-              createdAt,
-              updatedAt: failedAt,
-            });
-            await seededDatabase.db.insert(schema.gmailMailboxCredentials).values({
-              mailboxId: "mbx_reconnect_existing",
-              refreshTokenCiphertext: oldEncryptedRefreshToken,
-              createdAt,
-              updatedAt: failedAt,
-            });
-          } finally {
-            await seededDatabase.client.end();
-          }
-        });
-
-        const persistenceLayer = createWorkerPersistenceLayer(database.connectionString).pipe(
-          Layer.provide(testGmailRefreshTokenCipherLayer),
-        );
-
-        const completed = yield* Effect.gen(function* () {
-          const connectSessionStore = yield* MailboxConnectSessionStore;
-          const credentialStore = yield* GmailMailboxCredentialStore;
-
-          const connectSession = yield* connectSessionStore.createConnectSession({
-            id: "mcs_reconnect_existing",
-            workspaceId,
-            provider: "gmail",
-            tenantExternalId: "tenant_new",
-            mailboxExternalId: "mailbox_new",
-            redirectUrl: "https://app.example.com/oauth/callback",
-            codeVerifier: "code-verifier",
-            expiresAt: "2026-04-13T09:30:00.000Z",
+            try {
+              await seededDatabase.db.insert(schema.mailboxes).values({
+                id: "mbx_reconnect_existing",
+                workspaceId,
+                provider: "gmail",
+                tenantExternalId: "tenant_old",
+                mailboxExternalId: "mailbox_old",
+                emailAddress: "demo@mailmon.dev",
+                status: "reconnect_required",
+                syncState: "failed",
+                watchState: "active",
+                lastErrorCode: "gmail_token_refresh_reconnect_required",
+                lastErrorMessage:
+                  "Refreshing the Gmail access token failed because the stored Gmail refresh token is invalid or revoked. The mailbox must be reconnected.",
+                lastErrorOccurredAt: failedAt,
+                lastErrorRetryable: false,
+                createdAt,
+                updatedAt: failedAt,
+              });
+              await seededDatabase.db.insert(schema.gmailMailboxCredentials).values({
+                mailboxId: "mbx_reconnect_existing",
+                refreshTokenCiphertext: oldEncryptedRefreshToken,
+                createdAt,
+                updatedAt: failedAt,
+              });
+            } finally {
+              await seededDatabase.client.end();
+            }
           });
 
-          const reconnected = yield* connectSessionStore.completeConnectSession({
-            connectSessionId: connectSession.id,
-            connectedAt: "2026-04-13T08:50:00.000Z",
-            providerAccountEmail: "DEMO@mailmon.dev",
-            refreshToken: "new-refresh-token",
-          });
-          const credential = yield* credentialStore.getGmailMailboxCredential(
-            reconnected.mailbox.id,
+          const persistenceLayer = createWorkerPersistenceLayer(database.connectionString).pipe(
+            Layer.provide(testGmailRefreshTokenCipherLayer),
           );
 
-          return {
-            credential,
-            reconnected,
-          };
-        }).pipe(Effect.provide(persistenceLayer));
+          const completed = yield* Effect.gen(function* () {
+            const connectSessionStore = yield* MailboxConnectSessionStore;
+            const credentialStore = yield* GmailMailboxCredentialStore;
 
-        expect(completed.reconnected.created).toBe(false);
-        expect(completed.reconnected.mailbox).toMatchObject({
-          id: "mbx_reconnect_existing",
-          status: "active",
-          syncState: "initializing",
-          watchState: "expired",
-          lastError: null,
-        });
-        expect(completed.credential?.refreshToken).toBe("new-refresh-token");
+            const connectSession = yield* connectSessionStore.createConnectSession({
+              id: "mcs_reconnect_existing",
+              workspaceId,
+              provider: "gmail",
+              tenantExternalId: "tenant_new",
+              mailboxExternalId: "mailbox_new",
+              redirectUrl: "https://app.example.com/oauth/callback",
+              codeVerifier: "code-verifier",
+              expiresAt: "2026-04-13T09:30:00.000Z",
+            });
 
-        const storedRows = yield* Effect.promise(async () => {
-          const verificationDatabase = createDb(database.connectionString);
-
-          try {
-            const [connectSession] = await verificationDatabase.db
-              .select({
-                completedAt: schema.mailboxConnectSessions.completedAt,
-                mailboxId: schema.mailboxConnectSessions.mailboxId,
-              })
-              .from(schema.mailboxConnectSessions)
-              .where(eq(schema.mailboxConnectSessions.id, "mcs_reconnect_existing"))
-              .limit(1);
-            const [credential] = await verificationDatabase.db
-              .select({
-                refreshTokenCiphertext: schema.gmailMailboxCredentials.refreshTokenCiphertext,
-              })
-              .from(schema.gmailMailboxCredentials)
-              .where(eq(schema.gmailMailboxCredentials.mailboxId, "mbx_reconnect_existing"))
-              .limit(1);
+            const reconnected = yield* connectSessionStore.completeConnectSession({
+              connectSessionId: connectSession.id,
+              connectedAt: "2026-04-13T08:50:00.000Z",
+              providerAccountEmail: "DEMO@mailmon.dev",
+              refreshToken: "new-refresh-token",
+            });
+            const credential = yield* credentialStore.getGmailMailboxCredential(
+              reconnected.mailbox.id,
+            );
 
             return {
-              connectSession,
               credential,
+              reconnected,
             };
-          } finally {
-            await verificationDatabase.client.end();
-          }
-        });
+          }).pipe(Effect.provide(persistenceLayer));
 
-        expect(storedRows.connectSession?.mailboxId).toBe("mbx_reconnect_existing");
-        expect(storedRows.connectSession?.completedAt?.toISOString()).toBe(
-          "2026-04-13T08:50:00.000Z",
-        );
-        expect(storedRows.credential?.refreshTokenCiphertext).toMatch(/^mmrt_v1:/);
-        expect(storedRows.credential?.refreshTokenCiphertext).not.toBe(oldEncryptedRefreshToken);
-      }),
-    ),
+          expect(completed.reconnected.created).toBe(false);
+          expect(completed.reconnected.mailbox).toMatchObject({
+            id: "mbx_reconnect_existing",
+            status: "active",
+            syncState: "initializing",
+            watchState: "expired",
+            lastError: null,
+          });
+          expect(completed.credential?.refreshToken).toBe("new-refresh-token");
+
+          const storedRows = yield* Effect.promise(async () => {
+            const verificationDatabase = createDb(database.connectionString);
+
+            try {
+              const [connectSession] = await verificationDatabase.db
+                .select({
+                  completedAt: schema.mailboxConnectSessions.completedAt,
+                  mailboxId: schema.mailboxConnectSessions.mailboxId,
+                })
+                .from(schema.mailboxConnectSessions)
+                .where(eq(schema.mailboxConnectSessions.id, "mcs_reconnect_existing"))
+                .limit(1);
+              const [credential] = await verificationDatabase.db
+                .select({
+                  refreshTokenCiphertext: schema.gmailMailboxCredentials.refreshTokenCiphertext,
+                })
+                .from(schema.gmailMailboxCredentials)
+                .where(eq(schema.gmailMailboxCredentials.mailboxId, "mbx_reconnect_existing"))
+                .limit(1);
+
+              return {
+                connectSession,
+                credential,
+              };
+            } finally {
+              await verificationDatabase.client.end();
+            }
+          });
+
+          expect(storedRows.connectSession?.mailboxId).toBe("mbx_reconnect_existing");
+          expect(storedRows.connectSession?.completedAt?.toISOString()).toBe(
+            "2026-04-13T08:50:00.000Z",
+          );
+          expect(storedRows.credential?.refreshTokenCiphertext).toMatch(/^mmrt_v1:/);
+          expect(storedRows.credential?.refreshTokenCiphertext).not.toBe(oldEncryptedRefreshToken);
+        }),
+      ),
   );
 
   it.effect("audits and rewraps plaintext and previous-key Gmail credentials", () =>
