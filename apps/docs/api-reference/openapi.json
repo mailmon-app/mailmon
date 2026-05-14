@@ -27,14 +27,7 @@
         "scheme": "bearer"
       }
     },
-    "schemas": {
-      "NonEmptyString": {
-        "type": "string",
-        "description": "a non empty string",
-        "title": "nonEmptyString",
-        "minLength": 1
-      }
-    }
+    "schemas": {}
   },
   "paths": {
     "/v1/mailboxes/connect-sessions": {
@@ -48,11 +41,14 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["id", "object", "connectUrl", "expiresAt"],
                   "properties": {
                     "id": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "object": {
                       "type": "string",
@@ -60,13 +56,18 @@
                     },
                     "connectUrl": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "expiresAt": {
                       "type": "string",
                       "format": "date-time"
                     }
                   },
+                  "required": ["id", "object", "connectUrl", "expiresAt"],
                   "additionalProperties": false
                 }
               }
@@ -78,26 +79,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -109,6 +125,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -121,22 +138,41 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["provider", "tenantExternalId", "mailboxExternalId", "redirectUrl"],
                 "properties": {
                   "provider": {
-                    "type": "string",
-                    "enum": ["gmail"]
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["gmail"]
+                      }
+                    ]
                   },
                   "tenantExternalId": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   },
                   "mailboxExternalId": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   },
                   "redirectUrl": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   }
                 },
+                "required": ["provider", "tenantExternalId", "mailboxExternalId", "redirectUrl"],
                 "additionalProperties": false
               }
             }
@@ -155,21 +191,14 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "id",
-                    "object",
-                    "url",
-                    "description",
-                    "deliveryState",
-                    "lastDeliveryAt",
-                    "lastDeliveryError",
-                    "createdAt",
-                    "secret"
-                  ],
                   "properties": {
                     "id": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "object": {
                       "type": "string",
@@ -177,13 +206,21 @@
                     },
                     "url": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "description": {
                       "anyOf": [
                         {
                           "type": "string",
-                          "minLength": 1
+                          "allOf": [
+                            {
+                              "minLength": 1
+                            }
+                          ]
                         },
                         {
                           "type": "null"
@@ -209,15 +246,22 @@
                       "anyOf": [
                         {
                           "type": "object",
-                          "required": ["code", "message", "occurredAt", "retryable"],
                           "properties": {
                             "code": {
                               "type": "string",
-                              "minLength": 1
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ]
                             },
                             "message": {
                               "type": "string",
-                              "minLength": 1
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ]
                             },
                             "occurredAt": {
                               "type": "string",
@@ -227,6 +271,7 @@
                               "type": "boolean"
                             }
                           },
+                          "required": ["code", "message", "occurredAt", "retryable"],
                           "additionalProperties": false
                         },
                         {
@@ -240,9 +285,24 @@
                     },
                     "secret": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     }
                   },
+                  "required": [
+                    "id",
+                    "object",
+                    "url",
+                    "description",
+                    "deliveryState",
+                    "lastDeliveryAt",
+                    "lastDeliveryError",
+                    "createdAt",
+                    "secret"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -254,26 +314,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -285,6 +360,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -297,15 +373,31 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["url"],
                 "properties": {
                   "url": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   },
                   "description": {
                     "anyOf": [
                       {
-                        "$ref": "#/components/schemas/NonEmptyString"
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       },
                       {
                         "type": "null"
@@ -313,6 +405,7 @@
                     ]
                   }
                 },
+                "required": ["url"],
                 "additionalProperties": false
               }
             }
@@ -331,7 +424,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["object", "data", "nextCursor"],
                   "properties": {
                     "object": {
                       "type": "string",
@@ -341,18 +433,14 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "required": [
-                          "id",
-                          "object",
-                          "webhookEndpointId",
-                          "mailboxId",
-                          "eventTypes",
-                          "createdAt"
-                        ],
                         "properties": {
                           "id": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "object": {
                             "type": "string",
@@ -360,11 +448,19 @@
                           },
                           "webhookEndpointId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "mailboxId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "eventTypes": {
                             "type": "array",
@@ -378,6 +474,14 @@
                             "format": "date-time"
                           }
                         },
+                        "required": [
+                          "id",
+                          "object",
+                          "webhookEndpointId",
+                          "mailboxId",
+                          "eventTypes",
+                          "createdAt"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -392,6 +496,7 @@
                       ]
                     }
                   },
+                  "required": ["object", "data", "nextCursor"],
                   "additionalProperties": false
                 }
               }
@@ -403,26 +508,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -434,6 +554,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -445,26 +566,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -476,6 +612,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -488,17 +625,37 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["mailboxIds", "eventTypes"],
                 "properties": {
                   "mailboxIds": {
                     "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "string",
+                        "allOf": [
+                          {
+                            "minLength": 1
+                          }
+                        ]
+                      }
+                    ],
                     "minItems": 1,
                     "items": {
-                      "$ref": "#/components/schemas/NonEmptyString"
+                      "type": "string",
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     }
                   },
                   "eventTypes": {
                     "type": "array",
+                    "prefixItems": [
+                      {
+                        "type": "string",
+                        "enum": ["message.created", "message.updated", "thread.updated"]
+                      }
+                    ],
                     "minItems": 1,
                     "items": {
                       "type": "string",
@@ -506,6 +663,7 @@
                     }
                   }
                 },
+                "required": ["mailboxIds", "eventTypes"],
                 "additionalProperties": false
               }
             }
@@ -545,22 +703,14 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "id",
-                    "object",
-                    "provider",
-                    "emailAddress",
-                    "status",
-                    "syncState",
-                    "watchState",
-                    "initializedAt",
-                    "lastSuccessfulSyncAt",
-                    "lastError"
-                  ],
                   "properties": {
                     "id": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "object": {
                       "type": "string",
@@ -572,7 +722,11 @@
                     },
                     "emailAddress": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "string",
@@ -612,15 +766,22 @@
                       "anyOf": [
                         {
                           "type": "object",
-                          "required": ["code", "message", "occurredAt", "retryable"],
                           "properties": {
                             "code": {
                               "type": "string",
-                              "minLength": 1
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ]
                             },
                             "message": {
                               "type": "string",
-                              "minLength": 1
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ]
                             },
                             "occurredAt": {
                               "type": "string",
@@ -630,6 +791,7 @@
                               "type": "boolean"
                             }
                           },
+                          "required": ["code", "message", "occurredAt", "retryable"],
                           "additionalProperties": false
                         },
                         {
@@ -638,6 +800,18 @@
                       ]
                     }
                   },
+                  "required": [
+                    "id",
+                    "object",
+                    "provider",
+                    "emailAddress",
+                    "status",
+                    "syncState",
+                    "watchState",
+                    "initializedAt",
+                    "lastSuccessfulSyncAt",
+                    "lastError"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -649,26 +823,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -680,6 +869,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -691,26 +881,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -722,6 +927,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -741,7 +947,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["object", "data", "nextCursor"],
                   "properties": {
                     "object": {
                       "type": "string",
@@ -751,27 +956,22 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "required": [
-                          "syncRunId",
-                          "mailboxId",
-                          "startedAt",
-                          "completedAt",
-                          "status",
-                          "detail",
-                          "eventsEmitted",
-                          "leaseOwnerId",
-                          "previousCursor",
-                          "nextCursor",
-                          "cursorAdvanced"
-                        ],
                         "properties": {
                           "syncRunId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "mailboxId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "startedAt": {
                             "type": "string",
@@ -861,6 +1061,19 @@
                             ]
                           }
                         },
+                        "required": [
+                          "syncRunId",
+                          "mailboxId",
+                          "startedAt",
+                          "completedAt",
+                          "status",
+                          "detail",
+                          "eventsEmitted",
+                          "leaseOwnerId",
+                          "previousCursor",
+                          "nextCursor",
+                          "cursorAdvanced"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -875,6 +1088,7 @@
                       ]
                     }
                   },
+                  "required": ["object", "data", "nextCursor"],
                   "additionalProperties": false
                 }
               }
@@ -886,26 +1100,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -917,6 +1146,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -973,16 +1203,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "object",
-                    "mailboxId",
-                    "generatedAt",
-                    "lag",
-                    "cursor",
-                    "lease",
-                    "webhookDeliveries",
-                    "latestSyncRun"
-                  ],
                   "properties": {
                     "object": {
                       "type": "string",
@@ -990,7 +1210,11 @@
                     },
                     "mailboxId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "generatedAt": {
                       "type": "string",
@@ -998,13 +1222,6 @@
                     },
                     "lag": {
                       "type": "object",
-                      "required": [
-                        "status",
-                        "syncState",
-                        "watchState",
-                        "lastSuccessfulSyncAt",
-                        "lagSeconds"
-                      ],
                       "properties": {
                         "status": {
                           "type": "string",
@@ -1040,17 +1257,17 @@
                           ]
                         }
                       },
+                      "required": [
+                        "status",
+                        "syncState",
+                        "watchState",
+                        "lastSuccessfulSyncAt",
+                        "lagSeconds"
+                      ],
                       "additionalProperties": false
                     },
                     "cursor": {
                       "type": "object",
-                      "required": [
-                        "currentCursor",
-                        "previousCursor",
-                        "nextCursor",
-                        "advanced",
-                        "advancedAt"
-                      ],
                       "properties": {
                         "currentCursor": {
                           "anyOf": [
@@ -1104,19 +1321,17 @@
                           ]
                         }
                       },
+                      "required": [
+                        "currentCursor",
+                        "previousCursor",
+                        "nextCursor",
+                        "advanced",
+                        "advancedAt"
+                      ],
                       "additionalProperties": false
                     },
                     "lease": {
                       "type": "object",
-                      "required": [
-                        "activeLeaseOwner",
-                        "activeLeaseHeartbeatAt",
-                        "activeLeaseExpiresAt",
-                        "contentionCount24h",
-                        "latestContentionAt",
-                        "leaseLossCount24h",
-                        "latestLeaseLossAt"
-                      ],
                       "properties": {
                         "activeLeaseOwner": {
                           "anyOf": [
@@ -1179,31 +1394,37 @@
                           ]
                         }
                       },
+                      "required": [
+                        "activeLeaseOwner",
+                        "activeLeaseHeartbeatAt",
+                        "activeLeaseExpiresAt",
+                        "contentionCount24h",
+                        "latestContentionAt",
+                        "leaseLossCount24h",
+                        "latestLeaseLossAt"
+                      ],
                       "additionalProperties": false
                     },
                     "webhookDeliveries": {
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "required": [
-                          "webhookEndpointId",
-                          "webhookEndpointUrl",
-                          "deliveryState",
-                          "consecutiveFailures",
-                          "pendingDeliveries",
-                          "processingDeliveries",
-                          "failedDeliveries",
-                          "lastDeliveryAt",
-                          "lastDeliveryError"
-                        ],
                         "properties": {
                           "webhookEndpointId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "webhookEndpointUrl": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "deliveryState": {
                             "type": "string",
@@ -1236,15 +1457,22 @@
                             "anyOf": [
                               {
                                 "type": "object",
-                                "required": ["code", "message", "occurredAt", "retryable"],
                                 "properties": {
                                   "code": {
                                     "type": "string",
-                                    "minLength": 1
+                                    "allOf": [
+                                      {
+                                        "minLength": 1
+                                      }
+                                    ]
                                   },
                                   "message": {
                                     "type": "string",
-                                    "minLength": 1
+                                    "allOf": [
+                                      {
+                                        "minLength": 1
+                                      }
+                                    ]
                                   },
                                   "occurredAt": {
                                     "type": "string",
@@ -1254,6 +1482,7 @@
                                     "type": "boolean"
                                   }
                                 },
+                                "required": ["code", "message", "occurredAt", "retryable"],
                                 "additionalProperties": false
                               },
                               {
@@ -1262,6 +1491,17 @@
                             ]
                           }
                         },
+                        "required": [
+                          "webhookEndpointId",
+                          "webhookEndpointUrl",
+                          "deliveryState",
+                          "consecutiveFailures",
+                          "pendingDeliveries",
+                          "processingDeliveries",
+                          "failedDeliveries",
+                          "lastDeliveryAt",
+                          "lastDeliveryError"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -1269,27 +1509,22 @@
                       "anyOf": [
                         {
                           "type": "object",
-                          "required": [
-                            "syncRunId",
-                            "mailboxId",
-                            "startedAt",
-                            "completedAt",
-                            "status",
-                            "detail",
-                            "eventsEmitted",
-                            "leaseOwnerId",
-                            "previousCursor",
-                            "nextCursor",
-                            "cursorAdvanced"
-                          ],
                           "properties": {
                             "syncRunId": {
                               "type": "string",
-                              "minLength": 1
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ]
                             },
                             "mailboxId": {
                               "type": "string",
-                              "minLength": 1
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ]
                             },
                             "startedAt": {
                               "type": "string",
@@ -1379,6 +1614,19 @@
                               ]
                             }
                           },
+                          "required": [
+                            "syncRunId",
+                            "mailboxId",
+                            "startedAt",
+                            "completedAt",
+                            "status",
+                            "detail",
+                            "eventsEmitted",
+                            "leaseOwnerId",
+                            "previousCursor",
+                            "nextCursor",
+                            "cursorAdvanced"
+                          ],
                           "additionalProperties": false
                         },
                         {
@@ -1387,6 +1635,16 @@
                       ]
                     }
                   },
+                  "required": [
+                    "object",
+                    "mailboxId",
+                    "generatedAt",
+                    "lag",
+                    "cursor",
+                    "lease",
+                    "webhookDeliveries",
+                    "latestSyncRun"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1398,26 +1656,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -1429,6 +1702,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -1440,26 +1714,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -1471,6 +1760,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -1490,24 +1780,14 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "id",
-                    "object",
-                    "status",
-                    "mailboxId",
-                    "webhookEndpointId",
-                    "startTime",
-                    "endTime",
-                    "eventsReplayed",
-                    "createdAt",
-                    "startedAt",
-                    "completedAt",
-                    "lastError"
-                  ],
                   "properties": {
                     "id": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "object": {
                       "type": "string",
@@ -1519,11 +1799,19 @@
                     },
                     "mailboxId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "webhookEndpointId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "startTime": {
                       "type": "string",
@@ -1580,6 +1868,20 @@
                       ]
                     }
                   },
+                  "required": [
+                    "id",
+                    "object",
+                    "status",
+                    "mailboxId",
+                    "webhookEndpointId",
+                    "startTime",
+                    "endTime",
+                    "eventsReplayed",
+                    "createdAt",
+                    "startedAt",
+                    "completedAt",
+                    "lastError"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1591,26 +1893,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -1622,6 +1939,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -1633,26 +1951,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -1664,6 +1997,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -1676,21 +2010,41 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["mailboxId", "webhookEndpointId", "startTime", "endTime"],
                 "properties": {
                   "mailboxId": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   },
                   "webhookEndpointId": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   },
                   "startTime": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   },
                   "endTime": {
-                    "$ref": "#/components/schemas/NonEmptyString"
+                    "type": "string",
+                    "allOf": [
+                      {
+                        "minLength": 1
+                      }
+                    ]
                   }
                 },
+                "required": ["mailboxId", "webhookEndpointId", "startTime", "endTime"],
                 "additionalProperties": false
               }
             }
@@ -1720,24 +2074,14 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "id",
-                    "object",
-                    "status",
-                    "mailboxId",
-                    "webhookEndpointId",
-                    "startTime",
-                    "endTime",
-                    "eventsReplayed",
-                    "createdAt",
-                    "startedAt",
-                    "completedAt",
-                    "lastError"
-                  ],
                   "properties": {
                     "id": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "object": {
                       "type": "string",
@@ -1749,11 +2093,19 @@
                     },
                     "mailboxId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "webhookEndpointId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "startTime": {
                       "type": "string",
@@ -1810,6 +2162,20 @@
                       ]
                     }
                   },
+                  "required": [
+                    "id",
+                    "object",
+                    "status",
+                    "mailboxId",
+                    "webhookEndpointId",
+                    "startTime",
+                    "endTime",
+                    "eventsReplayed",
+                    "createdAt",
+                    "startedAt",
+                    "completedAt",
+                    "lastError"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -1821,26 +2187,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -1852,6 +2233,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -1863,26 +2245,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -1894,6 +2291,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -1913,7 +2311,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["object", "data", "nextCursor"],
                   "properties": {
                     "object": {
                       "type": "string",
@@ -1923,40 +2320,44 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "required": [
-                          "id",
-                          "mailboxId",
-                          "threadId",
-                          "providerMessageId",
-                          "subject",
-                          "from",
-                          "snippet",
-                          "receivedAt",
-                          "labelIds"
-                        ],
                         "properties": {
                           "id": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "mailboxId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "threadId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "providerMessageId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "subject": {
                             "type": "string"
                           },
                           "from": {
                             "type": "object",
-                            "required": ["name", "email"],
                             "properties": {
                               "name": {
                                 "anyOf": [
@@ -1970,9 +2371,14 @@
                               },
                               "email": {
                                 "type": "string",
-                                "minLength": 1
+                                "allOf": [
+                                  {
+                                    "minLength": 1
+                                  }
+                                ]
                               }
                             },
+                            "required": ["name", "email"],
                             "additionalProperties": false
                           },
                           "snippet": {
@@ -1986,10 +2392,25 @@
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "minLength": 1
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ]
                             }
                           }
                         },
+                        "required": [
+                          "id",
+                          "mailboxId",
+                          "threadId",
+                          "providerMessageId",
+                          "subject",
+                          "from",
+                          "snippet",
+                          "receivedAt",
+                          "labelIds"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -2004,6 +2425,7 @@
                       ]
                     }
                   },
+                  "required": ["object", "data", "nextCursor"],
                   "additionalProperties": false
                 }
               }
@@ -2015,26 +2437,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -2046,6 +2483,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -2073,7 +2511,12 @@
             "in": "query",
             "name": "mailboxId",
             "schema": {
-              "$ref": "#/components/schemas/NonEmptyString"
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
             },
             "required": true
           }
@@ -2102,40 +2545,44 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "id",
-                    "mailboxId",
-                    "threadId",
-                    "providerMessageId",
-                    "subject",
-                    "from",
-                    "snippet",
-                    "receivedAt",
-                    "labelIds"
-                  ],
                   "properties": {
                     "id": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "mailboxId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "threadId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "providerMessageId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "subject": {
                       "type": "string"
                     },
                     "from": {
                       "type": "object",
-                      "required": ["name", "email"],
                       "properties": {
                         "name": {
                           "anyOf": [
@@ -2149,9 +2596,14 @@
                         },
                         "email": {
                           "type": "string",
-                          "minLength": 1
+                          "allOf": [
+                            {
+                              "minLength": 1
+                            }
+                          ]
                         }
                       },
+                      "required": ["name", "email"],
                       "additionalProperties": false
                     },
                     "snippet": {
@@ -2165,10 +2617,25 @@
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "minLength": 1
+                        "allOf": [
+                          {
+                            "minLength": 1
+                          }
+                        ]
                       }
                     }
                   },
+                  "required": [
+                    "id",
+                    "mailboxId",
+                    "threadId",
+                    "providerMessageId",
+                    "subject",
+                    "from",
+                    "snippet",
+                    "receivedAt",
+                    "labelIds"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2180,26 +2647,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -2211,6 +2693,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -2222,26 +2705,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -2253,6 +2751,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -2272,7 +2771,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["object", "data", "nextCursor"],
                   "properties": {
                     "object": {
                       "type": "string",
@@ -2282,18 +2780,14 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "required": [
-                          "id",
-                          "object",
-                          "mailboxId",
-                          "providerThreadId",
-                          "subject",
-                          "lastMessageAt"
-                        ],
                         "properties": {
                           "id": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "object": {
                             "type": "string",
@@ -2301,11 +2795,19 @@
                           },
                           "mailboxId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "providerThreadId": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "subject": {
                             "type": "string"
@@ -2315,6 +2817,14 @@
                             "format": "date-time"
                           }
                         },
+                        "required": [
+                          "id",
+                          "object",
+                          "mailboxId",
+                          "providerThreadId",
+                          "subject",
+                          "lastMessageAt"
+                        ],
                         "additionalProperties": false
                       }
                     },
@@ -2329,6 +2839,7 @@
                       ]
                     }
                   },
+                  "required": ["object", "data", "nextCursor"],
                   "additionalProperties": false
                 }
               }
@@ -2340,26 +2851,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -2371,6 +2897,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -2398,7 +2925,12 @@
             "in": "query",
             "name": "mailboxId",
             "schema": {
-              "$ref": "#/components/schemas/NonEmptyString"
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1
+                }
+              ]
             },
             "required": true
           }
@@ -2427,19 +2959,14 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "id",
-                    "object",
-                    "mailboxId",
-                    "providerThreadId",
-                    "subject",
-                    "lastMessageAt",
-                    "messages"
-                  ],
                   "properties": {
                     "id": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "object": {
                       "type": "string",
@@ -2447,11 +2974,19 @@
                     },
                     "mailboxId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "providerThreadId": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "subject": {
                       "type": "string"
@@ -2464,11 +2999,14 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "required": ["id", "subject", "receivedAt"],
                         "properties": {
                           "id": {
                             "type": "string",
-                            "minLength": 1
+                            "allOf": [
+                              {
+                                "minLength": 1
+                              }
+                            ]
                           },
                           "subject": {
                             "type": "string"
@@ -2478,10 +3016,20 @@
                             "format": "date-time"
                           }
                         },
+                        "required": ["id", "subject", "receivedAt"],
                         "additionalProperties": false
                       }
                     }
                   },
+                  "required": [
+                    "id",
+                    "object",
+                    "mailboxId",
+                    "providerThreadId",
+                    "subject",
+                    "lastMessageAt",
+                    "messages"
+                  ],
                   "additionalProperties": false
                 }
               }
@@ -2493,26 +3041,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -2524,6 +3087,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }
@@ -2535,26 +3099,41 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "properties": {
                     "type": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "title": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "status": {
                       "type": "integer"
                     },
                     "code": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "detail": {
                       "type": "string",
-                      "minLength": 1
+                      "allOf": [
+                        {
+                          "minLength": 1
+                        }
+                      ]
                     },
                     "resource": {
                       "type": "object",
@@ -2566,6 +3145,7 @@
                       "type": "boolean"
                     }
                   },
+                  "required": ["type", "title", "status", "code", "detail", "retryable"],
                   "additionalProperties": false
                 }
               }

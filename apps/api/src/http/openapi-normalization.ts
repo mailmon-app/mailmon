@@ -33,6 +33,51 @@ const liftJsonSchemaDefsToComponents = (value: unknown, components: JsonObject) 
   }
 };
 
+const rewriteJsonSchemaDefsRefs = (value: unknown) => {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      rewriteJsonSchemaDefsRefs(item);
+    }
+
+    return;
+  }
+
+  if (!isJsonObject(value)) {
+    return;
+  }
+
+  if (typeof value.$ref === "string" && value.$ref.startsWith("#/$defs/")) {
+    value.$ref = value.$ref.replace("#/$defs/", "#/components/schemas/");
+  }
+
+  for (const child of Object.values(value)) {
+    rewriteJsonSchemaDefsRefs(child);
+  }
+};
+
+const removeUndefinedProperties = (value: unknown) => {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      removeUndefinedProperties(item);
+    }
+
+    return;
+  }
+
+  if (!isJsonObject(value)) {
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (child === undefined) {
+      delete value[key];
+      continue;
+    }
+
+    removeUndefinedProperties(child);
+  }
+};
+
 const hasOnlyCamelCaseProperties = (schema: JsonObject) => {
   if (!Array.isArray(schema.required)) {
     return false;
@@ -78,6 +123,27 @@ const preferCamelCaseRequestSchemas = (value: unknown) => {
 const preferCamelCaseQueryParameters = (specs: JsonObject) => {
   const paths = isJsonObject(specs.paths) ? specs.paths : {};
 
+  const removeNullFromQuerySchema = (schema: JsonObject) => {
+    if (!Array.isArray(schema.anyOf)) {
+      return;
+    }
+
+    const nonNullSchemas = schema.anyOf.filter((option) => {
+      return !isJsonObject(option) || option.type !== "null";
+    });
+
+    if (nonNullSchemas.length === 1 && isJsonObject(nonNullSchemas[0])) {
+      for (const key of Object.keys(schema)) {
+        delete schema[key];
+      }
+
+      Object.assign(schema, nonNullSchemas[0]);
+      return;
+    }
+
+    schema.anyOf = nonNullSchemas;
+  };
+
   for (const [path, pathItem] of Object.entries(paths)) {
     if (!isJsonObject(pathItem)) {
       continue;
@@ -97,10 +163,12 @@ const preferCamelCaseQueryParameters = (specs: JsonObject) => {
           continue;
         }
 
+        if (isJsonObject(parameter.schema)) {
+          removeNullFromQuerySchema(parameter.schema);
+        }
+
         if (parameter.name === "limit" && isJsonObject(parameter.schema)) {
-          parameter.schema.type = "integer";
-          parameter.schema.minimum = 1;
-          parameter.schema.maximum = 100;
+          parameter.schema = { type: "integer", minimum: 1, maximum: 100 };
           delete parameter.description;
         }
 
@@ -121,6 +189,8 @@ export const normalizeOpenApiDocument = (specs: JsonObject) => {
   preferCamelCaseRequestSchemas(specs);
   preferCamelCaseQueryParameters(specs);
   liftJsonSchemaDefsToComponents(specs, schemas);
+  rewriteJsonSchemaDefsRefs(specs);
+  removeUndefinedProperties(specs);
 
   components.schemas = schemas;
   specs.components = components;

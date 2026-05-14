@@ -217,12 +217,24 @@ describe("OpenAPI normalization policy", () => {
           get: {
             parameters: [
               { name: "mailbox_id", in: "query", schema: { type: "string" } },
-              { name: "mailboxId", in: "query", required: false, schema: { type: "string" } },
+              {
+                name: "cursor",
+                in: "query",
+                schema: { anyOf: [{ type: "string" }, { type: "null" }] },
+              },
+              {
+                name: "mailboxId",
+                in: "query",
+                required: false,
+                schema: {
+                  anyOf: [{ type: "string", allOf: [{ minLength: 1 }] }, { type: "null" }],
+                },
+              },
               {
                 name: "limit",
                 in: "query",
                 description: "Generated limit description",
-                schema: { type: "number" },
+                schema: { anyOf: [{ type: "string" }, { type: "null" }] },
               },
             ],
           },
@@ -241,7 +253,13 @@ describe("OpenAPI normalization policy", () => {
     const replayOperation = schemaAt(document, ["paths", "/v1/replays", "get"]);
 
     expect(messageOperation.parameters).toEqual([
-      { name: "mailboxId", in: "query", required: true, schema: { type: "string" } },
+      { name: "cursor", in: "query", schema: { type: "string" } },
+      {
+        name: "mailboxId",
+        in: "query",
+        required: true,
+        schema: { type: "string", allOf: [{ minLength: 1 }] },
+      },
       { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
     ]);
     expect(replayOperation.parameters).toEqual([
@@ -293,6 +311,9 @@ describe("OpenAPI normalization policy", () => {
     ]);
 
     expect(responseSchema).not.toHaveProperty("$defs");
+    expect(schemaAt(responseSchema, ["properties", "data"])).toEqual({
+      $ref: "#/components/schemas/Message",
+    });
     expect(schemaAt(document, ["components", "schemas", "Message"])).toEqual({
       type: "object",
     });
