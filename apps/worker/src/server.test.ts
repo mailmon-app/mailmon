@@ -114,7 +114,7 @@ const defaultProcessGmailPushNotification = async (notification: GmailPushNotifi
 interface GcpVerifiedTokenFixture {
   readonly audience: string;
   readonly email: string;
-  readonly emailVerified: boolean;
+  readonly emailVerified: boolean | null;
   readonly issuer: string;
 }
 
@@ -135,6 +135,12 @@ const gcpVerifiedTokens: Readonly<Record<string, GcpVerifiedTokenFixture>> = {
     audience: "https://worker.example.com",
     email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
     emailVerified: false,
+    issuer: "https://accounts.google.com",
+  },
+  "missing-email-verification-token": {
+    audience: "https://worker.example.com",
+    email: "scheduler@mailmon-staging.iam.gserviceaccount.com",
+    emailVerified: null,
     issuer: "https://accounts.google.com",
   },
   "valid-scheduler-token": {
@@ -508,22 +514,24 @@ describe("startWorkerHttpRuntime", () => {
   it("rejects internal auth tokens without a verified service account in gcp mode", async () => {
     const runtime = await startGcpWorkerTestRuntime();
 
-    const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
-      method: "POST",
-      headers: {
-        authorization: "Bearer unverified-email-token",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        mailboxId: "mbx_demo",
-      }),
-    });
+    for (const token of ["unverified-email-token", "missing-email-verification-token"]) {
+      const response = await fetch(`http://${runtime.host}:${runtime.port}/internal/sync`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          mailboxId: "mbx_demo",
+        }),
+      });
 
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      code: "worker_internal_auth_forbidden",
-      detail: "The internal worker authorization token is missing a verified service account.",
-    });
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        code: "worker_internal_auth_forbidden",
+        detail: "The internal worker authorization token is missing a verified service account.",
+      });
+    }
   });
 
   it("preserves retryable sync failures across the internal http boundary", async () => {

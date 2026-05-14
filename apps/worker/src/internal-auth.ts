@@ -161,7 +161,7 @@ export const authorizeInternalRequest = async (
     };
   }
 
-  if (verifiedToken.email === null || verifiedToken.emailVerified === false) {
+  if (verifiedToken.email === null || verifiedToken.emailVerified !== true) {
     return {
       authorized: false,
       body: {
