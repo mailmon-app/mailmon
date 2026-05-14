@@ -1,4 +1,3 @@
-import type * as Mailmon from "../../index.js";
 /**
  * @example
  *     {
@@ -6,6 +5,6 @@ import type * as Mailmon from "../../index.js";
  *     }
  */
 export interface PostV1WebhookEndpointsRequest {
-    url: Mailmon.NonEmptyString;
-    description?: Mailmon.NonEmptyString | null;
+    url: string;
+    description?: string | null;
 }

@@ -1,4 +1,3 @@
-import type * as Mailmon from "../../index.mjs";
 /**
  * @example
  *     {
@@ -9,8 +8,8 @@ import type * as Mailmon from "../../index.mjs";
  *     }
  */
 export interface PostV1ReplaysRequest {
-    mailboxId: Mailmon.NonEmptyString;
-    webhookEndpointId: Mailmon.NonEmptyString;
-    startTime: Mailmon.NonEmptyString;
-    endTime: Mailmon.NonEmptyString;
+    mailboxId: string;
+    webhookEndpointId: string;
+    startTime: string;
+    endTime: string;
 }

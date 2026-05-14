@@ -1,5 +1,6 @@
 package.json
 .fernignore
+CHANGELOG.md
 
 # Custom SDK helpers.
 esm/webhooks.mjs

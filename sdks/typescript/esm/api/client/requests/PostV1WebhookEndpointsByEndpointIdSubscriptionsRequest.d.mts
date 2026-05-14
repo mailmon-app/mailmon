@@ -1,4 +1,3 @@
-import type * as Mailmon from "../../index.mjs";
 /**
  * @example
  *     {
@@ -9,7 +8,7 @@ import type * as Mailmon from "../../index.mjs";
  */
 export interface PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest {
     endpointId: string;
-    mailboxIds: Mailmon.NonEmptyString[];
+    mailboxIds: string[];
     eventTypes: PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest.EventTypes.Item[];
 }
 export declare namespace PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest {

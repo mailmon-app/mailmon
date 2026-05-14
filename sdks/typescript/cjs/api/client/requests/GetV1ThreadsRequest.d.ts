@@ -1,4 +1,3 @@
-import type * as Mailmon from "../../index.js";
 /**
  * @example
  *     {
@@ -8,5 +7,5 @@ import type * as Mailmon from "../../index.js";
 export interface GetV1ThreadsRequest {
     cursor?: string;
     limit?: number;
-    mailboxId: Mailmon.NonEmptyString;
+    mailboxId: string;
 }
