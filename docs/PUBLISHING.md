@@ -67,6 +67,7 @@ For each package (`@mailmon.dev/sdk` and `@mailmon.dev/cli`), an organization ad
 ## Local Configuration Highlights
 
 - **`fern/generators.yml`**: Configured to output the TypeScript SDK into `../sdks/typescript` using `local-file-system`. `outputSourceFiles` is set to `false` so Fern pre-compiles CommonJS and ESM modules, avoiding a separate build step before publishing.
+- **`sdks/typescript/.fernignore`**: Protects custom SDK helper files and `CHANGELOG.md` during Fern regeneration. Generated SDK type fixes should come from the OpenAPI source or documented Fern overrides, not post-generation edits.
 - **`apps/cli/tsdown.config.ts`**: The CLI is bundled into a standalone ESM executable (`dist/index.mjs`) using `tsdown`.
 - **`apps/cli/package.json`**: All internal monorepo packages (e.g., `@mailmon/core`) are configured as `devDependencies` so `tsdown` completely inlines them into the final CLI bundle.
 - **`.changeset/config.json`**: Configures `access` to `public` so changesets publishes packages publicly.
