@@ -15,7 +15,7 @@ catalog:
   google-auth-library: ^10.6.2
   typescript: ^6.0.3
   varlock: ^1.1.0
-enableGlobalVirtualStore: true
+enableGlobalVirtualStore: false
 
 engineStrict: true
 
