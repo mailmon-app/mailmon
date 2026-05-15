@@ -65,6 +65,14 @@
     "overrides": {
       "esbuild": "^0.25.0",
       "uuid": "^13.0.1"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "@scarf/scarf",
+      "esbuild",
+      "msgpackr-extract",
+      "protobufjs",
+      "sharp"
+    ]
   }
 }
