@@ -6,20 +6,22 @@ This is a debugging log for the staging validation run. It records what was obse
 
 ## Current State
 
-- Staging API URL: `<staging-api-url>`
-- Staging worker URL: `<staging-worker-url>`
-- Connected Mailbox: `<mailbox-id>`
-- Webhook Endpoint: `<webhook-endpoint-id>`
-- Webhook Receiver URL: `<webhook-receiver-url>`
-- Webhook Subscription: `<webhook-subscription-id>`
-- Mailbox watch is active.
+- Staging API URL: `https://mailmon-api-nsi5aiqucq-uc.a.run.app`
+- Staging worker URL: `https://mailmon-worker-nsi5aiqucq-uc.a.run.app`
+- Deployed API revision validated: `mailmon-api-00039-bkh`
+- Deployed worker revision validated: `mailmon-worker-00039-mhk`
+- Connected Mailbox: `mbx_4c681d1a-a4db-40bc-b281-859f73b3e5b5`
+- Validation Webhook Endpoint: `whe_e8ea23d5-f89c-4fd6-b9ce-d926a8030ad0`
+- Validation Webhook Receiver URL: `https://httpbin.org/post?mailmon_validation=1778773781`
+- Validation Webhook Subscription: `whsub_6763456d-d0c7-47c2-8993-9fe4ce6c9c5c`
+- Latest validation replay: `rpl_0e45b91b-17b9-4566-82e3-8360b7dec254`
+- Mailbox is active, healthy, and has an active Gmail watch.
 - Gmail Push Notifications are reaching the worker.
-- Mailbox sync dispatch now succeeds after the Gmail push decoder fix.
-- Latest observed successful sync: `2026-05-07T06:14:55.386Z`.
-- Existing pending webhook deliveries have now recovered after redeploy.
-- Current remaining validation: completed. Fresh Gmail push/watch and Cloud Tasks webhook delivery are both validated in staging.
+- Existing mailbox reconnect now completes successfully for the same Gmail account.
+- Cloud Tasks webhook delivery is validated in staging after the refactor.
+- Current remaining validation: optional fresh real Gmail event if we want a human-sent email after reconnect. Reconnect-triggered sync, watch renewal, Cloud Tasks delivery, and webhook delivery have all been validated.
 
-Latest observability snapshot showed:
+Latest pre-refactor observability snapshot showed:
 
 ```text
 lastSuccessfulSyncAt: 2026-05-07T06:14:55.386Z
@@ -28,6 +30,203 @@ syncState: healthy
 currentCursor: 5125
 pendingDeliveries: 7
 lastDeliveryAt: null
+```
+
+Latest post-refactor validation snapshot from 2026-05-14:
+
+```text
+status: reconnect_required
+syncState: failed
+watchState: active
+lastSuccessfulSyncAt: 2026-05-14T00:20:58.094Z
+lastErrorCode: gmail_token_refresh_reconnect_required
+currentCursor: 5417
+latestSyncRun: sr_12b7d18e-07a6-467f-8fac-86dff05e9fe2
+latestSyncRunStatus: reconnect_required
+validationEndpointDeliveryState: healthy
+validationEndpointPendingDeliveries: 0
+validationEndpointFailedDeliveries: 0
+validationEndpointLastDeliveryAt: 2026-05-14T15:50:16.064Z
+```
+
+## 2026-05-14 Post-Refactor Validation Run
+
+This run validated the currently deployed staging revisions after the refactor:
+
+```text
+api: mailmon-api-00038-v9q
+worker: mailmon-worker-00038-l8g
+```
+
+Public API workflows validated successfully:
+
+- Fresh workspace API key creation for `ws_staging_test`.
+- `GET /v1/mailboxes/:mailboxId`.
+- `GET /v1/mailboxes/:mailboxId/observability`.
+- `GET /v1/mailboxes/:mailboxId/sync-runs`.
+- `GET /v1/messages?mailboxId=...` and `GET /v1/messages/:messageId`.
+- `GET /v1/threads?mailboxId=...` and `GET /v1/threads/:threadId`.
+- `POST /v1/mailboxes/connect-sessions` returned a valid connect session and connect URL.
+- `POST /v1/webhook-endpoints` created validation endpoint `whe_e8ea23d5-f89c-4fd6-b9ce-d926a8030ad0`.
+- `POST /v1/webhook-endpoints/:endpointId/subscriptions` created subscription `whsub_6763456d-d0c7-47c2-8993-9fe4ce6c9c5c`.
+- `POST /v1/replays` created replay `rpl_0e45b91b-17b9-4566-82e3-8360b7dec254`.
+- `GET /v1/replays/:replayId` showed the replay completed with `eventsReplayed: 2`.
+
+Replay and Cloud Tasks delivery were validated:
+
+```text
+dispatch_replays completedAt: 2026-05-14T15:50:04.987Z
+dispatch_replays scanned: 1
+dispatch_replays dispatched: 1
+dispatch_replays eventsReplayed: 2
+dispatch_replays failed: 0
+```
+
+Worker logs confirmed Cloud Tasks OIDC delivery to the internal worker endpoint:
+
+```text
+2026-05-14T15:50:14.668347Z /internal/webhook-deliveries 200
+2026-05-14T15:50:15.833673Z /internal/webhook-deliveries 200
+```
+
+Database delivery rows confirmed both replay deliveries succeeded:
+
+```text
+del_11fadfbc634e0f1e94b0e2c627c314b4e35d7aa39eaad7437580da385960de92 delivered attemptCount=1 lastResponseStatus=200
+del_819ed2b37bb7010e4762708aff4bd7ea648921111476ee1358fd2fe879602afa delivered attemptCount=1 lastResponseStatus=200
+```
+
+The validation webhook endpoint remained healthy:
+
+```text
+deliveryState: healthy
+consecutiveFailures: 0
+pendingDeliveries: 0
+processingDeliveries: 0
+failedDeliveries: 0
+lastDeliveryAt: 2026-05-14T15:50:16.064Z
+lastDeliveryError: null
+```
+
+Synthetic Gmail Pub/Sub transport was validated:
+
+```bash
+gcloud pubsub topics publish projects/mailmon-dev-494511/topics/gmail-push \
+  --message='{"emailAddress":"mailmon.dev@gmail.com","historyId":5418}'
+```
+
+Worker logs showed the push reached the deployed worker:
+
+```text
+2026-05-14T15:51:18.127170Z /internal/gmail-push 202
+```
+
+No new sync run was created from that push because the mailbox was already in this state:
+
+```text
+status: reconnect_required
+sync_state: failed
+last_error_code: gmail_token_refresh_reconnect_required
+last_error_message: Refreshing the Gmail access token failed because the stored Gmail refresh token is invalid or revoked. The mailbox must be reconnected.
+```
+
+Conclusion:
+
+- The public product API, replay workflow, Cloud Tasks scheduling, worker internal webhook delivery endpoint, and outbound customer webhook delivery path are working on the refactored staging deployment.
+- The live Gmail sync/event-emission workflow is blocked by test-account credentials, not by the deployed async transport. Reconnect the staging Gmail account and send a fresh email to complete the remaining validation.
+
+## 2026-05-14 Reconnect Fix Validation Run
+
+The reconnect fix was deployed and validated on:
+
+```text
+api: mailmon-api-00039-bkh
+worker: mailmon-worker-00039-mhk
+```
+
+Fresh hosted reconnect completed successfully:
+
+```text
+https://example.com/callback?created=false&mailbox_id=mbx_4c681d1a-a4db-40bc-b281-859f73b3e5b5&status=success
+```
+
+Mailbox state after reconnect:
+
+```text
+status: active
+syncState: healthy
+watchState: expired
+lastSuccessfulSyncAt: 2026-05-14T16:24:25.631Z
+lastError: null
+currentCursor: 5675
+previousCursor: 5417
+latestSyncRun: sr_efb9b6ac-72ac-40dd-88b8-d23dab14326e
+latestSyncRunStatus: completed
+eventsEmitted: 9
+```
+
+Worker logs confirmed reconnect-triggered sync and webhook delivery:
+
+```text
+2026-05-14T16:24:25.034335Z /internal/sync 200
+2026-05-14T16:24:26.039840Z /internal/webhook-deliveries 200
+2026-05-14T16:24:26.987974Z /internal/webhook-deliveries 200
+2026-05-14T16:24:27.980901Z /internal/webhook-deliveries 200
+...
+2026-05-14T16:24:42.985289Z /internal/webhook-deliveries 200
+```
+
+The old webhook.site receiver is now failing with HTTP 404, but the active validation receiver remains healthy:
+
+```text
+webhookEndpointId: whe_e8ea23d5-f89c-4fd6-b9ce-d926a8030ad0
+deliveryState: healthy
+consecutiveFailures: 0
+pendingDeliveries: 0
+processingDeliveries: 0
+failedDeliveries: 0
+lastDeliveryAt: 2026-05-14T16:24:43.036Z
+lastDeliveryError: null
+```
+
+Manual watch-renewal validation:
+
+```bash
+gcloud scheduler jobs run mailmon-renew-gmail-watches --location=us-central1
+```
+
+Worker logs confirmed scheduler invocation:
+
+```text
+2026-05-14T16:25:24.064265Z /internal/control-jobs 200
+```
+
+Final mailbox state:
+
+```text
+status: active
+syncState: healthy
+watchState: active
+watchExpirationAt: 2026-05-21T16:25:24.303Z
+watchLastRenewedAt: 2026-05-14T16:25:24.080Z
+watchLastHistoryId: 5675
+cursor: 5675
+lastSuccessfulSyncAt: 2026-05-14T16:25:25.691Z
+lastError: null
+```
+
+Final observability snapshot:
+
+```text
+lag.status: active
+lag.syncState: healthy
+lag.watchState: active
+latestSyncRun: sr_da6279b9-82a1-4101-ac3d-722f6c79a5e7
+latestSyncRunStatus: completed
+latestSyncRunEventsEmitted: 0
+validationEndpointDeliveryState: healthy
+validationEndpointPendingDeliveries: 0
+validationEndpointFailedDeliveries: 0
 ```
 
 ## Progress Made
