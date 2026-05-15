@@ -21,6 +21,9 @@
       "path": "./apps/cli/tsconfig.json"
     },
     {
+      "path": "./apps/marketing/tsconfig.json"
+    },
+    {
       "path": "./packages/config/tsconfig.json"
     },
     {
