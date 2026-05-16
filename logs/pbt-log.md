@@ -33,3 +33,35 @@ Completed phase 1 from `plans/antithesis-pbt-implementation-plan.md`.
 
 - Consulted `effect-solutions` before touching test code, per repo instructions.
 - Used local Hegel source in `.repos/hegel` to confirm `tc.note(...)` final-replay behavior and available settings.
+
+## 2026-05-17 - Phase 2 DB-Backed Mailbox Commit Safety
+
+Completed phase 2 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Added `packages/db/src/mailbox-sync-commit.pbt.test.ts`.
+- Added generated DB-backed coverage for:
+  - `cursor-never-regresses`
+  - `lease-loss-prevents-stale-commit`
+  - `state-cursor-events-commit-atomically`
+  - `sync-snapshot-application-is-idempotent`
+  - the DB-backed `label-ids-are-normalized` gap
+- The generator builds bounded mailbox sync snapshots with one mailbox, one to three thread domains, zero to six messages, small provider ID domains, ordered received timestamps, duplicate/reordered label arrays, deleted ID domains, and cursor families spanning null, decimals, prefixed ordinals, equal values, and arbitrary text.
+- The generated assertions inspect real PostgreSQL state after commits: mailbox cursor and lease fields, sync run completion, canonical message/thread rows, mailbox event rows, event payload label normalization, rollback behavior, stale lease no-op behavior, and idempotent reapplication behavior.
+- Added structured `tc.note(...)` context for every generated property family so shrunk failures include cursor pairs, stale lease family, snapshot sizes, deleted IDs, and label variants.
+
+### Verification
+
+- `pnpm --filter @mailmon/db test -- src/mailbox-sync-commit.pbt.test.ts` - passed
+- `pnpm --filter @mailmon/db test -- src/mailbox-event-emission.test.ts` - passed
+- `PBT_TEST_CASES=5 pnpm --filter @mailmon/db test -- src/mailbox-sync-commit.pbt.test.ts` - passed after final formatting/type fixes
+- `pnpm typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm format:check` - passed
+
+### Notes
+
+- Consulted `effect-solutions` before writing the Effect-backed test helper code, per repo instructions.
+- The user-referenced `./repos/hegel` path was not present; the local Hegel source is available at `.repos/hegel` and was used for generator/API context.
+- The DB package's Vitest invocation runs the full DB test set even when a specific file argument is supplied; the targeted commands reported `12 passed` test files and `55 passed` tests.
