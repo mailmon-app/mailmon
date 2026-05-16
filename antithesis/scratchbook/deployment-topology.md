@@ -1,10 +1,14 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: a4771cd562e5e48b412528096145a598a04de828
-updated: 2026-05-16
+commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
     why: User-requested TypeScript property-based testing client; inspected README and source at e58959ae567cf49aaddabe2e04a5819c8e6f6850.
+  - path: /home/satty/projects/mailmon-dev/.repos/hegel
+    why: Local Hegel source used to verify runner settings, shrinking diagnostics, and Antithesis-output limitations in version 0.2.2.
+  - path: /home/satty/projects/mailmon-dev/.repos/effect
+    why: Local Effect source consulted for @effect/vitest and Effect testing patterns.
   - path: https://github.com/antithesishq/bombadil
     why: User-requested browser/UI property-based testing tool; inspected README and manual at ad98c7b5c36c6889dd05db4f08034b48374dda4a.
   - path: https://antithesis.com/docs/properties_assertions/assertions/
@@ -25,7 +29,7 @@ external_references:
 
 ## Summary
 
-Because there is no Antithesis platform access, the useful topology is local/CI PBT. Keep Hegel properties as normal Vitest suites. Use Bombadil as an optional browser fuzzer against docs/marketing servers. A future Antithesis topology is included only so later setup work has a concrete handoff.
+Because there is no Antithesis platform access, the useful topology is local/CI PBT. Hegel properties now run as normal Vitest suites in the package test path. Use Bombadil as an optional browser fuzzer against docs/marketing servers later. A future Antithesis topology is included only so later setup work has a concrete handoff.
 
 ## Local Hegel Topologies
 
@@ -110,6 +114,7 @@ Do not add Redis to the PBT topology unless testing `legacy_bullmq`; the current
 - Local/CI PBT is the requested deliverable; Antithesis container layout is only future context.
 - DB-backed PBT should start with one Postgres instance because the system's distributed risk is mostly in application-level leasing and transport retries, not DB replication.
 - Test data must be synthetic and should not use real Gmail accounts.
+- GitHub Actions currently caches pnpm, not Hegel's `~/.cache/hegel`; add a cache or `uv` setup step if Hegel cold starts become flaky or slow.
 
 ## Open Questions
 

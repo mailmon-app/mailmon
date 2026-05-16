@@ -12,11 +12,13 @@ Generate attempt counts and failure kinds. Retryable failures before max attempt
 
 ## PBT Implementation Notes
 
-Use pure Hegel properties over classification functions with generated timestamps, status codes, and failure records. Assert monotonic delay by comparing adjacent generated attempt counts.
+Implemented in `packages/core/src/webhook-delivery-execution.pbt.test.ts` with pure Hegel properties over classification functions, generated status/failure families, and adjacent attempt-count comparisons.
+
+Next improvement: add `tc.note` for attempt count, status code, and failure code so shrunk failures report the generated boundary case directly.
 
 ## SUT-Side Instrumentation
 
-Missing. Future `Always` assertion point: any retryable pending completion has `nextAttemptAt > completedAt` and delay <= 900000 ms.
+Native Antithesis SDK instrumentation is missing. Local Hegel workload exists. Future `Always` assertion point: any retryable pending completion has `nextAttemptAt > completedAt` and delay <= 900000 ms.
 
 ## Open Questions
 

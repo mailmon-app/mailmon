@@ -11,11 +11,11 @@ Generate baseline messages, catch-up changed messages, and catch-up deleted IDs.
 
 ## PBT Implementation Notes
 
-Use Hegel generators for Gmail message records with duplicate IDs across baseline/catch-up. Check set equality against the expected map of non-deleted latest records.
+Implemented in `packages/gmail/src/history.pbt.test.ts` with Hegel generators for Gmail message records with duplicate IDs across baseline/catch-up. The property checks set equality against the expected map of non-deleted latest records.
 
 ## SUT-Side Instrumentation
 
-Missing. Future `Always` assertion point after merge: no merged message ID is present in catch-up deleted IDs.
+Native Antithesis SDK instrumentation is missing. Local Hegel workload exists. Future `Always` assertion point after merge: no merged message ID is present in catch-up deleted IDs.
 
 ## Open Questions
 

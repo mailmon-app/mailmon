@@ -1,10 +1,14 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: a4771cd562e5e48b412528096145a598a04de828
-updated: 2026-05-16
+commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
     why: User-requested TypeScript property-based testing client; inspected README and source at e58959ae567cf49aaddabe2e04a5819c8e6f6850.
+  - path: /home/satty/projects/mailmon-dev/.repos/hegel
+    why: Local Hegel source used to verify runner settings, shrinking diagnostics, and Antithesis-output limitations in version 0.2.2.
+  - path: /home/satty/projects/mailmon-dev/.repos/effect
+    why: Local Effect source consulted for @effect/vitest and Effect testing patterns.
   - path: https://github.com/antithesishq/bombadil
     why: User-requested browser/UI property-based testing tool; inspected README and manual at ad98c7b5c36c6889dd05db4f08034b48374dda4a.
   - path: https://antithesis.com/docs/properties_assertions/assertions/
@@ -94,7 +98,7 @@ The current suite already has useful example-based and integration coverage:
 - Sandbox E2E in `apps/api/src/sandbox-e2e.test.ts`.
 - Worker route tests in `apps/worker/src/server.test.ts`.
 
-The repo docs explicitly list deterministic simulation/PBT as remaining work: concurrent mailbox sync contention and randomized out-of-order Gmail history sequences. This catalog expands that into a concrete Hegel-first property set.
+The repo docs explicitly list deterministic simulation/PBT as remaining work: concurrent mailbox sync contention and randomized out-of-order Gmail history sequences. The current worktree now has a first Hegel increment for pure/backend-adjacent properties; concurrent mailbox sync contention remains the main missing PBT target.
 
 ## Hegel Fit
 
@@ -104,7 +108,7 @@ Hegel is a good match for this repo because it:
 - Has async test support for Effect programs and DB-backed tests.
 - Provides generators for primitive, collection, record, composite, optional, one-of, text, email, domain, URL, date/time, and binary values.
 - Shrinks counterexamples and supports `tc.note` for final replay diagnostics.
-- Emits Antithesis-style `sdk.jsonl` assertions when `ANTITHESIS_OUTPUT_DIR` and `.testLocation(...)` are used, which keeps tests portable if platform access appears later.
+- Has internal Antithesis-style `sdk.jsonl` output when `ANTITHESIS_OUTPUT_DIR` and `.testLocation(...)` are used, but Hegel 0.2.2 does not expose that builder through the package root. Treat this as future portability context, not current instrumentation.
 
 Recommended local pattern:
 
@@ -142,7 +146,7 @@ Do not use Bombadil as a substitute for Hegel tests over `@mailmon/core`, `@mail
 ## Assumptions
 
 - The PBT implementation should not require Antithesis platform access.
-- Hegel should be added as a dev dependency only when implementation starts.
+- Hegel has been added as a dev dependency in `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db` in the current uncommitted worktree.
 - Bombadil should be added only for browser-facing specs, not backend properties.
 - DB-backed properties can reuse `withIsolatedDatabasePromise` / `withIsolatedDatabaseEffect`.
 - The untracked `apps/marketing` app is treated as optional until committed.

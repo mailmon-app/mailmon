@@ -1,10 +1,14 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: a4771cd562e5e48b412528096145a598a04de828
-updated: 2026-05-16
+commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
     why: User-requested TypeScript property-based testing client; inspected README and source at e58959ae567cf49aaddabe2e04a5819c8e6f6850.
+  - path: /home/satty/projects/mailmon-dev/.repos/hegel
+    why: Local Hegel source used to verify runner settings, shrinking diagnostics, and Antithesis-output limitations in version 0.2.2.
+  - path: /home/satty/projects/mailmon-dev/.repos/effect
+    why: Local Effect source consulted for @effect/vitest and Effect testing patterns.
   - path: https://github.com/antithesishq/bombadil
     why: User-requested browser/UI property-based testing tool; inspected README and manual at ad98c7b5c36c6889dd05db4f08034b48374dda4a.
   - path: https://antithesis.com/docs/properties_assertions/assertions/
@@ -25,7 +29,7 @@ external_references:
 
 ## Summary
 
-The properties cluster around four implementation areas: mailbox sync execution, Gmail projection, webhook/replay durability, and protocol/read surfaces. The Bombadil browser property is intentionally separate because it tests documentation/customer-facing behavior rather than backend state correctness.
+The properties cluster around four implementation areas: mailbox sync execution, Gmail projection, webhook/replay durability, and protocol/read surfaces. The first implemented Hegel increment covers mostly Gmail projection, protocol/read surfaces, and webhook retry classification; mailbox sync execution and DB-backed webhook/replay durability remain the next highest-value clusters. The Bombadil browser property is intentionally separate because it tests documentation/customer-facing behavior rather than backend state correctness.
 
 ## Cluster: Mailbox Execution Safety
 

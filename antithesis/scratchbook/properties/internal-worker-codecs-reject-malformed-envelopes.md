@@ -12,11 +12,13 @@ Generate arbitrary JSON-like payloads, invalid base64, missing `message.data`, e
 
 ## PBT Implementation Notes
 
-Use Hegel recursive JSON generators bounded by size. Include generator combinators for valid payloads so the property checks both rejection and acceptance paths.
+Implemented in `packages/core/src/internal-message-codec.pbt.test.ts` with recursive JSON generators bounded by size plus generated valid payloads for direct, Pub/Sub, dead-letter, webhook, control, and Gmail push paths.
+
+Next improvement: add `tc.note` for malformed kind and generated payload shape so shrunk decoder failures are easier to triage.
 
 ## SUT-Side Instrumentation
 
-Missing. Future `AlwaysOrUnreachable` assertion point in worker route interpreter: decoded requests reaching processors have non-empty IDs and supported kinds.
+Native Antithesis SDK instrumentation is missing. Local Hegel workload exists. Future `AlwaysOrUnreachable` assertion point in worker route interpreter: decoded requests reaching processors have non-empty IDs and supported kinds.
 
 ## Open Questions
 

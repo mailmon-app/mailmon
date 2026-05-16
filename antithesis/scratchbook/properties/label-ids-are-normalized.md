@@ -12,11 +12,13 @@ Generate arrays of label IDs with duplicates, empty-ish variants excluded, and r
 
 ## PBT Implementation Notes
 
-Use a pure Hegel property over normalization plus a DB-backed idempotency property that changes only label order/duplicates between snapshots.
+Partially implemented. `packages/db/src/persistence/canonical-state-mappers.pbt.test.ts` covers pure normalization plus row and event mapper output. `packages/gmail/src/history.pbt.test.ts` covers Gmail projection preserving generated label arrays before DB normalization.
+
+Remaining improvement: add a DB-backed idempotency property that changes only label order/duplicates between snapshots and asserts no false message update event is emitted.
 
 ## SUT-Side Instrumentation
 
-Missing. Future `Always` assertion point: before emitting a message event, assert payload `labelIds` equals `normalizeLabelIds(payload.labelIds)`.
+Native Antithesis SDK instrumentation is missing. Local Hegel workload is partially present. Future `Always` assertion point: before emitting a message event, assert payload `labelIds` equals `normalizeLabelIds(payload.labelIds)`.
 
 ## Open Questions
 

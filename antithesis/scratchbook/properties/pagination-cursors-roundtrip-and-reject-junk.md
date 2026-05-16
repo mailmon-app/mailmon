@@ -12,11 +12,13 @@ Generate valid cursor positions and invalid strings. Valid values must round-tri
 
 ## PBT Implementation Notes
 
-Use pure Hegel tests with `gs.text`, `gs.datetimes`, and structured records. Add mutation generators that corrupt prefix, payload shape, ID, and timestamp.
+Implemented in `packages/db/src/persistence/pagination-cursors.pbt.test.ts` with pure Hegel tests over generated IDs, canonical timestamps, and mutation families that corrupt prefix, payload shape, ID, and timestamp.
+
+Next improvement: add `tc.note` for the selected malformed cursor family so shrunk failures explain which cursor invariant was under test.
 
 ## SUT-Side Instrumentation
 
-Missing. Future `AlwaysOrUnreachable` assertion point in public list handlers: any decoded cursor has non-empty ID and parseable timestamp.
+Native Antithesis SDK instrumentation is missing. Local Hegel workload exists. Future `AlwaysOrUnreachable` assertion point in public list handlers: any decoded cursor has non-empty ID and parseable timestamp.
 
 ## Open Questions
 

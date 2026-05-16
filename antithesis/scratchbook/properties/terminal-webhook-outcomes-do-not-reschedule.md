@@ -12,11 +12,13 @@ Generate terminal HTTP responses and sender failures. No terminal classification
 
 ## PBT Implementation Notes
 
-Use pure Hegel classification properties plus a small service-layer test with a fake scheduler that records calls. The fake scheduler must see zero calls for terminal completions.
+Partially implemented in `packages/core/src/webhook-delivery-execution.pbt.test.ts`. Current Hegel coverage verifies terminal classifications have `nextAttemptAt: null` and never return `scheduled_for_retry`.
+
+Remaining improvement: add a small service-layer test with a fake scheduler that records calls. The fake scheduler must see zero calls for terminal completions.
 
 ## SUT-Side Instrumentation
 
-Missing. Future `Always` assertion point: if result status is `delivered`, `failed`, or `retry_exhausted`, then `nextAttemptAt` is null.
+Native Antithesis SDK instrumentation is missing. Local Hegel workload is partially present. Future `Always` assertion point: if result status is `delivered`, `failed`, or `retry_exhausted`, then `nextAttemptAt` is null.
 
 ## Open Questions
 

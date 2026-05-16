@@ -1,10 +1,14 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: a4771cd562e5e48b412528096145a598a04de828
-updated: 2026-05-16
+commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
-    why: User-requested TypeScript property-based testing client; inspected README and source at e58959ae567cf49aaddabe2e04a5819c8e6f6850.
+    why: User-requested TypeScript property-based testing client; inspected README and source at e58959ae567cf49aaddabe2e04a5819c8e6f6850. First workload increment uses npm package @hegeldev/hegel 0.2.2.
+  - path: /home/satty/projects/mailmon-dev/.repos/hegel
+    why: Local Hegel source used to verify runner settings, shrinking diagnostics, and Antithesis-output limitations in version 0.2.2.
+  - path: /home/satty/projects/mailmon-dev/.repos/effect
+    why: Local Effect source consulted for @effect/vitest and Effect testing patterns.
   - path: https://github.com/antithesishq/bombadil
     why: User-requested browser/UI property-based testing tool; inspected README and manual at ad98c7b5c36c6889dd05db4f08034b48374dda4a.
   - path: https://antithesis.com/docs/properties_assertions/assertions/
@@ -26,6 +30,8 @@ external_references:
 ## Summary
 
 This catalog is local PBT first. Hegel should own backend properties through Vitest. Bombadil should own browser-facing docs/marketing properties. Antithesis assertion names are included as semantic labels and future-portability hints, not as a platform dependency.
+
+First Hegel workload increment is implemented for pure backend properties in `packages/core`, `packages/gmail`, and `packages/db`, and passed local package test runs on 2026-05-17. DB-backed concurrency/idempotency properties are now the next meaningful step; browser Bombadil properties remain a later workload increment.
 
 ## Mailbox Sync And Cursor Safety
 
@@ -114,6 +120,7 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 | **Priority**         | High                                                                                                                                                                                                                                 |
 | **Property**         | If Gmail history contains add/update and delete records for the same message in one delta, the deleted result wins.                                                                                                                  |
 | **Invariant**        | `Always`: for generated history record sequences, a message ID that appears in `messagesDeleted` is included in `deletedMessageIds` and excluded from fetched changed messages, regardless of earlier add/label events in the delta. |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/gmail/src/history.pbt.test.ts`; generated history operation sequences exercise `listGmailHistoryDelta` through a fake Gmail client and assert deleted IDs are not fetched or returned.    |
 | **Antithesis Angle** | Gmail history pages can contain duplicates and mixed operations; provider retries can expose unusual ordering.                                                                                                                       |
 | **Why It Matters**   | Delete/update ordering bugs create resurrected messages or missed deletions.                                                                                                                                                         |
 
@@ -129,6 +136,7 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 | **Priority**         | High                                                                                                                                                                                                                      |
 | **Property**         | During initial sync, catch-up deleted message IDs remove baseline messages and suppress catch-up messages with the same IDs.                                                                                              |
 | **Invariant**        | `Always`: for generated baseline message sets and catch-up deltas, `mergeInitialSyncMessages` returns one record per non-deleted provider message ID and never returns a message whose ID is in the catch-up deleted set. |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/gmail/src/history.pbt.test.ts`; generated baseline/catch-up messages and delete sets check set equality against the expected merged model.                                     |
 | **Antithesis Angle** | A message can be deleted between baseline list and catch-up history fetch.                                                                                                                                                |
 | **Why It Matters**   | Initial sync is a race between snapshot and history boundary.                                                                                                                                                             |
 
@@ -153,14 +161,15 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 
 ### label-ids-are-normalized - Label IDs Are Normalized
 
-|                      |                                                                                                                                     |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**             | Safety                                                                                                                              |
-| **Priority**         | Medium                                                                                                                              |
-| **Property**         | Message `labelIds` are stored and emitted as sorted unique sets.                                                                    |
-| **Invariant**        | `Always`: generated label arrays with duplicates and random order normalize identically in message rows and mailbox event payloads. |
-| **Antithesis Angle** | Reordered provider labels should not create false updates or duplicate events.                                                      |
-| **Why It Matters**   | Labels are not a first-class v1 resource, so message payload label stability is the customer-visible contract.                      |
+|                      |                                                                                                                                                                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety                                                                                                                                                                                                                                        |
+| **Priority**         | Medium                                                                                                                                                                                                                                        |
+| **Property**         | Message `labelIds` are stored and emitted as sorted unique sets.                                                                                                                                                                              |
+| **Invariant**        | `Always`: generated label arrays with duplicates and random order normalize identically in message rows and mailbox event payloads.                                                                                                           |
+| **Workload Status**  | Partially implemented with Hegel/Vitest in `packages/db/src/persistence/canonical-state-mappers.pbt.test.ts` plus Gmail projection coverage in `packages/gmail/src/history.pbt.test.ts`; DB-backed false-update/idempotency coverage remains. |
+| **Antithesis Angle** | Reordered provider labels should not create false updates or duplicate events.                                                                                                                                                                |
+| **Why It Matters**   | Labels are not a first-class v1 resource, so message payload label stability is the customer-visible contract.                                                                                                                                |
 
 **Open Questions:**
 
@@ -206,6 +215,7 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 | **Priority**         | High                                                                                                                                                                                                                                                   |
 | **Property**         | Retryable webhook failures schedule the next attempt with monotonic exponential delay capped at the maximum, until retry exhaustion.                                                                                                                   |
 | **Invariant**        | `Always`: generated attempt counts and retryable failure modes produce `pending` completions with nondecreasing `nextAttemptAt` delays below or equal to 15 minutes; attempts at or above max produce terminal `failed` or `retry_exhausted` outcomes. |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/core/src/webhook-delivery-execution.pbt.test.ts`; generated attempt boundaries, retryable status codes, and sender failures check bounded monotonic delays and retry exhaustion.                            |
 | **Antithesis Angle** | Endpoint failures, timeouts, and repeated task retries stress retry state and endpoint health transitions.                                                                                                                                             |
 | **Why It Matters**   | Incorrect retries either drop events or create retry storms.                                                                                                                                                                                           |
 
@@ -215,14 +225,15 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 
 ### terminal-webhook-outcomes-do-not-reschedule - Terminal Webhook Outcomes Do Not Reschedule
 
-|                      |                                                                                                                                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**             | Safety                                                                                                                                                                                                  |
-| **Priority**         | Medium                                                                                                                                                                                                  |
-| **Property**         | Delivered, nonretryable failed, and retry-exhausted webhook outcomes never schedule another delivery attempt.                                                                                           |
-| **Invariant**        | `Always`: generated HTTP status codes and sender failures classify terminal outcomes with `nextAttemptAt: null`, and `finalizeWebhookDelivery` schedules follow-up work only for `pending` completions. |
-| **Antithesis Angle** | Mixed customer endpoint responses can otherwise create impossible terminal-plus-pending states.                                                                                                         |
-| **Why It Matters**   | Prevents duplicate terminal sends and confusing observability state.                                                                                                                                    |
+|                      |                                                                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Type**             | Safety                                                                                                                                                                                                       |
+| **Priority**         | Medium                                                                                                                                                                                                       |
+| **Property**         | Delivered, nonretryable failed, and retry-exhausted webhook outcomes never schedule another delivery attempt.                                                                                                |
+| **Invariant**        | `Always`: generated HTTP status codes and sender failures classify terminal outcomes with `nextAttemptAt: null`, and `finalizeWebhookDelivery` schedules follow-up work only for `pending` completions.      |
+| **Workload Status**  | Partially implemented with Hegel/Vitest in `packages/core/src/webhook-delivery-execution.pbt.test.ts`; terminal classification has generated coverage, while the fake-scheduler service-layer check remains. |
+| **Antithesis Angle** | Mixed customer endpoint responses can otherwise create impossible terminal-plus-pending states.                                                                                                              |
+| **Why It Matters**   | Prevents duplicate terminal sends and confusing observability state.                                                                                                                                         |
 
 **Open Questions:**
 
@@ -262,14 +273,15 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 
 ### internal-worker-codecs-reject-malformed-envelopes - Internal Worker Codecs Reject Malformed Envelopes
 
-|                      |                                                                                                                                                                                                                |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**             | Safety                                                                                                                                                                                                         |
-| **Priority**         | Medium                                                                                                                                                                                                         |
-| **Property**         | Worker internal codecs accept only valid direct, Pub/Sub, and dead-letter payloads and preserve normalized fields.                                                                                             |
-| **Invariant**        | `Always`: generated unknown JSON, invalid base64, missing data, empty IDs, numeric Gmail `historyId`, and valid envelopes decode to either a specific error string or a normalized request with non-empty IDs. |
-| **Antithesis Angle** | Cloud Pub/Sub push, dead-letter replay, and local mode all hit the same HTTP worker routes with different envelope shapes.                                                                                     |
-| **Why It Matters**   | Bad decode behavior can silently drop work or accept malformed work.                                                                                                                                           |
+|                      |                                                                                                                                                                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety                                                                                                                                                                                                                                               |
+| **Priority**         | Medium                                                                                                                                                                                                                                               |
+| **Property**         | Worker internal codecs accept only valid direct, Pub/Sub, and dead-letter payloads and preserve normalized fields.                                                                                                                                   |
+| **Invariant**        | `Always`: generated unknown JSON, invalid base64, missing data, empty IDs, numeric Gmail `historyId`, and valid envelopes decode to either a specific error string or a normalized request with non-empty IDs.                                       |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/core/src/internal-message-codec.pbt.test.ts`; generated JSON values, valid envelopes, invalid Pub/Sub envelopes, empty IDs, and numeric Gmail history IDs cover acceptance, rejection, and normalization. |
+| **Antithesis Angle** | Cloud Pub/Sub push, dead-letter replay, and local mode all hit the same HTTP worker routes with different envelope shapes.                                                                                                                           |
+| **Why It Matters**   | Bad decode behavior can silently drop work or accept malformed work.                                                                                                                                                                                 |
 
 **Open Questions:**
 
@@ -292,14 +304,15 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 
 ### pagination-cursors-roundtrip-and-reject-junk - Pagination Cursors Round Trip And Reject Junk
 
-|                      |                                                                                                                                                                                                       |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**             | Safety                                                                                                                                                                                                |
-| **Priority**         | Medium                                                                                                                                                                                                |
-| **Property**         | Pagination cursors round-trip valid `(timestamp, id)` positions and reject malformed or impossible cursor payloads.                                                                                   |
-| **Invariant**        | `Always`: generated valid cursors decode to the original position; generated invalid prefixes, invalid base64, invalid JSON, empty IDs, and invalid timestamps fail with `invalid_pagination_cursor`. |
-| **Antithesis Angle** | API clients can replay stale, malformed, or fuzzed cursors under load.                                                                                                                                |
-| **Why It Matters**   | Bad pagination can duplicate or skip messages/threads.                                                                                                                                                |
+|                      |                                                                                                                                                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety                                                                                                                                                                                                                                  |
+| **Priority**         | Medium                                                                                                                                                                                                                                  |
+| **Property**         | Pagination cursors round-trip valid `(timestamp, id)` positions and reject malformed or impossible cursor payloads.                                                                                                                     |
+| **Invariant**        | `Always`: generated valid cursors decode to the original position; generated invalid prefixes, invalid base64, invalid JSON, empty IDs, and invalid timestamps fail with `invalid_pagination_cursor`.                                   |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/db/src/persistence/pagination-cursors.pbt.test.ts`; generated message/thread and sync-run cursors round-trip, while generated malformed payload families assert `invalid_pagination_cursor`. |
+| **Antithesis Angle** | API clients can replay stale, malformed, or fuzzed cursors under load.                                                                                                                                                                  |
+| **Why It Matters**   | Bad pagination can duplicate or skip messages/threads.                                                                                                                                                                                  |
 
 **Open Questions:**
 
@@ -325,7 +338,7 @@ This catalog is local PBT first. Hegel should own backend properties through Vit
 ## Assumptions
 
 - Hegel should replace the roadmap's fast-check idea unless a future decision says otherwise.
-- Hegel's current Antithesis integration emits only an `Always` aggregate for a test function, so local test names and failure messages must stay specific.
+- Hegel 0.2.2 has internal Antithesis-output plumbing, but the package root exports `test` and `testAsync`, not the `.testLocation(...)` builder; local test names and failure messages must stay specific, and native Antithesis cataloging remains future work.
 - Bombadil is experimental and should stay isolated from core PR-time tests until stable in CI.
 
 ## Open Questions
