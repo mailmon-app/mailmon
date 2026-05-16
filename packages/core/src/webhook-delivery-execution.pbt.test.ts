@@ -2,15 +2,12 @@ import { describe, expect, it } from "@effect/vitest";
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 
+import { hegelSettings, notePbtCase } from "./test-hegel.js";
 import {
   calculateWebhookDeliveryRetryDelayMs,
   classifyWebhookDeliveryFailure,
   classifyWebhookDeliveryResponse,
 } from "./webhook-delivery-execution.js";
-
-const hegelSettings = {
-  testCases: 40,
-};
 
 const completedAt = "2026-03-24T00:00:10.000Z";
 const maxRetryDelayMs = 15 * 60_000;
@@ -46,6 +43,13 @@ describe("Webhook delivery execution properties", () => {
         const retryDelayMs = calculateWebhookDeliveryRetryDelayMs(attemptCount);
         const nextRetryDelayMs = calculateWebhookDeliveryRetryDelayMs(attemptCount + 1);
 
+        notePbtCase(tc, "webhook-retry-delay-bounded-monotonic", {
+          family: "attempt-count-boundary",
+          attemptCount,
+          retryDelayMs,
+          nextRetryDelayMs,
+        });
+
         expect(retryDelayMs).toBeGreaterThanOrEqual(5_000);
         expect(retryDelayMs).toBeLessThanOrEqual(maxRetryDelayMs);
         expect(nextRetryDelayMs).toBeGreaterThanOrEqual(retryDelayMs);
@@ -65,6 +69,12 @@ describe("Webhook delivery execution properties", () => {
           completedAt,
           statusCode,
         );
+
+        notePbtCase(tc, "webhook-retry-delay-bounded-monotonic", {
+          family: "retryable-response-before-max-attempts",
+          attemptCount,
+          statusCode,
+        });
 
         expect(classified.completion.state).toBe("pending");
         expect(classified.completion.retryable).toBe(true);
@@ -109,6 +119,12 @@ describe("Webhook delivery execution properties", () => {
           },
         );
 
+        notePbtCase(tc, "webhook-retry-delay-bounded-monotonic", {
+          family: "retryable-sender-failure-before-max-attempts",
+          attemptCount,
+          failureCode,
+        });
+
         expect(classified.completion.state).toBe("pending");
         expect(classified.completion.retryable).toBe(true);
         expect(classified.result.status).toBe("scheduled_for_retry");
@@ -135,30 +151,48 @@ describe("Webhook delivery execution properties", () => {
     () =>
       hegel.test((tc) => {
         const kind = tc.draw(terminalOutcomeKindGen);
-        const classified =
-          kind === "terminal-response"
-            ? classifyWebhookDeliveryResponse(
-                deliveryAttempt(1),
-                completedAt,
-                tc.draw(terminalStatusCodeGen),
-              )
-            : kind === "exhausted-response"
-              ? classifyWebhookDeliveryResponse(
-                  deliveryAttempt(maxAttempts),
-                  completedAt,
-                  tc.draw(retryableStatusCodeGen),
-                )
-              : kind === "nonretryable-failure"
-                ? classifyWebhookDeliveryFailure(deliveryAttempt(1), completedAt, {
-                    code: "webhook_delivery_nonretryable_property_failure",
-                    message: "Generated nonretryable sender failure",
-                    retryable: false,
-                  })
-                : classifyWebhookDeliveryFailure(deliveryAttempt(maxAttempts), completedAt, {
-                    code: "webhook_delivery_timeout",
-                    message: "Generated exhausted sender failure",
-                    retryable: true,
-                  });
+        let terminalStatusCode: number | null = null;
+        let exhaustedStatusCode: number | null = null;
+        const classified = (() => {
+          if (kind === "terminal-response") {
+            terminalStatusCode = tc.draw(terminalStatusCodeGen);
+            return classifyWebhookDeliveryResponse(
+              deliveryAttempt(1),
+              completedAt,
+              terminalStatusCode,
+            );
+          }
+
+          if (kind === "exhausted-response") {
+            exhaustedStatusCode = tc.draw(retryableStatusCodeGen);
+            return classifyWebhookDeliveryResponse(
+              deliveryAttempt(maxAttempts),
+              completedAt,
+              exhaustedStatusCode,
+            );
+          }
+
+          if (kind === "nonretryable-failure") {
+            return classifyWebhookDeliveryFailure(deliveryAttempt(1), completedAt, {
+              code: "webhook_delivery_nonretryable_property_failure",
+              message: "Generated nonretryable sender failure",
+              retryable: false,
+            });
+          }
+
+          return classifyWebhookDeliveryFailure(deliveryAttempt(maxAttempts), completedAt, {
+            code: "webhook_delivery_timeout",
+            message: "Generated exhausted sender failure",
+            retryable: true,
+          });
+        })();
+
+        notePbtCase(tc, "terminal-webhook-outcomes-do-not-reschedule", {
+          family: "terminal-outcome",
+          kind,
+          terminalStatusCode,
+          exhaustedStatusCode,
+        });
 
         expect(classified.completion.state).not.toBe("pending");
         expect(classified.completion.nextAttemptAt).toBeNull();

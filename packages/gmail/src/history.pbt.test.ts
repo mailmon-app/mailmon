@@ -5,10 +5,7 @@ import { expect, it, describe } from "vitest";
 import { mergeInitialSyncMessages, toSyncSnapshot } from "./canonical-projection.js";
 import { listGmailHistoryDelta } from "./history.js";
 import type { GmailHistoryRecord, GmailMessageResponse } from "./parsers.js";
-
-const hegelSettings = {
-  testCases: 40,
-};
+import { hegelSettings, notePbtCase } from "./test-hegel.js";
 
 const messageIdGen = gs.sampledFrom([
   "gmail_msg_0",
@@ -116,6 +113,13 @@ describe("Gmail history and initial sync properties", () => {
             .filter((id) => !expectedDeletedIds.has(id)),
         );
 
+        notePbtCase(tc, "history-delete-wins-compaction", {
+          family: "gmail-history-operation-sequence",
+          operations,
+          expectedDeletedIds: [...expectedDeletedIds],
+          expectedChangedIds: [...expectedChangedIds],
+        });
+
         const delta = await listGmailHistoryDelta({
           accessToken: "access-token",
           cursor: "hist_1",
@@ -195,6 +199,13 @@ describe("Gmail history and initial sync properties", () => {
         );
         const expectedMessages = new Map<string, GmailMessageResponse>();
 
+        notePbtCase(tc, "initial-sync-catchup-delete-wins", {
+          family: "initial-sync-baseline-catchup-delete-sequence",
+          baselineRecords,
+          catchUpRecords,
+          deletedMessageIds,
+        });
+
         for (const message of baselineMessages) {
           if (!deletedIdSet.has(message.id)) {
             expectedMessages.set(message.id, message);
@@ -226,6 +237,12 @@ describe("Gmail history and initial sync properties", () => {
     () =>
       hegel.test((tc) => {
         const labelIds = tc.draw(gs.arrays(labelIdGen, { maxSize: 8 }));
+
+        notePbtCase(tc, "label-ids-are-normalized", {
+          family: "gmail-projection-label-array",
+          labelIds,
+        });
+
         const snapshot = toSyncSnapshot(
           "mbx_property",
           [gmailMessage("gmail_msg_0", { labelIds })],

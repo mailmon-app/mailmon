@@ -11,10 +11,7 @@ import {
   decodeWebhookDeliveryScheduleRequest,
   type InternalMessageDecodeResult,
 } from "./internal-message-codec.js";
-
-const hegelSettings = {
-  testCases: 40,
-};
+import { hegelSettings, notePbtCase } from "./test-hegel.js";
 
 type JsonValue =
   | null
@@ -122,6 +119,15 @@ describe("Internal message codec properties", () => {
           ? tc.draw(nonEmptyTextGen)
           : tc.draw(gs.integers({ minValue: 0, maxValue: 1_000_000 }));
 
+        notePbtCase(tc, "internal-worker-codecs-reject-malformed-envelopes", {
+          family: "valid-internal-message-payloads",
+          mailboxId,
+          deliveryId,
+          notBefore,
+          controlJobKind,
+          historyId: String(historyId),
+        });
+
         expect(expectValue(decodeMailboxSyncWorkerRequest({ mailboxId }))).toEqual({
           mailboxId,
         });
@@ -172,6 +178,11 @@ describe("Internal message codec properties", () => {
       hegel.test((tc) => {
         const payload = tc.draw(jsonValueGen());
 
+        notePbtCase(tc, "internal-worker-codecs-reject-malformed-envelopes", {
+          family: "generated-json-payload",
+          payload,
+        });
+
         assertNonEmptyDecodeResult(decodeMailboxSyncWorkerRequest(payload), (value) => {
           expect(value.mailboxId.length).toBeGreaterThan(0);
         });
@@ -208,6 +219,12 @@ describe("Internal message codec properties", () => {
               : malformedKind === "invalid-json"
                 ? { message: { data: "%%%" } }
                 : pubSubEnvelope({ mailboxId: "" });
+
+        notePbtCase(tc, "internal-worker-codecs-reject-malformed-envelopes", {
+          family: "known-malformed-envelope",
+          malformedKind,
+          payload,
+        });
 
         if (malformedKind === "missing-message") {
           expect(decodeMailboxSyncWorkerRequest(payload)).toEqual({

@@ -3,6 +3,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import type { CanonicalMessageRecord } from "@mailmon/core";
 
+import { hegelSettings, notePbtCase } from "../test-hegel.js";
 import {
   normalizeLabelIds,
   toMessageInsert,
@@ -12,10 +13,6 @@ import {
   createMessageCreatedMailboxEvent,
   createMessageUpdatedMailboxEvent,
 } from "./mailbox-event-mappers.js";
-
-const hegelSettings = {
-  testCases: 40,
-};
 
 const labelIdGen = gs.sampledFrom([
   "INBOX",
@@ -49,6 +46,13 @@ describe("Canonical state mapper properties", () => {
         const labelIds = tc.draw(gs.arrays(labelIdGen, { maxSize: 12 }));
         // oxlint-disable-next-line unicorn/no-array-sort -- sorting a fresh array keeps the expected model independent from normalizeLabelIds while supporting the package test lib.
         const expected = [...new Set(labelIds)].sort();
+
+        notePbtCase(tc, "label-ids-are-normalized", {
+          family: "canonical-label-array",
+          labelIds,
+          expected,
+        });
+
         const message = canonicalMessage(labelIds);
         const messageCreated = createMessageCreatedMailboxEvent({
           syncRunId: "sync_property",

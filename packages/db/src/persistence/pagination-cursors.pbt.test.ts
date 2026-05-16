@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 
+import { hegelSettings, notePbtCase } from "../test-hegel.js";
 import {
   decodePaginationCursor,
   decodeSyncRunPaginationCursor,
@@ -9,10 +10,6 @@ import {
   encodeSyncRunPaginationCursor,
 } from "./pagination-cursors.js";
 import { isProblemDetails } from "./problems.js";
-
-const hegelSettings = {
-  testCases: 40,
-};
 
 const cursorIdGen = gs.text({
   alphabet: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-",
@@ -57,6 +54,12 @@ describe("Pagination cursor properties", () => {
         };
         const resourceType = tc.draw(resourceTypeGen);
 
+        notePbtCase(tc, "pagination-cursors-roundtrip-and-reject-junk", {
+          family: "resource-pagination-cursor-roundtrip",
+          resourceType,
+          cursor,
+        });
+
         expect(decodePaginationCursor(resourceType, encodePaginationCursor(cursor))).toEqual(
           cursor,
         );
@@ -72,6 +75,11 @@ describe("Pagination cursor properties", () => {
           id: tc.draw(cursorIdGen),
           startedAt: tc.draw(isoTimestampGen),
         };
+
+        notePbtCase(tc, "pagination-cursors-roundtrip-and-reject-junk", {
+          family: "sync-run-pagination-cursor-roundtrip",
+          cursor,
+        });
 
         expect(decodeSyncRunPaginationCursor(encodeSyncRunPaginationCursor(cursor))).toEqual(
           cursor,
@@ -101,6 +109,14 @@ describe("Pagination cursor properties", () => {
             encodedCursorPayload({ timestamp: validTimestamp }),
           ]),
         );
+
+        notePbtCase(tc, "pagination-cursors-roundtrip-and-reject-junk", {
+          family: "malformed-resource-pagination-cursor",
+          resourceType,
+          validId,
+          validTimestamp,
+          malformedCursor,
+        });
 
         expectInvalidPaginationCursor(() => decodePaginationCursor(resourceType, malformedCursor));
       }, hegelSettings),
@@ -149,6 +165,13 @@ describe("Pagination cursor properties", () => {
             encodedCursorPayload({ startedAt: validStartedAt }),
           ]),
         );
+
+        notePbtCase(tc, "pagination-cursors-roundtrip-and-reject-junk", {
+          family: "malformed-sync-run-pagination-cursor",
+          validId,
+          validStartedAt,
+          malformedCursor,
+        });
 
         expectInvalidPaginationCursor(() => decodeSyncRunPaginationCursor(malformedCursor));
       }, hegelSettings),
