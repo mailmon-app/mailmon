@@ -12,6 +12,12 @@ interface SyncRunPaginationCursor {
   readonly startedAt: string;
 }
 
+const isCanonicalIsoTimestamp = (timestamp: string) => {
+  const parsed = Date.parse(timestamp);
+
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === timestamp;
+};
+
 export const encodePaginationCursor = (cursor: PaginationCursor) => {
   const payload = JSON.stringify({
     id: cursor.id,
@@ -41,7 +47,7 @@ export const decodePaginationCursor = (
       payload.id.length === 0 ||
       !("timestamp" in payload) ||
       typeof payload.timestamp !== "string" ||
-      Number.isNaN(Date.parse(payload.timestamp))
+      !isCanonicalIsoTimestamp(payload.timestamp)
     ) {
       throw invalidPaginationCursor(resourceType);
     }
@@ -82,7 +88,7 @@ export const decodeSyncRunPaginationCursor = (cursor: string): SyncRunPagination
       payload.id.length === 0 ||
       !("startedAt" in payload) ||
       typeof payload.startedAt !== "string" ||
-      Number.isNaN(Date.parse(payload.startedAt))
+      !isCanonicalIsoTimestamp(payload.startedAt)
     ) {
       throw invalidPaginationCursor("sync_runs");
     }
