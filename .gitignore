@@ -3,6 +3,7 @@ node_modules
 .fallow
 dist
 coverage
+.hegel/
 .DS_Store
 .env
 .env.*
