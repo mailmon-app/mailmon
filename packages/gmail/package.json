@@ -21,6 +21,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@hegeldev/hegel": "^0.2.2",
     "@types/node": "catalog:"
   }
 }
