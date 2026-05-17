@@ -121,26 +121,35 @@ export const createWebhookDeliveryStoreLayer = Layer.effect(
           }
 
           const notBefore = toDate(params.notBefore);
-          const deliveryRows = eventRows
-            .toSorted((left, right) => left.id.localeCompare(right.id))
-            .map((event) => ({
-              id: createStableWebhookDeliveryId(event.id, params.webhookEndpointId),
-              mailboxEventId: event.id,
-              webhookEndpointId: params.webhookEndpointId,
-              state: "pending",
-              attemptCount: 0,
-              processingStartedAt: null,
-              lastAttemptedAt: null,
-              nextAttemptAt: notBefore,
-              deliveredAt: null,
-              lastResponseStatus: null,
-              lastErrorCode: null,
-              lastErrorMessage: null,
-              lastErrorOccurredAt: null,
-              lastErrorRetryable: null,
-              createdAt: notBefore,
-              updatedAt: notBefore,
-            }));
+          const eventRowsById = new Map(eventRows.map((event) => [event.id, event]));
+          const deliveryRows = [...new Set(params.mailboxEventIds)].flatMap((eventId) => {
+            const event = eventRowsById.get(eventId);
+
+            if (event === undefined) {
+              return [];
+            }
+
+            return [
+              {
+                id: createStableWebhookDeliveryId(event.id, params.webhookEndpointId),
+                mailboxEventId: event.id,
+                webhookEndpointId: params.webhookEndpointId,
+                state: "pending",
+                attemptCount: 0,
+                processingStartedAt: null,
+                lastAttemptedAt: null,
+                nextAttemptAt: notBefore,
+                deliveredAt: null,
+                lastResponseStatus: null,
+                lastErrorCode: null,
+                lastErrorMessage: null,
+                lastErrorOccurredAt: null,
+                lastErrorRetryable: null,
+                createdAt: notBefore,
+                updatedAt: notBefore,
+              },
+            ];
+          });
 
           await database.db
             .insert(webhookDeliveries)

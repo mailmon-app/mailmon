@@ -161,3 +161,34 @@ Completed phase 5 from `plans/antithesis-pbt-implementation-plan.md`.
 - Consulted `effect-solutions` before writing the Effect-backed DB test code, per repo instructions.
 - The requested `./repos/hegel` path is absent in this checkout; `.repos/hegel` is present and was used for Hegel runner and generator context.
 - The DB package's Vitest invocation continues to run the full DB test set even when a specific file argument is supplied; the targeted DB commands reported `14 passed` test files and `62 passed` tests.
+
+## 2026-05-17 - Phase 6 Replay State Machine PBT
+
+Completed phase 6 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Added `packages/db/src/replay.pbt.test.ts`.
+- Added generated DB-backed coverage for:
+  - `replay-active-ranges-do-not-overlap`
+  - `replay-dispatch-is-single-claim-and-counted`
+- Active range coverage generates concurrent public `createReplay` requests across identical, nested, partial-overlap, touching-boundary, disjoint, different-mailbox, different-endpoint, and different-workspace families. It also seeds overlapping inactive replay rows to prove completed/failed/cancelled ranges do not block new active ranges.
+- Dispatch coverage generates event logs with timestamp ties and IDs that sort differently from timestamp order, replay ranges that select zero/one/many events, and concurrent `dispatchReplays` calls. It asserts one dispatch claim, durable completion, `eventsReplayed` counts, delivery row counts, and scheduler order by ascending `(occurredAt, id)`.
+- Updated `createWebhookDeliveriesForReplay` in `packages/db/src/persistence/webhook-deliveries.ts` to preserve caller event order while still deduping event IDs. This keeps replay dispatch ordering aligned with `prepareReplayDispatch`'s `(occurredAt, id)` selection order.
+- Updated `antithesis/scratchbook/property-catalog.md` with the implemented workload status for both replay properties.
+
+### Verification
+
+- `PBT_TEST_CASES=5 pnpm --filter @mailmon/db test -- src/replay.pbt.test.ts` - passed; DB package script ran the full DB test set and reported `15 passed` test files and `64 passed` tests.
+- `pnpm --filter @mailmon/db test -- src/replay.pbt.test.ts` - passed; DB package script ran the full DB test set and reported `15 passed` test files and `64 passed` tests.
+- `pnpm --dir packages/db exec vitest run src/replay.pbt.test.ts` - passed, `1` test file and `2` tests.
+- `pnpm --dir packages/db exec vitest run src/replay.test.ts` - passed, `1` test file and `7` tests.
+- `pnpm --filter @mailmon/db typecheck` - passed
+- `pnpm --filter @mailmon/db lint` - passed
+- `pnpm --filter @mailmon/db format:check` - passed
+
+### Notes
+
+- Consulted `effect-solutions` before writing the Effect-backed DB test code, per repo instructions.
+- The requested `./repos/hegel` path is absent in this checkout; `.repos/hegel` is present and was used for Hegel context.
+- `pnpm --filter @mailmon/db test -- src/replay.test.ts` still runs the full DB suite rather than only `src/replay.test.ts`; that full-suite invocation failed once on the pre-existing `mailbox-lease-single-flight` DB PBT with Hegel's "Flaky test detected" error. Direct Vitest execution of `src/replay.test.ts` passed.
