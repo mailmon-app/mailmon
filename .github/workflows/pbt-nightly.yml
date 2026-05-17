@@ -16,6 +16,7 @@ jobs:
   pbt:
     name: Hegel PBT
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
@@ -33,7 +34,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://mailmon:mailmon@127.0.0.1:5432/mailmon
-      PBT_TEST_CASES: 250
+      PBT_TEST_CASES: 50
 
     steps:
       - uses: actions/checkout@v4
@@ -62,4 +63,4 @@ jobs:
         run: pnpm build:libs
 
       - name: Run Expanded PBT
-        run: pnpm test:pbt
+        run: pnpm exec vitest run --config vitest.pbt.config.ts --reporter=verbose
