@@ -149,6 +149,27 @@ const fetchDurableState = async (connectionString: string) => {
   }
 };
 
+const waitForGeneratedSyncRuns = async (connectionString: string, expectedSyncRunCount: number) => {
+  const deadline = Date.now() + 5_000;
+
+  while (Date.now() < deadline) {
+    const durableState = await fetchDurableState(connectionString);
+    const generatedSyncRuns = durableState.syncRuns.filter(
+      (syncRun) => syncRun.id !== staleSyncRunId,
+    );
+
+    if (generatedSyncRuns.length >= expectedSyncRunCount) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error(
+    `Timed out waiting for ${expectedSyncRunCount} generated sync runs before releasing provider.`,
+  );
+};
+
 const applyMailboxSyncResult = (
   connectionString: string,
   params: Readonly<{
@@ -183,7 +204,10 @@ const createGeneratedProviderLayer = (
     cursor: string | null;
     providerCallIndex: number;
   }>,
-  providerDelayMs: number,
+  options: Readonly<{
+    beforeSnapshot?: () => Promise<void>;
+    providerDelayMs: number;
+  }>,
 ) =>
   Layer.succeed(MailboxSyncProvider, {
     syncMailbox: ({ cursor }) =>
@@ -194,7 +218,11 @@ const createGeneratedProviderLayer = (
           providerCallIndex,
         });
 
-        yield* Effect.sleep(Duration.millis(providerDelayMs));
+        if (options.beforeSnapshot !== undefined) {
+          yield* Effect.promise(options.beforeSnapshot);
+        }
+
+        yield* Effect.sleep(Duration.millis(options.providerDelayMs));
 
         return {
           snapshot: buildProviderSnapshot(providerCallIndex),
@@ -246,11 +274,18 @@ describe("DB-backed mailbox sync execution properties", () => {
             deliveryId: string;
             notBefore: string;
           }> = [];
+          let releaseProvider!: () => void;
+          const providerGate = new Promise<void>((resolve) => {
+            releaseProvider = resolve;
+          });
           const runtimeLayer = Layer.mergeAll(
             createCorePersistenceLayer(connectionString).pipe(
               Layer.provide(testGmailRefreshTokenCipherLayer),
             ),
-            createGeneratedProviderLayer(providerCalls, providerDelayMs),
+            createGeneratedProviderLayer(providerCalls, {
+              beforeSnapshot: () => providerGate,
+              providerDelayMs,
+            }),
             createRecordingSchedulerLayer(scheduledDeliveryRequests),
           );
 
@@ -258,7 +293,7 @@ describe("DB-backed mailbox sync execution properties", () => {
             expiredLease: leaseFamily === "expired-lease",
           });
 
-          const results = await Effect.runPromise(
+          const resultsPromise = Effect.runPromise(
             Effect.all(
               startDelayMs.map((delayMs) =>
                 Effect.sleep(Duration.millis(delayMs)).pipe(
@@ -268,6 +303,14 @@ describe("DB-backed mailbox sync execution properties", () => {
               { concurrency: "unbounded" },
             ).pipe(Effect.provide(runtimeLayer)),
           );
+
+          try {
+            await waitForGeneratedSyncRuns(connectionString, attemptCount);
+          } finally {
+            releaseProvider();
+          }
+
+          const results = await resultsPromise;
           const durableState = await fetchDurableState(connectionString);
           const generatedSyncRuns = durableState.syncRuns.filter(
             (syncRun) => syncRun.id !== staleSyncRunId,
@@ -329,7 +372,7 @@ describe("DB-backed mailbox sync execution properties", () => {
             createCorePersistenceLayer(connectionString).pipe(
               Layer.provide(testGmailRefreshTokenCipherLayer),
             ),
-            createGeneratedProviderLayer(providerCalls, providerDelayMs),
+            createGeneratedProviderLayer(providerCalls, { providerDelayMs }),
             createRecordingSchedulerLayer([]),
           );
 
