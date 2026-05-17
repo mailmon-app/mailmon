@@ -96,3 +96,35 @@ Started phase 3 from `plans/antithesis-pbt-implementation-plan.md`.
 
 - Consulted `effect-solutions` before writing Effect test layers, per repo instructions.
 - The user-referenced `./repos/hegel` path is still absent; `.repos/hegel` is present and was used for Hegel async-test context.
+
+## 2026-05-17 - Phase 4 Generated Thread Recalculation
+
+Completed phase 4 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Extended `packages/db/src/mailbox-sync-commit.pbt.test.ts`.
+- Targeted property slug:
+  - `thread-summary-follows-latest-message`
+- Added a generated DB-backed delete-only snapshot property that:
+  - creates two to four provider threads with one to four messages per thread,
+  - applies a baseline snapshot through the public mailbox sync commit path,
+  - applies a delete-only snapshot that exercises newest, oldest, middle, all-but-one, and all-message deletion families,
+  - derives the expected thread model from remaining messages by `(receivedAt desc, id desc)`,
+  - asserts stored thread rows match that model,
+  - asserts deleted provider messages are absent,
+  - asserts removed-last-message behavior is explicit: a provider thread with no remaining messages is absent,
+  - asserts `thread.updated` events emitted by the delete commit match the derived changed-thread model.
+- Updated `antithesis/scratchbook/property-catalog.md` with the implemented workload status and refreshed the catalog commit provenance.
+
+### Verification
+
+- `pnpm --filter @mailmon/db test -- src/mailbox-sync-commit.pbt.test.ts` - passed
+- `pnpm --filter @mailmon/db lint` - passed
+- `pnpm --filter @mailmon/db typecheck` - passed
+- `pnpm --filter @mailmon/db format:check` - passed
+
+### Notes
+
+- Consulted `effect-solutions` before extending the Effect-backed DB test code, per repo instructions.
+- The requested `./repos/hegel` path is absent in this checkout; `.repos/hegel` is present and was used for Hegel context.

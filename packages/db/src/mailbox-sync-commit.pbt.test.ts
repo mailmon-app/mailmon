@@ -62,6 +62,14 @@ const receivedAtValues = [
   "2026-04-09T09:05:00.000Z",
 ] as const;
 
+const threadDeleteFamilyGen = gs.sampledFrom([
+  "newest",
+  "oldest",
+  "middle",
+  "all-but-one",
+  "all",
+] as const);
+
 const parseDecimalHistoryCursor = (cursor: string): bigint | null => {
   if (!/^\d+$/.test(cursor)) {
     return null;
@@ -209,6 +217,137 @@ const buildGeneratedSnapshot = (
     messages,
     threads,
   } satisfies MailboxSyncSnapshot;
+};
+
+const compareMessagesNewestFirst = (
+  left: MailboxSyncSnapshot["messages"][number],
+  right: MailboxSyncSnapshot["messages"][number],
+) => {
+  const receivedAtDifference = Date.parse(right.receivedAt) - Date.parse(left.receivedAt);
+
+  if (receivedAtDifference !== 0) {
+    return receivedAtDifference;
+  }
+
+  return right.id.localeCompare(left.id);
+};
+
+const toThreadsFromMessages = (
+  messages: ReadonlyArray<MailboxSyncSnapshot["messages"][number]>,
+): MailboxSyncSnapshot["threads"] => {
+  const latestMessageByProviderThreadId = new Map<
+    string,
+    MailboxSyncSnapshot["messages"][number]
+  >();
+
+  for (const message of messages) {
+    const existing = latestMessageByProviderThreadId.get(message.providerThreadId);
+
+    if (existing === undefined || compareMessagesNewestFirst(message, existing) < 0) {
+      latestMessageByProviderThreadId.set(message.providerThreadId, message);
+    }
+  }
+
+  const threadRecords = [...latestMessageByProviderThreadId.values()].map((message) => ({
+    id: message.threadId,
+    providerThreadId: message.providerThreadId,
+    subject: message.subject,
+    lastMessageAt: message.receivedAt,
+  }));
+
+  // oxlint-disable-next-line unicorn/no-array-sort
+  threadRecords.sort((left, right) => left.providerThreadId.localeCompare(right.providerThreadId));
+
+  return threadRecords;
+};
+
+const buildThreadRecalculationScenario = (tc: hegel.TestCase) => {
+  const deleteFamily = tc.draw(threadDeleteFamilyGen);
+  const threadCount = tc.draw(gs.integers({ minValue: 2, maxValue: 4 }));
+  const focalThreadIndex = tc.draw(gs.integers({ minValue: 0, maxValue: threadCount - 1 }));
+  const focalThreadMinMessages =
+    deleteFamily === "middle" ? 3 : deleteFamily === "all-but-one" ? 2 : 1;
+  const messages: Array<MailboxSyncSnapshot["messages"][number]> = [];
+
+  for (let threadIndex = 0; threadIndex < threadCount; threadIndex += 1) {
+    const minMessages = threadIndex === focalThreadIndex ? focalThreadMinMessages : 1;
+    const messageCount = tc.draw(gs.integers({ minValue: minMessages, maxValue: 4 }));
+
+    for (let messageIndex = 0; messageIndex < messageCount; messageIndex += 1) {
+      const receivedAt = tc.draw(gs.sampledFrom(receivedAtValues));
+
+      messages.push({
+        id: `msg_thread_${threadIndex}_${messageIndex}`,
+        threadId: `thr_recalc_${threadIndex}`,
+        providerMessageId: `gmail_msg_recalc_${threadIndex}_${messageIndex}`,
+        providerThreadId: `gmail_thr_recalc_${threadIndex}`,
+        subject: `Thread ${threadIndex} message ${messageIndex}`,
+        from: {
+          name: "Mailmon PBT",
+          email: "pbt@mailmon.dev",
+        },
+        snippet: `Generated recalculation message ${threadIndex}.${messageIndex}`,
+        receivedAt,
+        labelIds: tc.draw(gs.arrays(labelIdGen, { maxSize: 4 })),
+      });
+    }
+  }
+
+  const focalProviderThreadId = `gmail_thr_recalc_${focalThreadIndex}`;
+  const focalMessagesNewestFirst = messages.filter(
+    (message) => message.providerThreadId === focalProviderThreadId,
+  );
+
+  // oxlint-disable-next-line unicorn/no-array-sort
+  focalMessagesNewestFirst.sort(compareMessagesNewestFirst);
+
+  const focalDeletedMessages =
+    deleteFamily === "newest"
+      ? focalMessagesNewestFirst.slice(0, 1)
+      : deleteFamily === "oldest"
+        ? focalMessagesNewestFirst.slice(-1)
+        : deleteFamily === "middle"
+          ? [focalMessagesNewestFirst[Math.floor(focalMessagesNewestFirst.length / 2)]]
+          : deleteFamily === "all-but-one"
+            ? focalMessagesNewestFirst.slice(0, -1)
+            : focalMessagesNewestFirst;
+  const otherThreadProviderMessageIds = messages
+    .filter((message) => message.providerThreadId !== focalProviderThreadId)
+    .map((message) => message.providerMessageId);
+  const otherDeletedProviderMessageIds =
+    otherThreadProviderMessageIds.length === 0
+      ? []
+      : tc.draw(
+          gs.arrays(gs.sampledFrom(otherThreadProviderMessageIds), {
+            maxSize: otherThreadProviderMessageIds.length,
+            unique: true,
+          }),
+        );
+  const deletedProviderMessageIds = [
+    ...focalDeletedMessages.map((message) => message.providerMessageId),
+    ...otherDeletedProviderMessageIds,
+  ];
+  const deletedProviderMessageIdSet = new Set(deletedProviderMessageIds);
+  const remainingMessages = messages.filter(
+    (message) => !deletedProviderMessageIdSet.has(message.providerMessageId),
+  );
+
+  return {
+    baselineSnapshot: {
+      deletedProviderMessageIds: [],
+      messages,
+      threads: toThreadsFromMessages(messages),
+    } satisfies MailboxSyncSnapshot,
+    deleteFamily,
+    deleteOnlySnapshot: {
+      deletedProviderMessageIds,
+      messages: [],
+      threads: [],
+    } satisfies MailboxSyncSnapshot,
+    expectedThreads: toThreadsFromMessages(remainingMessages),
+    focalProviderThreadId,
+    remainingMessages,
+  };
 };
 
 const toEquivalentSnapshotWithLabelNoise = (
@@ -449,6 +588,80 @@ const expectCommittedSnapshotState = (
     if ("labelIds" in event.payload.data) {
       expect(event.payload.data.labelIds).toEqual(normalizeLabelIds(event.payload.data.labelIds));
     }
+  }
+};
+
+const expectThreadRowsMatchModel = (
+  state: Awaited<ReturnType<typeof fetchCommitState>>,
+  expectedThreads: MailboxSyncSnapshot["threads"],
+) => {
+  expect(state.threads).toHaveLength(expectedThreads.length);
+
+  for (const expectedThread of expectedThreads) {
+    const storedThread = state.threads.find(
+      (candidate) => candidate.providerThreadId === expectedThread.providerThreadId,
+    );
+
+    expect(storedThread).toEqual(
+      expect.objectContaining({
+        id: expectedThread.id,
+        subject: expectedThread.subject,
+      }),
+    );
+    expect(storedThread?.lastMessageAt.toISOString()).toBe(expectedThread.lastMessageAt);
+  }
+};
+
+const expectThreadUpdateEventsMatchModel = (
+  commitResult: MailboxSyncCommitResult,
+  state: Awaited<ReturnType<typeof fetchCommitState>>,
+  params: Readonly<{
+    baselineThreads: MailboxSyncSnapshot["threads"];
+    expectedThreads: MailboxSyncSnapshot["threads"];
+    syncedAt: string;
+  }>,
+) => {
+  const baselineThreadsByProviderThreadId = new Map(
+    params.baselineThreads.map((thread) => [thread.providerThreadId, thread]),
+  );
+  const expectedThreadUpdates = params.expectedThreads.filter((thread) => {
+    const baselineThread = baselineThreadsByProviderThreadId.get(thread.providerThreadId);
+
+    return (
+      baselineThread === undefined ||
+      baselineThread.id !== thread.id ||
+      baselineThread.subject !== thread.subject ||
+      baselineThread.lastMessageAt !== thread.lastMessageAt
+    );
+  });
+  const deleteCommitEvents = state.mailboxEvents.filter((event) =>
+    commitResult.mailboxEventIds.includes(event.id),
+  );
+
+  expect(deleteCommitEvents).toHaveLength(commitResult.mailboxEventIds.length);
+  expect(deleteCommitEvents).toHaveLength(expectedThreadUpdates.length);
+  expect(deleteCommitEvents.every((event) => event.eventType === "thread.updated")).toBe(true);
+
+  for (const expectedThread of expectedThreadUpdates) {
+    const event = deleteCommitEvents.find(
+      (candidate) => candidate.payload.data.providerThreadId === expectedThread.providerThreadId,
+    );
+
+    expect(event?.payload).toEqual({
+      id: event?.id,
+      type: "thread.updated",
+      schemaVersion: 1,
+      occurredAt: params.syncedAt,
+      workspaceId,
+      tenantExternalId,
+      mailboxId,
+      data: {
+        threadId: expectedThread.id,
+        providerThreadId: expectedThread.providerThreadId,
+        subject: expectedThread.subject,
+        lastMessageAt: expectedThread.lastMessageAt,
+      },
+    });
   }
 };
 
@@ -745,6 +958,93 @@ describe("DB-backed mailbox sync commit properties", () => {
               nextCursor: duplicateCursor,
             }),
           );
+        });
+      }, hegelSettings),
+    120_000,
+  );
+
+  it(
+    "thread-summary-follows-latest-message recalculates generated threads after delete-only snapshots",
+    () =>
+      hegel.testAsync(async (tc) => {
+        const scenario = buildThreadRecalculationScenario(tc);
+
+        notePbtCase(tc, "thread-summary-follows-latest-message", {
+          family: "db-delete-only-thread-recalculation",
+          deleteFamily: scenario.deleteFamily,
+          focalProviderThreadId: scenario.focalProviderThreadId,
+          baselineMessageCount: scenario.baselineSnapshot.messages.length,
+          baselineThreadCount: scenario.baselineSnapshot.threads.length,
+          deletedProviderMessageIds: scenario.deleteOnlySnapshot.deletedProviderMessageIds,
+          expectedThreadCount: scenario.expectedThreads.length,
+          remainingProviderMessageIds: scenario.remainingMessages.map(
+            (message) => message.providerMessageId,
+          ),
+        });
+
+        await withIsolatedDatabasePromise(async ({ connectionString }) => {
+          const baselineSyncRunId = "sr_thread_recalc_baseline_pbt";
+          const deleteSyncRunId = "sr_thread_recalc_delete_pbt";
+          const deleteSyncedAt = "2026-04-09T09:37:00.000Z";
+
+          await seedMailboxFixture(connectionString);
+          await armMailboxSync(connectionString, {
+            syncRunId: baselineSyncRunId,
+            leaseOwnerId: activeLeaseOwnerId,
+          });
+          await Effect.runPromise(
+            applyMailboxSyncResult(connectionString, {
+              leaseOwnerId: activeLeaseOwnerId,
+              nextCursor: "hist_thread_recalc_1",
+              snapshot: scenario.baselineSnapshot,
+              syncRunId: baselineSyncRunId,
+              syncedAt: "2026-04-09T09:36:00.000Z",
+            }),
+          );
+
+          await armMailboxSync(connectionString, {
+            syncRunId: deleteSyncRunId,
+            leaseOwnerId: activeLeaseOwnerId,
+          });
+          const deleteCommitResult = await Effect.runPromise(
+            applyMailboxSyncResult(connectionString, {
+              leaseOwnerId: activeLeaseOwnerId,
+              nextCursor: "hist_thread_recalc_2",
+              snapshot: scenario.deleteOnlySnapshot,
+              syncRunId: deleteSyncRunId,
+              syncedAt: deleteSyncedAt,
+            }),
+          );
+          const stateAfterDelete = await fetchCommitState(connectionString);
+          const deletedProviderMessageIdSet = new Set(
+            scenario.deleteOnlySnapshot.deletedProviderMessageIds,
+          );
+
+          expect(deleteCommitResult.applied).toBe(true);
+          expect(stateAfterDelete.messages).toHaveLength(scenario.remainingMessages.length);
+          expect(
+            stateAfterDelete.messages.filter((message) =>
+              deletedProviderMessageIdSet.has(message.providerMessageId),
+            ),
+          ).toEqual([]);
+          expectThreadRowsMatchModel(stateAfterDelete, scenario.expectedThreads);
+          expectThreadUpdateEventsMatchModel(deleteCommitResult, stateAfterDelete, {
+            baselineThreads: scenario.baselineSnapshot.threads,
+            expectedThreads: scenario.expectedThreads,
+            syncedAt: deleteSyncedAt,
+          });
+
+          if (
+            !scenario.expectedThreads.some(
+              (thread) => thread.providerThreadId === scenario.focalProviderThreadId,
+            )
+          ) {
+            expect(
+              stateAfterDelete.threads.some(
+                (thread) => thread.providerThreadId === scenario.focalProviderThreadId,
+              ),
+            ).toBe(false);
+          }
         });
       }, hegelSettings),
     120_000,

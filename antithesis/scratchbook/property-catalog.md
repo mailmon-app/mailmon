@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+commit: 79c8ff37fc51675fb62b3f6daa1bb4f7de0902f6
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -146,14 +146,15 @@ First Hegel workload increment is implemented for pure backend properties in `pa
 
 ### thread-summary-follows-latest-message - Thread Summary Follows Latest Message
 
-|                      |                                                                                                                                                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**             | Safety                                                                                                                                                                                                           |
-| **Priority**         | High                                                                                                                                                                                                             |
-| **Property**         | A canonical thread summary always reflects the latest remaining message in that provider thread.                                                                                                                 |
-| **Invariant**        | `Always`: for generated message sets and deletion sequences, thread `lastMessageAt`, `subject`, and `id` equal the newest non-deleted message chosen by `(receivedAt desc, id desc)` after commit recalculation. |
-| **Antithesis Angle** | Deletes and updates can hit the newest message while older messages remain.                                                                                                                                      |
-| **Why It Matters**   | Thread list correctness is user-visible and can be corrupted by delete-only deltas.                                                                                                                              |
+|                      |                                                                                                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety                                                                                                                                                                                                                           |
+| **Priority**         | High                                                                                                                                                                                                                             |
+| **Property**         | A canonical thread summary always reflects the latest remaining message in that provider thread.                                                                                                                                 |
+| **Invariant**        | `Always`: for generated message sets and deletion sequences, thread `lastMessageAt`, `subject`, and `id` equal the newest non-deleted message chosen by `(receivedAt desc, id desc)` after commit recalculation.                 |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/db/src/mailbox-sync-commit.pbt.test.ts`; generated delete-only snapshots cover newest, oldest, middle, all-but-one, and all-message deletion families through the public commit path. |
+| **Antithesis Angle** | Deletes and updates can hit the newest message while older messages remain.                                                                                                                                                      |
+| **Why It Matters**   | Thread list correctness is user-visible and can be corrupted by delete-only deltas.                                                                                                                                              |
 
 **Open Questions:**
 
