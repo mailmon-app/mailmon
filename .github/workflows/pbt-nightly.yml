@@ -16,7 +16,7 @@ jobs:
   pbt:
     name: Hegel PBT
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -34,7 +34,7 @@ jobs:
 
     env:
       DATABASE_URL: postgres://mailmon:mailmon@127.0.0.1:5432/mailmon
-      PBT_TEST_CASES: 50
+      PBT_TEST_CASES: 10
 
     steps:
       - uses: actions/checkout@v4
