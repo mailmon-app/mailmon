@@ -65,3 +65,34 @@ Completed phase 2 from `plans/antithesis-pbt-implementation-plan.md`.
 - Consulted `effect-solutions` before writing the Effect-backed test helper code, per repo instructions.
 - The user-referenced `./repos/hegel` path was not present; the local Hegel source is available at `.repos/hegel` and was used for generator/API context.
 - The DB package's Vitest invocation runs the full DB test set even when a specific file argument is supplied; the targeted commands reported `12 passed` test files and `55 passed` tests.
+
+## 2026-05-17 - Phase 3 Mailbox Single-Flight Sync Execution
+
+Started phase 3 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Added generated core service-model coverage in `packages/core/src/mailbox-sync-execution.pbt.test.ts`.
+- Added generated DB-backed durable lease acquisition coverage in `packages/db/src/mailbox-sync-execution.pbt.test.ts`.
+- Targeted property slug:
+  - `mailbox-lease-single-flight`
+- Core property generates two to six concurrent sync attempts, start delays, provider delays, provider success/failure outcomes, and an optional preexisting active lease. It asserts at most one provider snapshot can apply and skipped attempts have no cursor, mailbox-event, or webhook-scheduling effects.
+- DB-backed property generates concurrent `runMailboxSync` calls against isolated PostgreSQL through `createCorePersistenceLayer`, with empty and expired lease families. It asserts durable sync runs record at most one completed application and all skipped runs have zero events and null next cursor.
+- DB-backed expired-lease takeover property asserts a new owner can take over an expired lease and the stale owner cannot commit afterward.
+
+### Verification
+
+- `pnpm --filter @mailmon/core test -- src/mailbox-sync-execution.pbt.test.ts` - passed
+- `pnpm --filter @mailmon/db test -- src/mailbox-sync-execution.pbt.test.ts` - passed
+- `pnpm --filter @mailmon/core test -- src/use-cases.test.ts` - passed
+- `pnpm --filter @mailmon/db test -- src/mailbox-sync-commit.pbt.test.ts` - passed
+- `PBT_TEST_CASES=5 pnpm --filter @mailmon/core test -- src/mailbox-sync-execution.pbt.test.ts` - passed after formatting
+- `PBT_TEST_CASES=5 pnpm --filter @mailmon/db test -- src/mailbox-sync-execution.pbt.test.ts` - passed after formatting
+- `pnpm typecheck` - passed
+- `pnpm lint` - passed
+- `pnpm format:check` - passed after running package formatters
+
+### Notes
+
+- Consulted `effect-solutions` before writing Effect test layers, per repo instructions.
+- The user-referenced `./repos/hegel` path is still absent; `.repos/hegel` is present and was used for Hegel async-test context.
