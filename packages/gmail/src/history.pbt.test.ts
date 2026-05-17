@@ -20,7 +20,19 @@ const historyOperationKindGen = gs.sampledFrom([
   "labelsRemoved",
   "messagesDeleted",
 ] as const);
+const changedHistoryOperationKindGen = gs.sampledFrom([
+  "messagesAdded",
+  "labelsAdded",
+  "labelsRemoved",
+] as const);
 const labelIdGen = gs.sampledFrom(["INBOX", "UNREAD", "STARRED", "CATEGORY_PROMOTIONS"]);
+
+type HistoryOperationKind = "messagesAdded" | "labelsAdded" | "labelsRemoved" | "messagesDeleted";
+
+interface HistoryOperation {
+  readonly id: string;
+  readonly kind: HistoryOperationKind;
+}
 
 const gmailMessage = (
   id: string,
@@ -46,10 +58,7 @@ const gmailMessage = (
   };
 };
 
-const historyRecordForOperation = (
-  kind: "messagesAdded" | "labelsAdded" | "labelsRemoved" | "messagesDeleted",
-  id: string,
-): GmailHistoryRecord => ({
+const historyRecordForOperation = (kind: HistoryOperationKind, id: string): GmailHistoryRecord => ({
   [kind]: [
     {
       message: {
@@ -85,21 +94,59 @@ const expectMessagesMatchById = (
 
 describe("Gmail history and initial sync properties", () => {
   it(
-    "compacts generated Gmail history so delete wins over add and label changes",
+    "compacts generated multi-page Gmail history so delete wins over add and label changes",
     () =>
       hegel.testAsync(async (tc) => {
-        const operations = tc.draw(
+        const generatedPages = tc.draw(
           gs.arrays(
-            gs.record({
-              id: messageIdGen,
-              kind: historyOperationKindGen,
-            }),
-            { minSize: 1, maxSize: 18 },
+            gs.arrays(
+              gs.record({
+                id: messageIdGen,
+                kind: historyOperationKindGen,
+              }),
+              { maxSize: 6 },
+            ),
+            { minSize: 2, maxSize: 4 },
           ),
         );
-        const historyRecords = operations.map((operation) =>
-          historyRecordForOperation(operation.kind, operation.id),
+        const crossPageMessageId = tc.draw(messageIdGen);
+        const crossPageChangeKind = tc.draw(changedHistoryOperationKindGen);
+        const deleteFirst = tc.draw(gs.booleans());
+        const missingMessageIds = tc.draw(gs.arrays(messageIdGen, { maxSize: 5 }));
+        const missingMessageIdSet = setFrom(missingMessageIds);
+        const firstCrossPageOperation: HistoryOperation = {
+          id: crossPageMessageId,
+          kind: deleteFirst ? "messagesDeleted" : crossPageChangeKind,
+        };
+        const lastCrossPageOperation: HistoryOperation = {
+          id: crossPageMessageId,
+          kind: deleteFirst ? crossPageChangeKind : "messagesDeleted",
+        };
+        const operationsByPage: ReadonlyArray<ReadonlyArray<HistoryOperation>> = generatedPages.map(
+          (pageOperations, pageIndex) => {
+            const operations: HistoryOperation[] = [...pageOperations];
+
+            if (pageIndex === 0) {
+              operations.unshift(firstCrossPageOperation);
+            }
+
+            if (pageIndex === generatedPages.length - 1) {
+              operations.push(lastCrossPageOperation);
+            }
+
+            return operations;
+          },
         );
+        const operations = operationsByPage.flat();
+        const historyPages = operationsByPage.map((pageOperations, pageIndex) => ({
+          history: pageOperations.map((operation) =>
+            historyRecordForOperation(operation.kind, operation.id),
+          ),
+          historyId: `hist_${pageIndex + 2}`,
+          ...(pageIndex < operationsByPage.length - 1
+            ? { nextPageToken: `page_token_${pageIndex + 1}` }
+            : {}),
+        }));
         const fetchedMessageIds: string[] = [];
         const expectedDeletedIds = new Set(
           operations
@@ -112,27 +159,54 @@ describe("Gmail history and initial sync properties", () => {
             .map((operation) => operation.id)
             .filter((id) => !expectedDeletedIds.has(id)),
         );
+        const expectedReturnedMessages = new Map(
+          [...expectedChangedIds]
+            .filter((id) => !missingMessageIdSet.has(id))
+            .map((id) => [id, gmailMessage(id)]),
+        );
+        const finalHistoryId = historyPages.at(-1)?.historyId;
+
+        if (finalHistoryId === undefined) {
+          throw new Error("history property generated no pages");
+        }
 
         notePbtCase(tc, "history-delete-wins-compaction", {
-          family: "gmail-history-operation-sequence",
-          operations,
+          family: "multi-page-gmail-history-operation-sequence",
+          operationsByPage: operationsByPage.map((pageOperations) =>
+            pageOperations.map((operation) => `${operation.kind}:${operation.id}`),
+          ),
+          pageHistoryIds: historyPages.map((page) => page.historyId),
+          pageTokens: historyPages.map((page) => page.nextPageToken ?? null),
+          crossPageMessageId,
+          deleteFirst,
+          missingMessageIds,
           expectedDeletedIds: [...expectedDeletedIds],
           expectedChangedIds: [...expectedChangedIds],
+          expectedReturnedMessageIds: [...expectedReturnedMessages.keys()],
         });
 
+        let pageIndex = 0;
         const delta = await listGmailHistoryDelta({
           accessToken: "access-token",
           cursor: "hist_1",
           httpClient: {
-            getJson: async () => ({
-              response: new Response(
-                JSON.stringify({ history: historyRecords, historyId: "hist_2" }),
-              ),
-              responseBody: {
-                history: historyRecords,
-                historyId: "hist_2",
-              },
-            }),
+            getJson: async ({ searchParams }) => {
+              const expectedPageToken = pageIndex === 0 ? undefined : `page_token_${pageIndex}`;
+              const page = historyPages[pageIndex];
+
+              expect(searchParams?.pageToken).toBe(expectedPageToken);
+
+              if (page === undefined) {
+                throw new Error("history property requested too many pages");
+              }
+
+              pageIndex += 1;
+
+              return {
+                response: new Response(JSON.stringify(page)),
+                responseBody: page,
+              };
+            },
             postJson: async () => {
               throw new Error("history property does not issue POST requests");
             },
@@ -140,20 +214,23 @@ describe("Gmail history and initial sync properties", () => {
           mailboxId: "mbx_property",
           getMessage: async (messageId) => {
             fetchedMessageIds.push(messageId);
-            return gmailMessage(messageId);
+            return missingMessageIdSet.has(messageId) ? null : gmailMessage(messageId);
           },
         });
 
+        expect(pageIndex).toBe(historyPages.length);
+        expect(delta.nextCursor).toBe(finalHistoryId);
         expectSameSet(delta.deletedMessageIds, expectedDeletedIds);
-        expectSameSet(
-          delta.messages.map((message) => message.id),
-          expectedChangedIds,
-        );
+        expectMessagesMatchById(delta.messages, expectedReturnedMessages);
         expectSameSet(fetchedMessageIds, expectedChangedIds);
 
         for (const deletedId of expectedDeletedIds) {
           expect(fetchedMessageIds).not.toContain(deletedId);
           expect(delta.messages.map((message) => message.id)).not.toContain(deletedId);
+        }
+
+        for (const missingMessageId of missingMessageIdSet) {
+          expect(delta.messages.map((message) => message.id)).not.toContain(missingMessageId);
         }
       }, hegelSettings),
     60_000,

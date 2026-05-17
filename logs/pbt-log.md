@@ -192,3 +192,31 @@ Completed phase 6 from `plans/antithesis-pbt-implementation-plan.md`.
 - Consulted `effect-solutions` before writing the Effect-backed DB test code, per repo instructions.
 - The requested `./repos/hegel` path is absent in this checkout; `.repos/hegel` is present and was used for Hegel context.
 - `pnpm --filter @mailmon/db test -- src/replay.test.ts` still runs the full DB suite rather than only `src/replay.test.ts`; that full-suite invocation failed once on the pre-existing `mailbox-lease-single-flight` DB PBT with Hegel's "Flaky test detected" error. Direct Vitest execution of `src/replay.test.ts` passed.
+
+## 2026-05-17 - Phase 7 Gmail History Depth
+
+Completed phase 7 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Extended `packages/gmail/src/history.pbt.test.ts`.
+- Targeted property slug:
+  - `history-delete-wins-compaction`
+- The generated history property now builds two to four Gmail history pages with page-token chains and final per-page `historyId` values.
+- Each generated case forces a cross-page change/delete conflict so delete-wins compaction is checked across page boundaries, not only inside one returned page.
+- Added generated `getMessage: null` races for changed IDs that disappear between history compaction and fetch; these IDs are fetched when changed, but are not returned as messages.
+- Added assertions that deleted IDs are never fetched or returned and that the delta cursor equals the final page's `historyId`.
+- Updated `antithesis/scratchbook/properties/history-delete-wins-compaction.md` and `antithesis/scratchbook/property-catalog.md` to reflect the completed multi-page/missing-message coverage.
+
+### Verification
+
+- `PBT_TEST_CASES=5 pnpm --filter @mailmon/gmail test -- src/history.pbt.test.ts` - passed; package invocation reported `2` passed test files and `26` passed tests.
+- `pnpm --filter @mailmon/gmail test -- src/history.pbt.test.ts` - passed; package invocation reported `2` passed test files and `26` passed tests.
+- `pnpm --filter @mailmon/gmail typecheck` - passed
+- `pnpm --filter @mailmon/gmail lint` - passed
+- `pnpm --filter @mailmon/gmail format:check` - passed
+
+### Notes
+
+- Consulted `effect-solutions` before touching the Effect-adjacent test code, per repo instructions.
+- The requested `./repos/hegel` and `./antithesis/sratchbook` paths are absent in this checkout; `.repos/hegel` and `antithesis/scratchbook` were used instead.

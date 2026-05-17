@@ -12,9 +12,7 @@ Generate history records with repeated `messagesAdded`, `labelsAdded`, `labelsRe
 
 ## PBT Implementation Notes
 
-Implemented in `packages/gmail/src/history.pbt.test.ts` by testing through `listGmailHistoryDelta` with a generated fake `GmailHttpClient` and generated history operation sequences. Current coverage uses one generated history page and successful `getMessage` calls for changed IDs.
-
-Next improvement: generate multiple history pages and allow `getMessage` to return `null` for changed IDs that disappear between history compaction and message fetch.
+Implemented in `packages/gmail/src/history.pbt.test.ts` by testing through `listGmailHistoryDelta` with a generated fake `GmailHttpClient` and generated history operation sequences. Coverage now generates multiple history pages, page-token chains, cross-page change/delete conflicts, final page cursors, and `getMessage: null` races for changed IDs that disappear between history compaction and message fetch.
 
 ## SUT-Side Instrumentation
 

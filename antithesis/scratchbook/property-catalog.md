@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: f86931c30cc149fc090158de2813d8ecf01a9614
+commit: 81f8e3344f95c73d5c628864270afe9c763b555f
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -114,15 +114,15 @@ First Hegel workload increment is implemented for pure backend properties in `pa
 
 ### history-delete-wins-compaction - Gmail History Delete Wins Compaction
 
-|                      |                                                                                                                                                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Type**             | Safety                                                                                                                                                                                                                               |
-| **Priority**         | High                                                                                                                                                                                                                                 |
-| **Property**         | If Gmail history contains add/update and delete records for the same message in one delta, the deleted result wins.                                                                                                                  |
-| **Invariant**        | `Always`: for generated history record sequences, a message ID that appears in `messagesDeleted` is included in `deletedMessageIds` and excluded from fetched changed messages, regardless of earlier add/label events in the delta. |
-| **Workload Status**  | Implemented with Hegel/Vitest in `packages/gmail/src/history.pbt.test.ts`; generated history operation sequences exercise `listGmailHistoryDelta` through a fake Gmail client and assert deleted IDs are not fetched or returned.    |
-| **Antithesis Angle** | Gmail history pages can contain duplicates and mixed operations; provider retries can expose unusual ordering.                                                                                                                       |
-| **Why It Matters**   | Delete/update ordering bugs create resurrected messages or missed deletions.                                                                                                                                                         |
+|                      |                                                                                                                                                                                                                                                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety                                                                                                                                                                                                                                                                                                                                    |
+| **Priority**         | High                                                                                                                                                                                                                                                                                                                                      |
+| **Property**         | If Gmail history contains add/update and delete records for the same message in one delta, the deleted result wins.                                                                                                                                                                                                                       |
+| **Invariant**        | `Always`: for generated history record sequences, a message ID that appears in `messagesDeleted` is included in `deletedMessageIds` and excluded from fetched changed messages, regardless of earlier add/label events in the delta.                                                                                                      |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/gmail/src/history.pbt.test.ts`; generated multi-page history operation sequences exercise `listGmailHistoryDelta` through a fake Gmail client and assert deleted IDs are not fetched or returned, `getMessage: null` changed IDs are filtered, and the final cursor comes from the final page. |
+| **Antithesis Angle** | Gmail history pages can contain duplicates and mixed operations; provider retries can expose unusual ordering.                                                                                                                                                                                                                            |
+| **Why It Matters**   | Delete/update ordering bugs create resurrected messages or missed deletions.                                                                                                                                                                                                                                                              |
 
 **Open Questions:**
 
