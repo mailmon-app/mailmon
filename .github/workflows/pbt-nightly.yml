@@ -1,0 +1,65 @@
+name: PBT Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pbt-nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pbt:
+    name: Hegel PBT
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mailmon
+          POSTGRES_PASSWORD: mailmon
+          POSTGRES_USER: mailmon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U mailmon -d mailmon"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgres://mailmon:mailmon@127.0.0.1:5432/mailmon
+      PBT_TEST_CASES: 250
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 24
+
+      - name: Cache Hegel uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hegel
+          key: ${{ runner.os }}-hegel-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-hegel-
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build PBT Packages
+        run: pnpm build:libs
+
+      - name: Run Expanded PBT
+        run: pnpm test:pbt

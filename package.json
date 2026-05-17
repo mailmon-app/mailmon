@@ -18,6 +18,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:coverage": "vitest run --coverage",
+    "test:pbt": "turbo run test --filter=@mailmon/core --filter=@mailmon/gmail --filter=@mailmon/db",
     "test:watch": "turbo run test:watch",
     "format": "turbo run format",
     "format:check": "turbo run format:check",

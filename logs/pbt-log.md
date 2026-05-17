@@ -249,3 +249,32 @@ Completed phase 8 from `plans/antithesis-pbt-implementation-plan.md`.
 
 - Consulted `effect-solutions` before writing the Effect-backed core test layers, per repo instructions.
 - The requested `./repos/hegel` and `./antithesis/sratchbook` paths are absent in this checkout; `.repos/hegel` and `antithesis/scratchbook` were used instead.
+
+## 2026-05-17 - Phase 9 Documentation And CI Alignment
+
+Completed phase 9 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Updated `docs/testing-requirements.md` section `4.4 Deterministic Simulation Testing` to make Hegel/Vitest the repo's property-based testing direction.
+- Removed the stale future fast-check direction and documented the implemented backend PBT coverage: mailbox sync commit safety, single-flight sync execution, Gmail history compaction, Gmail push fanout, webhook delivery claims/outcomes, Replay overlap/dispatch, internal worker codecs, and pagination cursors.
+- Documented PR-time versus nightly/manual counts: default PBT uses 40 cases through package-local helpers, while expanded runs use `PBT_TEST_CASES=250 pnpm test:pbt`.
+- Stated that Antithesis is property vocabulary and future portability only until platform access, SDK assertions, and output plumbing exist in this repo.
+- Added a root `test:pbt` script that runs the core/gmail/db package test lanes where Hegel PBT lives.
+- Added `.github/workflows/pbt-nightly.yml` as a scheduled/manual opt-in PBT workflow with PostgreSQL and `PBT_TEST_CASES=250`.
+- Added `~/.cache/hegel` caching to normal CI and the nightly PBT workflow for Hegel's private `uv` install path.
+- Disabled file-level parallelism in the DB Vitest project so generated PostgreSQL state-machine properties run deterministically in the default package test path.
+- Updated `docs/launch-readiness.md` with the new PBT evidence and CI posture.
+
+### Verification
+
+- `pnpm format:check` - passed
+- `pnpm --filter @mailmon/db test -- src/mailbox-sync-execution.pbt.test.ts` - passed after DB Vitest file serialization; package invocation reported `15` passed test files and `64` passed tests.
+- `pnpm test` - passed after DB Vitest file serialization; Turbo reported `18` successful tasks.
+
+### Notes
+
+- Consulted `effect-solutions` before phase work per repo instructions.
+- Referenced `.repos/hegel` to confirm Hegel uses `uv` and caches its private install under `~/.cache/hegel`.
+- Two full `pnpm test` attempts before DB Vitest file serialization reproduced Hegel's flaky-test detector in `packages/db/src/mailbox-sync-execution.pbt.test.ts`; serializing DB test files removed the cross-file race while preserving the default PBT path.
+- The requested `./antithesis/sratchbook` path is absent in this checkout; `antithesis/scratchbook` was used instead.
