@@ -12,11 +12,19 @@ Generate push notifications and matching mailbox lists, including duplicates if 
 
 ## PBT Implementation Notes
 
-Use Hegel with fake store/dispatcher layers. Generate mailbox lists and dispatcher failure modes in separate properties: one for successful fanout, one for propagation of dispatch failures.
+Implemented with Hegel in `packages/core/src/gmail-push-notification.pbt.test.ts`.
+The success property generates Gmail push notifications plus zero to eight returned
+mailboxes from a small ID domain so duplicate mailbox IDs occur naturally. It
+asserts `dispatched` and dispatcher calls are derived from the same generated
+store result. The failure property generates a non-empty mailbox list and a
+failing dispatcher mailbox ID, then asserts the dispatcher failure propagates.
 
 ## SUT-Side Instrumentation
 
-Missing. Future `Always` assertion point: accepted Gmail push result `dispatched` equals the number of dispatch calls made by the dispatcher.
+Covered at the service boundary by fake `MailboxPushNotificationStore` and
+`MailboxSyncDispatcher` layers. The test intentionally does not provide
+`MailboxStateStore`, Gmail API, or event-store layers, so direct mutation
+dependencies would fail layer resolution.
 
 ## Open Questions
 

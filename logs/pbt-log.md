@@ -220,3 +220,32 @@ Completed phase 7 from `plans/antithesis-pbt-implementation-plan.md`.
 
 - Consulted `effect-solutions` before touching the Effect-adjacent test code, per repo instructions.
 - The requested `./repos/hegel` and `./antithesis/sratchbook` paths are absent in this checkout; `.repos/hegel` and `antithesis/scratchbook` were used instead.
+
+## 2026-05-17 - Phase 8 Gmail Push Fanout
+
+Completed phase 8 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Added `packages/core/src/gmail-push-notification.pbt.test.ts`.
+- Targeted property slug:
+  - `gmail-push-is-wakeup-only-and-fans-out`
+- Added generated core service-boundary coverage for accepted Gmail push fanout:
+  generated notifications, zero to eight fake store-returned mailboxes, duplicate mailbox IDs from the current store result semantics, exact dispatcher call ordering, and `dispatched` count equality.
+- Added generated dispatcher failure coverage with non-empty fake store results and a generated failing mailbox ID, asserting the failure propagates.
+- The PBT layer only provides `MailboxPushNotificationStore` and `MailboxSyncDispatcher`, so direct calls to `MailboxStateStore`, Gmail APIs, or event stores would fail layer resolution.
+- Updated `antithesis/scratchbook/properties/gmail-push-is-wakeup-only-and-fans-out.md` and `antithesis/scratchbook/property-catalog.md` to reflect the implemented workload status.
+
+### Verification
+
+- `PBT_TEST_CASES=5 pnpm --filter @mailmon/core test -- src/gmail-push-notification.pbt.test.ts` - passed; package invocation reported `10` passed test files and `96` passed tests.
+- `pnpm --filter @mailmon/core test -- src/gmail-push-notification.pbt.test.ts` - passed; package invocation reported `10` passed test files and `96` passed tests.
+- `pnpm --filter @mailmon/core test -- src/use-cases.test.ts` - passed; package invocation reported `10` passed test files and `96` passed tests.
+- `pnpm --filter @mailmon/core typecheck` - passed
+- `pnpm --filter @mailmon/core lint` - passed
+- `pnpm --filter @mailmon/core format:check` - passed
+
+### Notes
+
+- Consulted `effect-solutions` before writing the Effect-backed core test layers, per repo instructions.
+- The requested `./repos/hegel` and `./antithesis/sratchbook` paths are absent in this checkout; `.repos/hegel` and `antithesis/scratchbook` were used instead.
