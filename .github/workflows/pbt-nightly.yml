@@ -62,5 +62,25 @@ jobs:
       - name: Build PBT Packages
         run: pnpm build:libs
 
-      - name: Run Expanded PBT
+      - name: Run Core and Gmail PBT
+        env:
+          PBT_INCLUDE: packages/core/src/**/*.pbt.test.ts,packages/gmail/src/**/*.pbt.test.ts
+        run: pnpm exec vitest run --config vitest.pbt.config.ts --reporter=verbose
+
+      - name: Run DB Sync Commit PBT
+        timeout-minutes: 6
+        env:
+          PBT_INCLUDE: packages/db/src/mailbox-sync-commit.pbt.test.ts
+        run: pnpm exec vitest run --config vitest.pbt.config.ts --reporter=verbose
+
+      - name: Run DB Webhook and Replay PBT
+        timeout-minutes: 6
+        env:
+          PBT_INCLUDE: packages/db/src/webhook-delivery-runtime.pbt.test.ts,packages/db/src/replay.pbt.test.ts
+        run: pnpm exec vitest run --config vitest.pbt.config.ts --reporter=verbose
+
+      - name: Run DB Execution and Mapper PBT
+        timeout-minutes: 6
+        env:
+          PBT_INCLUDE: packages/db/src/mailbox-sync-execution.pbt.test.ts,packages/db/src/persistence/pagination-cursors.pbt.test.ts,packages/db/src/persistence/canonical-state-mappers.pbt.test.ts
         run: pnpm exec vitest run --config vitest.pbt.config.ts --reporter=verbose
