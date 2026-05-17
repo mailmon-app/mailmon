@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: 79c8ff37fc51675fb62b3f6daa1bb4f7de0902f6
+commit: f86931c30cc149fc090158de2813d8ecf01a9614
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -180,14 +180,15 @@ First Hegel workload increment is implemented for pure backend properties in `pa
 
 ### webhook-delivery-id-stable-dedupes-scheduling - Webhook Delivery ID Stable Dedupes Scheduling
 
-|                      |                                                                                                                                                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Type**             | Safety                                                                                                                                                                                                             |
-| **Priority**         | High                                                                                                                                                                                                               |
-| **Property**         | The same mailbox event and webhook endpoint pair maps to exactly one durable delivery, even under duplicate scheduling.                                                                                            |
-| **Invariant**        | `Always`: generated event/endpoint pairs create stable `del_...` IDs; repeated `createWebhookDeliveriesForMailboxEvents` calls never create duplicate rows for the same `(mailbox_event_id, webhook_endpoint_id)`. |
-| **Antithesis Angle** | Sync commits, replay, and recovery can schedule delivery for the same event more than once.                                                                                                                        |
-| **Why It Matters**   | Durable at-least-once delivery must not become unbounded duplicate delivery.                                                                                                                                       |
+|                      |                                                                                                                                                                                                                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety                                                                                                                                                                                                                                                                 |
+| **Priority**         | High                                                                                                                                                                                                                                                                   |
+| **Property**         | The same mailbox event and webhook endpoint pair maps to exactly one durable delivery, even under duplicate scheduling.                                                                                                                                                |
+| **Invariant**        | `Always`: generated event/endpoint pairs create stable `del_...` IDs; repeated `createWebhookDeliveriesForMailboxEvents` calls never create duplicate rows for the same `(mailbox_event_id, webhook_endpoint_id)`.                                                     |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/db/src/webhook-delivery-runtime.pbt.test.ts`; generated event inputs, endpoint subscription families, duplicate IDs, and repeated scheduling calls assert stable IDs and one durable row per scheduled event/endpoint pair. |
+| **Antithesis Angle** | Sync commits, replay, and recovery can schedule delivery for the same event more than once.                                                                                                                                                                            |
+| **Why It Matters**   | Durable at-least-once delivery must not become unbounded duplicate delivery.                                                                                                                                                                                           |
 
 **Open Questions:**
 
@@ -201,6 +202,7 @@ First Hegel workload increment is implemented for pure backend properties in `pa
 | **Priority**         | High                                                                                                                                                                                                                                                           |
 | **Property**         | A webhook delivery can be claimed by only one live attempt, and stale processing attempts become reclaimable after the processing timeout.                                                                                                                     |
 | **Invariant**        | `Always`: for generated claim attempts and timestamps, at most one non-stale processing claim succeeds; a processing row older than `WEBHOOK_DELIVERY_PROCESSING_TIMEOUT_MS` can be reclaimed and increments `attemptCount` exactly once per successful claim. |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/db/src/webhook-delivery-runtime.pbt.test.ts`; generated concurrent pending claims, non-stale processing rows, exact-timeout rows, and stale rows inspect final durable delivery state and attempt counts.           |
 | **Antithesis Angle** | Cloud Tasks or local retries can invoke the same delivery concurrently or after worker death.                                                                                                                                                                  |
 | **Why It Matters**   | This is the webhook delivery equivalent of mailbox single-flight.                                                                                                                                                                                              |
 
@@ -226,15 +228,15 @@ First Hegel workload increment is implemented for pure backend properties in `pa
 
 ### terminal-webhook-outcomes-do-not-reschedule - Terminal Webhook Outcomes Do Not Reschedule
 
-|                      |                                                                                                                                                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Type**             | Safety                                                                                                                                                                                                       |
-| **Priority**         | Medium                                                                                                                                                                                                       |
-| **Property**         | Delivered, nonretryable failed, and retry-exhausted webhook outcomes never schedule another delivery attempt.                                                                                                |
-| **Invariant**        | `Always`: generated HTTP status codes and sender failures classify terminal outcomes with `nextAttemptAt: null`, and `finalizeWebhookDelivery` schedules follow-up work only for `pending` completions.      |
-| **Workload Status**  | Partially implemented with Hegel/Vitest in `packages/core/src/webhook-delivery-execution.pbt.test.ts`; terminal classification has generated coverage, while the fake-scheduler service-layer check remains. |
-| **Antithesis Angle** | Mixed customer endpoint responses can otherwise create impossible terminal-plus-pending states.                                                                                                              |
-| **Why It Matters**   | Prevents duplicate terminal sends and confusing observability state.                                                                                                                                         |
+|                      |                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Type**             | Safety                                                                                                                                                                                                                                                                                                                                                       |
+| **Priority**         | Medium                                                                                                                                                                                                                                                                                                                                                       |
+| **Property**         | Delivered, nonretryable failed, and retry-exhausted webhook outcomes never schedule another delivery attempt.                                                                                                                                                                                                                                                |
+| **Invariant**        | `Always`: generated HTTP status codes and sender failures classify terminal outcomes with `nextAttemptAt: null`, and `finalizeWebhookDelivery` schedules follow-up work only for `pending` completions.                                                                                                                                                      |
+| **Workload Status**  | Implemented with Hegel/Vitest in `packages/core/src/webhook-delivery-execution.pbt.test.ts` and `packages/db/src/webhook-delivery-runtime.pbt.test.ts`; terminal classification has generated coverage, and DB-backed service execution uses a fake scheduler to assert zero follow-up scheduling calls for delivered, failed, and retry-exhausted outcomes. |
+| **Antithesis Angle** | Mixed customer endpoint responses can otherwise create impossible terminal-plus-pending states.                                                                                                                                                                                                                                                              |
+| **Why It Matters**   | Prevents duplicate terminal sends and confusing observability state.                                                                                                                                                                                                                                                                                         |
 
 **Open Questions:**
 

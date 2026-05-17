@@ -128,3 +128,36 @@ Completed phase 4 from `plans/antithesis-pbt-implementation-plan.md`.
 
 - Consulted `effect-solutions` before extending the Effect-backed DB test code, per repo instructions.
 - The requested `./repos/hegel` path is absent in this checkout; `.repos/hegel` is present and was used for Hegel context.
+
+## 2026-05-17 - Phase 5 Webhook Delivery State Machine PBT
+
+Completed phase 5 from `plans/antithesis-pbt-implementation-plan.md`.
+
+### Changes
+
+- Added `packages/db/src/webhook-delivery-runtime.pbt.test.ts`.
+- Added generated DB-backed coverage for:
+  - `webhook-delivery-id-stable-dedupes-scheduling`
+  - `webhook-claim-is-exclusive-and-stale-recoverable`
+  - the service-layer scheduler side-effect piece of `terminal-webhook-outcomes-do-not-reschedule`
+- Stable delivery ID coverage generates mailbox event types, endpoint subscription families, duplicate event input IDs, and repeated scheduling calls through `scheduleMailboxEventDeliveries`. It asserts one durable row per requested `(mailbox_event_id, webhook_endpoint_id)` pair and verifies every row ID equals `createStableWebhookDeliveryId(...)`.
+- Claim coverage generates concurrent pending claims without sleeps and asserts exactly one durable transition to `processing` with one attempt increment.
+- Stale recovery coverage generates non-stale, exact-timeout, and stale processing rows, then fires concurrent claims and inspects final durable `attemptCount`, `processingStartedAt`, and `lastAttemptedAt`.
+- Terminal service-layer coverage runs `runWebhookDelivery` against durable pending rows with generated delivered, terminal HTTP, nonretryable failure, exhausted HTTP, and exhausted failure outcomes, using a fake scheduler to assert zero follow-up scheduling calls.
+- Updated `antithesis/scratchbook/property-catalog.md` with implemented workload statuses and refreshed the catalog commit provenance.
+
+### Verification
+
+- `PBT_TEST_CASES=5 pnpm --filter @mailmon/db test -- src/webhook-delivery-runtime.pbt.test.ts` - passed
+- `pnpm --filter @mailmon/db test -- src/webhook-delivery-runtime.pbt.test.ts` - passed
+- `pnpm --filter @mailmon/db test -- src/webhook-delivery-runtime.test.ts` - passed
+- `pnpm --filter @mailmon/core test -- src/webhook-delivery-execution.pbt.test.ts` - passed
+- `pnpm --filter @mailmon/db typecheck` - passed
+- `pnpm --filter @mailmon/db lint` - passed
+- `pnpm --filter @mailmon/db format:check` - passed
+
+### Notes
+
+- Consulted `effect-solutions` before writing the Effect-backed DB test code, per repo instructions.
+- The requested `./repos/hegel` path is absent in this checkout; `.repos/hegel` is present and was used for Hegel runner and generator context.
+- The DB package's Vitest invocation continues to run the full DB test set even when a specific file argument is supplied; the targeted DB commands reported `14 passed` test files and `62 passed` tests.
