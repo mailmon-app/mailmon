@@ -439,6 +439,7 @@ release validation.
 - live staging validation of Cloud Tasks-backed webhook delivery, including startup recovery of pending durable deliveries and successful OIDC dispatch to `/internal/webhook-deliveries`
 - live staging validation of the Gmail push/watch production path, including Pub/Sub OIDC intake at `/internal/gmail-push`, mailbox sync dispatch to `/internal/sync`, fresh Mailbox Event emission, and customer webhook delivery
 - durable Replay resources with create/get API routes, overlap conflict handling, empty-range completion, deterministic Mailbox Event selection, and scheduled re-delivery with stable `event.id` values
+- local and CI property-based testing now covers the riskiest backend state machines with Hegel/Vitest: mailbox cursor/lease/commit safety, single-flight sync execution, Gmail history delete-wins behavior, webhook delivery claims and terminal outcomes, Replay overlap/dispatch, worker envelopes, and pagination cursors
 - generated OpenAPI output, Fern SDK checks, and a published TypeScript SDK package
 - Mintlify docs now include a real introduction, Quickstart, authentication guide, webhook guide, Replay guide, API patterns guide, errors guide, and generated route reference pages
 - PRD, README, Mintlify Quickstart/Replay examples, OpenAPI, and the SDK now agree on camelCase Connect Session and Replay field names; Replay creation is consistently `201 Created` with flat `webhookEndpointId`
@@ -487,6 +488,13 @@ Results:
 - API contract tests now pin camelCase Connect Session fields, flat Replay `webhookEndpointId`, `201 Created`, message `labelIds`, and absence of `/v1/labels`.
 
 Items checked off in this pass are limited to things backed by route metadata, tests, generated SDK artifacts, Terraform, or docs that actually exist. Items with only partial implementation remain unchecked.
+
+Additional PBT evidence added on 2026-05-17:
+
+- `docs/testing-requirements.md` now names Hegel, not fast-check, as the repo's executable property-based testing direction.
+- Normal package tests include `*.pbt.test.ts` by default through the existing Vitest globs.
+- The optional `PBT Nightly` workflow runs `PBT_TEST_CASES=250 pnpm test:pbt` against `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db` with PostgreSQL.
+- CI caches `~/.cache/hegel` for Hegel's private `uv` install and does not require Antithesis platform access.
 
 ## 7. Recommended Launch Sequence
 

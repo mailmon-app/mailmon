@@ -12,6 +12,7 @@ The following layers are already implemented and should be treated as the requir
 - **Worker runtime contract tests:** `apps/worker/src/server.test.ts` exercises `/health`, `/internal/sync`, `/internal/gmail-push`, `/internal/webhook-deliveries`, and `/internal/control-jobs`, including local-mode bypass and GCP-mode internal auth rejection/verification.
 - **Sandbox E2E matrix:** `apps/api/src/sandbox-e2e.test.ts` runs the hosted connect flow, a real worker runtime, DB-backed sync, durable event emission, webhook delivery, reconnect-required handling, webhook retry behavior, duplicate incremental dispatch idempotency, and newest-first readback against a stateful Gmail sandbox server plus a local webhook receiver.
 - **Core workflow tests:** `packages/core/src/use-cases.test.ts` covers mailbox lease acquisition/skip behavior, reconnect-required transitions, lease heartbeat/loss, webhook retry scheduling, and stale completion handling.
+- **Hegel property-based tests:** `*.pbt.test.ts` suites in `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db` cover shrinkable state-machine properties for mailbox sync, cursor safety, Gmail history compaction, webhook delivery, Replay dispatch, internal worker codecs, and pagination cursors.
 - **Gmail provider contract tests:** `packages/gmail/src/index.test.ts` covers token refresh failures, rate-limit classification, incremental history handling, and snapshot shaping.
 - **DB-backed integration tests:** `packages/db/src/read-model.test.ts`, `packages/db/src/mailbox-event-emission.test.ts`, `packages/db/src/webhook-delivery-runtime.test.ts`, `packages/db/src/gmail-credentials.test.ts`, and related suites exercise real PostgreSQL migrations, pagination/index behavior, transactional sync finalization, event durability, webhook recovery, and reconnect-required persistence.
 - **Queue/runtime adapter tests:** `packages/queue/src/index.test.ts` covers local async dispatch, GCP Pub/Sub mailbox sync publishing, delayed local webhook scheduling, worker HTTP adapters, and Cloud Tasks task creation/idempotency.
@@ -37,9 +38,15 @@ The minimum CI baseline for this repo is:
 
 - run install, build, lint, typecheck, format checks, and tests on every push and pull request
 - run DB-backed tests against a real PostgreSQL service container
+- run Hegel PBT in the normal package/Vitest test path, with modest PR-time case counts
+- run the DB Vitest project with file-level parallelism disabled so generated PostgreSQL state-machine properties do not race other DB suites
 - generate coverage via `@vitest/coverage-v8`
 - enforce practical global thresholds plus stricter thresholds for the most critical workflow files
 - publish coverage artifacts for inspection
+- keep expanded PBT opt-in through the scheduled/manual `PBT Nightly` workflow, which runs `PBT_TEST_CASES=250 pnpm test:pbt`
+- cache `~/.cache/hegel` in CI so Hegel's private `uv` install does not become a cold-start source of noise
+
+CI does not require Antithesis platform access. Antithesis terminology in the scratchbook and plan is used for property semantics and future portability only; the executable backend lane is local Hegel through Vitest.
 
 Follow-up work here should focus on tightening thresholds over time, not on introducing the baseline for the first time.
 
@@ -81,17 +88,33 @@ The following areas are still missing and are the real testing roadmap from here
 
 **Objective:** Use deterministic clocks plus property-based inputs to shake out rare state-machine bugs.
 
+**Current state:** Hegel is the repo's property-based testing direction. The implemented local/Vitest lane uses package-local `test-hegel.ts` helpers, defaults to 40 generated cases for PR-time runs, clamps tiny or invalid `PBT_TEST_CASES` values to 5, and emits `tc.note(...)` diagnostics so shrunk failures include the relevant property slug and generated scenario family.
+
+Implemented PBT coverage includes:
+
+- mailbox sync commit safety: cursor regression rejection, stale lease no-op commits, atomic state/cursor/event commits, idempotent snapshot application, label normalization, and thread-summary recalculation
+- mailbox single-flight execution through both core service models and DB-backed lease acquisition
+- Gmail history and initial-sync delete-wins compaction, including multi-page deltas and disappearing changed messages
+- Gmail push fanout as a wake-up-only service-boundary property
+- webhook delivery scheduling, stable delivery IDs, exclusive/stale claims, retry delay classification, and terminal no-reschedule behavior
+- Replay active-range overlap rejection plus single-claim dispatch/counting
+- internal worker envelope codecs and public pagination cursor round-trips/rejection
+
+PR-time package tests run PBT by default because package Vitest configs include `src/**/*.test.ts`, which includes `*.pbt.test.ts`. Use `PBT_TEST_CASES=250 pnpm test:pbt` for manual expansion, and let the scheduled/manual `PBT Nightly` workflow run that same command without slowing every pull request.
+
+Antithesis remains vocabulary and future portability for this lane until platform access, SDK assertions, and output plumbing exist in this repo. Do not add native Antithesis assertions or claim `ANTITHESIS_OUTPUT_DIR` support until those APIs are wired and verified.
+
 **Still required:**
 
-- Add `fast-check`-driven concurrent Mailbox sync contention scenarios on the same `mailboxId`.
-- Add randomized out-of-order Gmail history sequences and assert eventual canonical-state convergence.
-- Keep these tests transport-neutral and centered on `@mailmon/core` plus DB-backed finalization boundaries.
+- Add a live/deployed failure-injection tier for worker death, PostgreSQL impairment, and queue retry behavior.
+- Consider Bombadil browser/docs fuzzing only after backend PBT and docs runtime costs are stable.
+- Keep newly added state-machine tests transport-neutral where possible and DB-backed only where durable transaction/claim behavior is the property under test.
 
 ## 5. Recommended Execution Order
 
 1. Build and stabilize the sandbox E2E harness.
 2. Add a first chaos suite around worker death and DB impairment.
 3. Add repeatable load scenarios with explicit budgets.
-4. Add property-based DST for lease contention and history ordering.
+4. Keep the Hegel PBT lane healthy in PRs and use nightly/manual expanded case counts to deepen shrinkable state-machine coverage.
 
 That sequence keeps the next effort focused on the highest-value missing confidence layers rather than over-investing in more unit coverage.
