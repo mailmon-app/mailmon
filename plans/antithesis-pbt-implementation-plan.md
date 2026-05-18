@@ -2,7 +2,9 @@
 
 > Source artifacts: `antithesis/scratchbook/`
 > Current date: 2026-05-17
-> Scope: local/CI property-based testing with Hegel first; Bombadil later; native Antithesis SDK/platform work deferred.
+> Scope: local/CI property-based testing with Hegel first; Bombadil deferred until a product web interface exists; native Antithesis SDK/platform work deferred.
+
+> Status update, 2026-05-17: this plan has mostly been executed for the backend Hegel lane. Current `docs/testing-requirements.md` and `antithesis/scratchbook/` now treat local Hegel PBT as implemented baseline and move the remaining roadmap to provider-failure E2E, worker-death chaos, PostgreSQL impairment, deployed Pub/Sub retry validation, and load/performance budgets.
 
 ## Purpose
 
@@ -18,7 +20,7 @@ The useful conclusion across `evaluation/synthesis.md`, `evaluation/coverage-bal
 - The first pure PBT increment is real and passing, but it mostly covers deterministic mapper/codec/classification logic.
 - The highest remaining risk lives in real PostgreSQL transaction and claim boundaries, especially mailbox leases, stale commits, cursor regression, webhook claim recovery, and replay overlap.
 - Hegel's public package should be treated as local Vitest PBT only. The Antithesis-style output path exists in local Hegel source but is not exported by `@hegeldev/hegel` 0.2.2.
-- Bombadil is a valid browser/docs fuzzer, but it is low priority for a backend state-sync product and should not compete with DB-backed PBT.
+- Bombadil is a valid browser/UI fuzzer, but it is deferred until Mailmon has a product web interface worth exploring. It should not target docs or marketing, and it should not compete with backend PBT.
 - `docs/testing-requirements.md` still mentions fast-check and should be updated once this branch's Hegel direction is finalized.
 
 ## Current Coverage Map
@@ -46,7 +48,7 @@ Example/integration coverage exists, but generated PBT is still missing:
 
 Not implemented:
 
-- `docs-browser-navigation-has-no-runtime-errors`
+- `product-web-interface-has-no-runtime-errors`
 
 ## Implementation Rules
 
@@ -445,32 +447,29 @@ pnpm test
 pnpm format:check
 ```
 
-## Phase 10: Optional Bombadil Browser Fuzzing
+## Phase 10: Deferred Bombadil Product Web Interface Fuzzing
 
 ### When To Start
 
-Start only after backend DB-backed PBT is stable and docs/browser fuzzing is explicitly worth CI cost.
+Start only after backend DB-backed PBT is stable and Mailmon has a product web interface with workflows worth browser exploration. Do not start this for docs or marketing.
 
 ### What To Build
 
-- Add Bombadil dependency in the appropriate docs/browser package or tooling location.
-- Add `antithesis/bombadil/docs.spec.ts`.
-- Run against a local docs server.
+- Add Bombadil dependency in the appropriate product web-interface package or tooling location.
+- Add a Bombadil spec for the product web interface once that interface exists.
+- Run against a local product web-interface server.
 
 ### Property
 
-Target `docs-browser-navigation-has-no-runtime-errors`:
+Target `product-web-interface-has-no-runtime-errors`:
 
 - default properties for uncaught exceptions, promise rejections, console errors, and HTTP error responses
-- reachability for Quickstart, Webhooks, Replays, and API reference pages
-- custom actions for sidebar/nav links only if default actions are insufficient
+- reachability for critical product workflows
+- custom actions for authenticated/product controls only if default actions are insufficient
 
 ### Verification
 
-```bash
-pnpm --filter @mailmon/docs dev
-bombadil test http://127.0.0.1:3333 antithesis/bombadil/docs.spec.ts --headless --time-limit 2m --exit-on-violation
-```
+Deferred until the product web interface and its local dev command exist.
 
 ## Suggested Execution Order
 
@@ -483,7 +482,7 @@ bombadil test http://127.0.0.1:3333 antithesis/bombadil/docs.spec.ts --headless 
 7. Phase 7: multi-page Gmail history and missing-message races.
 8. Phase 8: Gmail push fanout.
 9. Phase 9: testing docs and CI alignment.
-10. Phase 10: Bombadil docs fuzzing.
+10. Phase 10: deferred Bombadil product web interface fuzzing.
 
 This order follows the scratchbook's risk ranking: first improve failure diagnostics, then cover the real transaction and claim boundaries, then deepen already-implemented pure properties, then update docs and optional browser fuzzing.
 
@@ -500,5 +499,5 @@ This order follows the scratchbook's risk ranking: first improve failure diagnos
 
 - Native Antithesis SDK assertions and `ANTITHESIS_OUTPUT_DIR` output.
 - Antithesis container topology and `snouty` launch setup.
-- Bombadil marketing-site fuzzing until `apps/marketing` is committed and in scope.
+- Bombadil product web-interface fuzzing until that interface exists. Docs and marketing are out of scope for this Bombadil lane.
 - Real Gmail-account live sandbox tests, GCP Pub/Sub retry validation, and infrastructure chaos testing. Those belong to the broader testing roadmap, not this local PBT increment.

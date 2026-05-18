@@ -34,17 +34,26 @@ These scenarios are covered today by the existing test suites and should stay in
 
 ## 3. CI/CD Enforcement
 
-The minimum CI baseline for this repo is:
+The enforced CI baseline for this repo is:
 
 - run install, build, lint, typecheck, format checks, and tests on every push and pull request
 - run DB-backed tests against a real PostgreSQL service container
-- run Hegel PBT in the normal package/Vitest test path, with modest PR-time case counts
-- run the DB Vitest project with file-level parallelism disabled so generated PostgreSQL state-machine properties do not race other DB suites
+- run the DB Vitest project with file-level parallelism disabled so generated PostgreSQL suites do not race each other
 - generate coverage via `@vitest/coverage-v8`
 - enforce practical global thresholds plus stricter thresholds for the most critical workflow files
 - publish coverage artifacts for inspection
-- keep expanded PBT opt-in through the scheduled/manual `PBT Nightly` workflow, which runs `PBT_TEST_CASES=250 pnpm test:pbt`
 - cache `~/.cache/hegel` in CI so Hegel's private `uv` install does not become a cold-start source of noise
+
+CI currently runs `pnpm test:coverage`, which executes the normal Vitest project graph with `**/*.pbt.test.ts` excluded. The PR-time coverage lane therefore covers API contracts, worker runtime behavior, sandbox E2E, DB-backed integration tests, Gmail provider contracts, queue/runtime adapter tests, and non-PBT core workflow tests, but not Hegel property tests.
+
+Hegel PBT is enforced through the scheduled/manual `PBT Nightly` workflow. That workflow currently uses a PostgreSQL service container, builds the shared libraries, sets `PBT_TEST_CASES=10`, and runs `vitest.pbt.config.ts` in several explicit include groups:
+
+- core and Gmail PBT
+- DB mailbox sync commit PBT
+- DB webhook and Replay PBT
+- DB execution and mapper PBT
+
+For local/manual expansion, prefer `PBT_TEST_CASES=<n> pnpm exec vitest run --config vitest.pbt.config.ts`. The root `pnpm test:pbt` script is a convenience filter over the `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db` package tests; because those package configs include all `src/**/*.test.ts`, it runs both PBT and non-PBT tests in those packages.
 
 CI does not require Antithesis platform access. Antithesis terminology in the scratchbook and plan is used for property semantics and future portability only; the executable backend lane is local Hegel through Vitest.
 
@@ -100,21 +109,21 @@ Implemented PBT coverage includes:
 - Replay active-range overlap rejection plus single-claim dispatch/counting
 - internal worker envelope codecs and public pagination cursor round-trips/rejection
 
-PR-time package tests run PBT by default because package Vitest configs include `src/**/*.test.ts`, which includes `*.pbt.test.ts`. Use `PBT_TEST_CASES=250 pnpm test:pbt` for manual expansion, and let the scheduled/manual `PBT Nightly` workflow run that same command without slowing every pull request.
+Package-level `pnpm test` runs include PBT by default because package Vitest configs include `src/**/*.test.ts`, which includes `*.pbt.test.ts`. The CI coverage lane intentionally excludes PBT, while the scheduled/manual `PBT Nightly` workflow runs the PBT-only config with explicit include groups. Use `PBT_TEST_CASES=<n> pnpm exec vitest run --config vitest.pbt.config.ts` for manual PBT expansion.
 
 Antithesis remains vocabulary and future portability for this lane until platform access, SDK assertions, and output plumbing exist in this repo. Do not add native Antithesis assertions or claim `ANTITHESIS_OUTPUT_DIR` support until those APIs are wired and verified.
 
 **Still required:**
 
 - Add a live/deployed failure-injection tier for worker death, PostgreSQL impairment, and queue retry behavior.
-- Consider Bombadil browser/docs fuzzing only after backend PBT and docs runtime costs are stable.
+- Defer Bombadil until Mailmon has a product web interface worth browser fuzzing; do not spend this lane on docs or marketing-site fuzzing.
 - Keep newly added state-machine tests transport-neutral where possible and DB-backed only where durable transaction/claim behavior is the property under test.
 
 ## 5. Recommended Execution Order
 
-1. Build and stabilize the sandbox E2E harness.
+1. Add provider-side failure cases to the sandbox E2E harness and decide whether any heavier sandbox tier should move out of the PR-time coverage lane.
 2. Add a first chaos suite around worker death and DB impairment.
 3. Add repeatable load scenarios with explicit budgets.
-4. Keep the Hegel PBT lane healthy in PRs and use nightly/manual expanded case counts to deepen shrinkable state-machine coverage.
+4. Keep the Hegel PBT lane healthy in scheduled/manual runs and raise case counts when runtime budgets allow.
 
 That sequence keeps the next effort focused on the highest-value missing confidence layers rather than over-investing in more unit coverage.

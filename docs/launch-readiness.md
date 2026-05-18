@@ -492,8 +492,8 @@ Items checked off in this pass are limited to things backed by route metadata, t
 Additional PBT evidence added on 2026-05-17:
 
 - `docs/testing-requirements.md` now names Hegel, not fast-check, as the repo's executable property-based testing direction.
-- Normal package tests include `*.pbt.test.ts` by default through the existing Vitest globs.
-- The optional `PBT Nightly` workflow runs `PBT_TEST_CASES=250 pnpm test:pbt` against `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db` with PostgreSQL.
+- Normal package tests include `*.pbt.test.ts` by default through the existing Vitest globs, but the CI coverage lane intentionally excludes PBT with `pnpm test:coverage`.
+- The optional `PBT Nightly` workflow runs the PBT-only Vitest config against `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db` with PostgreSQL, currently using `PBT_TEST_CASES=10` and explicit include groups.
 - CI caches `~/.cache/hegel` for Hegel's private `uv` install and does not require Antithesis platform access.
 
 ## 7. Recommended Launch Sequence
