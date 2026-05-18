@@ -4,6 +4,7 @@ node_modules
 dist
 coverage
 .hegel/
+load/results/*.json
 .DS_Store
 .env
 .env.*

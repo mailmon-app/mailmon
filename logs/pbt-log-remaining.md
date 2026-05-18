@@ -234,3 +234,83 @@ Results:
 - `pnpm format:check`: 9 tasks successful.
 - Direct script `tsc --noEmit` check: passed with `--skipLibCheck` to match the
   repo's TypeScript settings.
+
+## 2026-05-19 - Phase 6: Load And Backpressure Budgets
+
+Completed `internal-route-load-maintains-backpressure` from
+`plans/antithesis-remaining-testing-work-plan.md`.
+
+- Added report-only k6 scenarios:
+  - `load/internal-sync.k6.js` drives `/internal/sync` across a small mailbox
+    set and records latency, status buckets, retryable `5xx` count/rate, and
+    lease-contention count/rate.
+  - `load/webhook-deliveries.k6.js` drives `/internal/webhook-deliveries`
+    across a small delivery set and records latency, status buckets,
+    retryable `5xx` count/rate, webhook claim contention, scheduled retry
+    responses, and optional settled processing-row counts.
+- Added `load/lib/internal-route-budget-report.js` so both scenarios emit a
+  repeatable JSON report with beta p95/p99, retryable `5xx`, DB pool
+  saturation, and route-specific contention budgets.
+- Added `scripts/run-load-smoke.sh` to run both scenarios or an individual
+  scenario and write run-scoped JSON reports under `load/results/`. The wrapper
+  uses a host `k6` binary when available and falls back to
+  `docker run grafana/k6:latest` with host networking and the host UID/GID when
+  it is not.
+- Documented the manual/nightly workflow and environment knobs in
+  `load/README.md`, and updated `docs/testing-requirements.md` to reflect the
+  report-only load lane and remaining baseline work.
+- Kept budgets non-enforcing. The JSON report marks each comparison as
+  `enforced: false`, so promotion to CI failure remains a separate decision
+  after local and staging baselines are collected.
+- Rechecked local Hegel context in `./.repos/hegel`; Phase 6 is HTTP load
+  scaffolding rather than Hegel PBT, so no native Antithesis/Hegel output path
+  was added.
+
+Verification:
+
+```bash
+pnpm exec oxlint --config ./.oxlintrc.json load/internal-sync.k6.js load/webhook-deliveries.k6.js load/lib/internal-route-budget-report.js
+pnpm exec oxfmt --config ./.oxfmtrc.json --check load/README.md load/internal-sync.k6.js load/webhook-deliveries.k6.js load/lib/internal-route-budget-report.js scripts/run-load-smoke.sh .gitignore docs/testing-requirements.md logs/pbt-log-remaining.md
+bash -n scripts/run-load-smoke.sh
+node --check load/lib/internal-route-budget-report.js
+node --check load/internal-sync.k6.js
+node --check load/webhook-deliveries.k6.js
+pnpm format:check
+docker run --rm grafana/k6:latest version
+docker run --rm --network host --volume "$PWD:/work" --workdir /work grafana/k6:latest inspect load/internal-sync.k6.js
+docker run --rm --network host --volume "$PWD:/work" --workdir /work grafana/k6:latest inspect load/webhook-deliveries.k6.js
+scripts/run-load-smoke.sh sync
+```
+
+Results:
+
+- `oxlint`: passed with 0 warnings and 0 errors.
+- `oxfmt --check`: passed after formatting the new files.
+- `bash -n`: passed.
+- `node --check`: passed for the shared helper and both k6 scenario files.
+- `pnpm format:check`: passed; 9 tasks successful.
+- Docker k6 image `grafana/k6:latest`: pulled and reported
+  `k6 v2.0.0+dirty`.
+- Docker `k6 inspect`: passed for both load scenarios.
+- `MAILMON_LOAD_SYNC_DURATION=1s MAILMON_LOAD_SYNC_VUS=1
+MAILMON_LOAD_REQUEST_TIMEOUT=1s scripts/run-load-smoke.sh sync`: exercised
+  the Docker fallback path and wrote
+  `load/results/internal-sync-20260518T204323Z.json`. Requests failed with
+  connection refused because no local worker was running, so a meaningful load
+  result still requires a seeded local or staging worker endpoint.
+- `MAILMON_LOAD_WORKER_BASE_URL=http://host.docker.internal:3001
+MAILMON_LOAD_RUN_ID=phase6-docker-worker MAILMON_LOAD_SYNC_DURATION=10s
+MAILMON_LOAD_SYNC_VUS=4 MAILMON_LOAD_WEBHOOK_DURATION=10s
+MAILMON_LOAD_WEBHOOK_VUS=4 MAILMON_LOAD_REQUEST_TIMEOUT=2s
+scripts/run-load-smoke.sh all`: exercised both scenarios against a local
+  worker reachable from Docker and wrote:
+  - `load/results/internal-sync-phase6-docker-worker.json`: 685 total
+    `/internal/sync` requests, 685 `4xx`, p95 17.34 ms, p99 20.61 ms,
+    retryable `5xx` rate 0. Generated mailbox IDs were not seeded, so this was
+    a route/reporter smoke rather than lease-contention signal.
+  - `load/results/webhook-deliveries-phase6-docker-worker.json`: 672 total
+    `/internal/webhook-deliveries` requests, 672 `2xx`, p95 18.64 ms, p99
+    20.32 ms, retryable `5xx` rate 0, claim-contention rate 1.0. The
+    report-only webhook claim-contention beta budget was marked over budget;
+    this is expected with generated/unseeded delivery IDs and confirms the
+    budget comparison path is visible without failing the run.

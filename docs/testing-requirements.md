@@ -87,11 +87,21 @@ The following areas are still missing and are the real testing roadmap from here
 
 **Objective:** Find concurrency, memory, and DB pool bottlenecks before staging traffic does it first.
 
+**Current state:** Report-only k6 smoke scenarios live under `load/` and can be
+run through `scripts/run-load-smoke.sh`. The first scenarios drive
+`/internal/sync` lease contention and `/internal/webhook-deliveries` claim
+contention, then write JSON reports with latency, status distribution,
+retryable `5xx` rate, and route-specific contention counters. The beta budgets
+are present in the reports but are not enforced yet.
+
 **Still required:**
 
-- Drive high concurrency against `/internal/sync` and `/internal/webhook-deliveries`.
-- Measure Postgres pool pressure and lease acquisition contention under load.
-- Add repeatable `k6` or `Artillery` scenarios and define pass/fail budgets.
+- Run the scenarios against a seeded local topology and staging to establish
+  realistic beta baselines.
+- Feed observed Postgres pool saturation and settled webhook processing-row
+  counts into the reports until first-class runtime metrics exist.
+- Promote report-only budgets to enforced thresholds after several successful
+  runs define stable numbers.
 
 ### 4.4 Deterministic Simulation Testing
 
