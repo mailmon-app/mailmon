@@ -1,5 +1,5 @@
 import type { InternalMessageDecodeResult, ProblemDetails } from "@mailmon/core";
-import { Context, ManagedRuntime } from "effect";
+import { Context, Data, Effect, ManagedRuntime, Schema } from "effect";
 
 import type { WorkerHttpRuntimeOptions } from "./server.js";
 
@@ -36,6 +36,10 @@ export interface InternalRouteSpec<TRequest, TResult> {
 
 export type WorkerHttpServerRuntime = Pick<ManagedRuntime.ManagedRuntime<any, any>, "runPromise">;
 
+class WorkerRouteUnknownError extends Data.TaggedError("WorkerRouteUnknownError")<{
+  readonly error: unknown;
+}> {}
+
 export const createJsonResponse = (body: unknown, status: number): Response => {
   return new Response(JSON.stringify(body), {
     headers: {
@@ -55,15 +59,25 @@ const createWorkerInternalErrorResponse = (detail: string): Response => {
   );
 };
 
-const readJsonRequest = async (request: JsonRequestReader) => {
-  const body = await request.text();
+const readJsonRequest = (request: JsonRequestReader) =>
+  Effect.tryPromise({
+    catch: (error) => new WorkerRouteUnknownError({ error }),
+    try: async () => {
+      const body = await request.text();
 
-  if (body.length === 0) {
-    return null;
-  }
+      if (body.length === 0) {
+        return null;
+      }
 
-  return JSON.parse(body) as unknown;
-};
+      return body;
+    },
+  }).pipe(
+    Effect.flatMap((body) =>
+      body === null
+        ? Effect.succeed(null)
+        : Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(body),
+    ),
+  );
 
 const isProblemDetails = (value: unknown): value is ProblemDetails => {
   return (
@@ -78,42 +92,68 @@ const isProblemDetails = (value: unknown): value is ProblemDetails => {
   );
 };
 
-const getWorkerHttpProcessors = (
-  runtime: WorkerHttpServerRuntime,
-): Promise<WorkerHttpProcessorHandlers> => {
-  return runtime.runPromise(WorkerHttpProcessors.asEffect());
-};
+const responseFromMaybePromise = (response: Response | Promise<Response>) =>
+  Effect.tryPromise({
+    catch: (error) => new WorkerRouteUnknownError({ error }),
+    try: () => Promise.resolve(response),
+  });
+
+const wrapRouteError = (error: unknown) =>
+  isProblemDetails(error) ? error : new WorkerRouteUnknownError({ error });
+
+const unwrapRouteError = (error: unknown) =>
+  error instanceof WorkerRouteUnknownError ? error.error : error;
+
+export const interpretInternalRouteEffect = Effect.fn("worker.interpretInternalRoute")(function* <
+  TRequest,
+  TResult,
+>(spec: InternalRouteSpec<TRequest, TResult>, request: JsonRequestReader) {
+  const precondition = spec.precondition?.() ?? null;
+
+  if (precondition !== null) {
+    return precondition;
+  }
+
+  return yield* Effect.gen(function* () {
+    const payload = yield* readJsonRequest(request);
+    const parsed = yield* Effect.try({
+      catch: wrapRouteError,
+      try: () => spec.decode(payload),
+    });
+
+    if ("error" in parsed) {
+      return yield* responseFromMaybePromise(spec.invalidRequest(parsed.error));
+    }
+
+    const processors = yield* WorkerHttpProcessors;
+    const result = yield* Effect.tryPromise({
+      catch: wrapRouteError,
+      try: () => spec.selectProcessor(processors)(parsed.value),
+    });
+
+    return createJsonResponse(result, spec.successStatus ?? 200);
+  }).pipe(
+    Effect.catch((error: unknown) => {
+      const routeError = unwrapRouteError(error);
+
+      if (isProblemDetails(routeError)) {
+        return Effect.succeed(
+          createJsonResponse(routeError, spec.problemStatus?.(routeError) ?? routeError.status),
+        );
+      }
+
+      return Effect.sync(() => {
+        console.error(spec.internalErrorDetail, routeError);
+        return createWorkerInternalErrorResponse(spec.internalErrorDetail);
+      });
+    }),
+  );
+});
 
 export const interpretInternalRoute =
   <TRequest, TResult>(
     spec: InternalRouteSpec<TRequest, TResult>,
     runtime: WorkerHttpServerRuntime,
   ) =>
-  async (request: JsonRequestReader) => {
-    const precondition = spec.precondition?.() ?? null;
-
-    if (precondition !== null) {
-      return precondition;
-    }
-
-    try {
-      const payload = await readJsonRequest(request);
-      const parsed = spec.decode(payload);
-
-      if ("error" in parsed) {
-        return spec.invalidRequest(parsed.error);
-      }
-
-      const processors = await getWorkerHttpProcessors(runtime);
-      const result = await spec.selectProcessor(processors)(parsed.value);
-
-      return createJsonResponse(result, spec.successStatus ?? 200);
-    } catch (error) {
-      if (isProblemDetails(error)) {
-        return createJsonResponse(error, spec.problemStatus?.(error) ?? error.status);
-      }
-
-      console.error(spec.internalErrorDetail, error);
-      return createWorkerInternalErrorResponse(spec.internalErrorDetail);
-    }
-  };
+  (request: JsonRequestReader) =>
+    runtime.runPromise(interpretInternalRouteEffect(spec, request));
