@@ -122,3 +122,59 @@ Results:
 - `@mailmon/worker typecheck`: passed with 0 warnings and 0 errors.
 - `pnpm typecheck`: passed.
 - `pnpm format:check`: passed.
+
+## 2026-05-18 - Phase 4: PostgreSQL Impairment Harness
+
+Completed `postgres-impairment-does-not-partially-commit` from
+`plans/antithesis-remaining-testing-work-plan.md`.
+
+- Added `docker-compose.test-faults.yml` with its own Compose project, a
+  dedicated PostgreSQL 17 service on host port `55432`, and Toxiproxy on
+  `8474`/`15432`, leaving the normal local `docker-compose.yml` topology
+  untouched.
+- Extended `packages/db/src/test-setup.ts` so isolated test databases can be
+  created from an explicit base database URL. Phase 4 uses the direct database
+  URL for setup/snapshots and routes the system-under-test persistence layer
+  through the proxied URL.
+- Added `packages/db/src/postgres-impairment.test.ts` for:
+  - mailbox sync commit under proxy latency, asserting a complete valid commit
+    outcome
+  - mailbox sync commit with the proxy listener removed, asserting explicit
+    failure and unchanged durable rows
+  - webhook delivery claim under proxy latency, asserting a complete valid claim
+    outcome
+  - webhook delivery finalize with the proxy listener removed, asserting
+    explicit failure and unchanged delivery/endpoint state
+- Kept the test non-interfering with normal DB-backed suites: when Toxiproxy is
+  unavailable it skips the impairment body unless
+  `MAILMON_REQUIRE_DB_IMPAIRMENT_TESTS=1` is set.
+- Checked local Hegel context in `./.repos/hegel`; no native Antithesis output
+  path was added, consistent with the remaining-work plan's constraint that the
+  current Hegel baseline remains Vitest-oriented.
+
+Verification:
+
+```bash
+docker compose -f docker-compose.test-faults.yml up -d
+MAILMON_REQUIRE_DB_IMPAIRMENT_TESTS=1 pnpm exec vitest run packages/db/src/postgres-impairment.test.ts
+pnpm exec vitest run packages/db/src/postgres-impairment.test.ts
+pnpm --filter @mailmon/db typecheck
+pnpm --filter @mailmon/db format:check
+pnpm typecheck
+pnpm format:check
+docker compose -f docker-compose.test-faults.yml down -v
+```
+
+Results:
+
+- Fault stack started successfully. Toxiproxy image
+  `ghcr.io/shopify/toxiproxy:2.12.0` was pulled locally.
+- Required impairment run: `packages/db/src/postgres-impairment.test.ts`: 4
+  passed.
+- Plan command with the fault stack up:
+  `packages/db/src/postgres-impairment.test.ts`: 4 passed.
+- `@mailmon/db typecheck`: passed with 0 warnings and 0 errors.
+- `@mailmon/db format:check`: passed.
+- `pnpm typecheck`: passed; 14 tasks successful.
+- `pnpm format:check`: passed; 9 tasks successful.
+- Fault stack cleanup removed the dedicated containers, network, and volume.

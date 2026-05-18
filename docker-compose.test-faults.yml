@@ -1,0 +1,30 @@
+name: mailmon-dev-faults
+
+services:
+  postgres-faults:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: mailmon
+      POSTGRES_USER: mailmon
+      POSTGRES_PASSWORD: mailmon
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mailmon -d mailmon"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres-faults-data:/var/lib/postgresql/data
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    depends_on:
+      postgres-faults:
+        condition: service_healthy
+    ports:
+      - "8474:8474"
+      - "15432:15432"
+
+volumes:
+  postgres-faults-data:

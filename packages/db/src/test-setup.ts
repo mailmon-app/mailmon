@@ -22,7 +22,7 @@ const templateAdvisoryLock = {
 } as const;
 
 let cachedMigrationFingerprint: string | null = null;
-const templateInitializedByFingerprint = new Set<string>();
+const templateInitializedByDatabaseUrlAndFingerprint = new Set<string>();
 
 const withDatabaseName = (connectionString: string, databaseName: string) => {
   const url = new URL(connectionString);
@@ -205,20 +205,21 @@ const templateIsReadyForFingerprint = async (connectionString: string, fingerpri
   return templateFingerprint === fingerprint;
 };
 
-const ensureTemplateDatabase = async () => {
+const ensureTemplateDatabase = async (databaseUrl = DEFAULT_DATABASE_URL) => {
   const migrationFingerprint = await readMigrationFingerprint();
+  const cacheKey = `${databaseUrl}\n${migrationFingerprint}`;
 
-  if (templateInitializedByFingerprint.has(migrationFingerprint)) {
+  if (templateInitializedByDatabaseUrlAndFingerprint.has(cacheKey)) {
     return;
   }
 
-  const adminConnectionString = toAdminConnectionString(DEFAULT_DATABASE_URL);
+  const adminConnectionString = toAdminConnectionString(databaseUrl);
   const adminClient = postgres(adminConnectionString, { max: 1 });
 
   try {
     await adminClient`SELECT pg_advisory_lock(${templateAdvisoryLock.keyHigh}, ${templateAdvisoryLock.keyLow})`;
 
-    const templateConnectionString = withDatabaseName(DEFAULT_DATABASE_URL, templateDatabaseName);
+    const templateConnectionString = withDatabaseName(databaseUrl, templateDatabaseName);
     const templateAlreadyExists = await templateExists(adminClient);
 
     if (templateAlreadyExists) {
@@ -228,14 +229,14 @@ const ensureTemplateDatabase = async () => {
       );
 
       if (ready) {
-        templateInitializedByFingerprint.add(migrationFingerprint);
+        templateInitializedByDatabaseUrlAndFingerprint.add(cacheKey);
         return;
       }
 
       const existingFingerprint = await readTemplateMigrationFingerprint(templateConnectionString);
 
       if (existingFingerprint !== null) {
-        templateInitializedByFingerprint.clear();
+        templateInitializedByDatabaseUrlAndFingerprint.clear();
       }
 
       await dropTemplateDatabaseIfPresent(adminClient);
@@ -244,19 +245,21 @@ const ensureTemplateDatabase = async () => {
     await createTemplateDatabase(adminClient);
     await applyMigrations(templateConnectionString);
     await markTemplateReady(templateConnectionString, migrationFingerprint);
-    templateInitializedByFingerprint.add(migrationFingerprint);
+    templateInitializedByDatabaseUrlAndFingerprint.add(cacheKey);
   } finally {
     await adminClient`SELECT pg_advisory_unlock(${templateAdvisoryLock.keyHigh}, ${templateAdvisoryLock.keyLow})`;
     await adminClient.end();
   }
 };
 
-const createIsolatedDatabase = async (): Promise<IsolatedDatabase> => {
-  await ensureTemplateDatabase();
+const createIsolatedDatabase = async (
+  databaseUrl = DEFAULT_DATABASE_URL,
+): Promise<IsolatedDatabase> => {
+  await ensureTemplateDatabase(databaseUrl);
 
   const databaseName = createDatabaseName();
-  const adminConnectionString = toAdminConnectionString(DEFAULT_DATABASE_URL);
-  const connectionString = withDatabaseName(DEFAULT_DATABASE_URL, databaseName);
+  const adminConnectionString = toAdminConnectionString(databaseUrl);
+  const connectionString = withDatabaseName(databaseUrl, databaseName);
   const adminClient = postgres(adminConnectionString, { max: 1 });
 
   try {
@@ -287,17 +290,23 @@ const dropIsolatedDatabase = async (database: IsolatedDatabase) => {
 
 export const withIsolatedDatabaseEffect = <A, E>(
   run: (database: IsolatedDatabase) => Effect.Effect<A, E>,
+  options: Readonly<{
+    databaseUrl?: string;
+  }> = {},
 ) =>
   Effect.acquireUseRelease(
-    Effect.promise(() => createIsolatedDatabase()),
+    Effect.promise(() => createIsolatedDatabase(options.databaseUrl)),
     run,
     (database) => Effect.promise(() => dropIsolatedDatabase(database)),
   );
 
 export const withIsolatedDatabasePromise = async <T>(
   run: (database: IsolatedDatabase) => Promise<T>,
+  options: Readonly<{
+    databaseUrl?: string;
+  }> = {},
 ) => {
-  const database = await createIsolatedDatabase();
+  const database = await createIsolatedDatabase(options.databaseUrl);
 
   try {
     return await run(database);
