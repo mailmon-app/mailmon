@@ -178,3 +178,59 @@ Results:
 - `pnpm typecheck`: passed; 14 tasks successful.
 - `pnpm format:check`: passed; 9 tasks successful.
 - Fault stack cleanup removed the dedicated containers, network, and volume.
+
+## 2026-05-19 - Phase 5: Deployed Pub/Sub Retry And Dead-Letter Validation
+
+Completed `deployed-pubsub-retries-redispatch-sync` from
+`plans/antithesis-remaining-testing-work-plan.md`.
+
+- Added `scripts/staging-pubsub-retry-smoke.ts`, a staging/manual validation
+  script that seeds a synthetic workspace/mailbox, publishes a real Pub/Sub
+  mailbox sync dispatch, waits for dead-letter durable state, and prints a
+  run-scoped cleanup command.
+- Added the opt-in worker fixture
+  `MAILMON_STAGING_PUBSUB_RETRY_SMOKE_MAILBOX_IDS`. Matching synthetic mailbox
+  IDs return retryable `503` ProblemDetails from `/internal/sync`, producing
+  real Pub/Sub retry/dead-letter behavior without customer data.
+- The smoke script verifies configured Pub/Sub resources with `gcloud`, can
+  verify the Cloud Run worker fixture env when `--worker-service` is provided,
+  and can optionally require Cloud Logging evidence of repeated forced retries.
+- Documented the staging runbook and cleanup path in
+  `docs/staging-validation-guide.md`, and documented the staging-only worker
+  env in `docs/deployment-guide.md` and `apps/worker/.env.schema`.
+- Did not add a GitHub Actions workflow because the plan explicitly defers that
+  until secrets, quotas, and cleanup ownership are decided.
+- Rechecked local Hegel context in `./.repos/hegel`; no native Antithesis output
+  path was added, consistent with the remaining-work plan's constraint that the
+  current Hegel baseline remains Vitest-oriented.
+
+Verification:
+
+```bash
+pnpm exec tsx scripts/staging-pubsub-retry-smoke.ts --help
+pnpm --filter @mailmon/config test -- src/index.test.ts
+pnpm --filter @mailmon/worker test -- src/processor.test.ts src/index.test.ts
+pnpm --filter @mailmon/config build
+pnpm --filter @mailmon/config typecheck
+pnpm --filter @mailmon/worker typecheck
+pnpm --filter @mailmon/api typecheck
+pnpm build:libs
+pnpm typecheck
+pnpm format:check
+pnpm exec tsc --noEmit --ignoreConfig --module NodeNext --moduleResolution NodeNext --target ES2024 --lib ES2024,DOM --types node --strict --skipLibCheck scripts/staging-pubsub-retry-smoke.ts
+```
+
+Results:
+
+- Smoke script help path compiled and printed usage.
+- `@mailmon/config` focused test command: 1 file passed, 11 tests passed.
+- `@mailmon/worker` focused test command: 4 files passed, 38 tests passed.
+- `@mailmon/config build`: passed.
+- `@mailmon/config typecheck`: passed with 0 warnings and 0 errors.
+- `@mailmon/worker typecheck`: passed with 0 warnings and 0 errors.
+- `@mailmon/api typecheck`: passed with 0 warnings and 0 errors.
+- `pnpm build:libs`: 5 tasks successful.
+- `pnpm typecheck`: 14 tasks successful.
+- `pnpm format:check`: 9 tasks successful.
+- Direct script `tsc --noEmit` check: passed with `--skipLibCheck` to match the
+  repo's TypeScript settings.

@@ -9,6 +9,7 @@ import {
   createProcessMailboxSyncDeadLetter,
   createProcessSyncJob,
   createProcessWebhookDelivery,
+  withStagingPubSubRetrySmokeSyncFailure,
 } from "./processor.js";
 
 type ProcessorRuntime<T extends (...args: any) => any> = Parameters<T>[0];
@@ -109,6 +110,44 @@ describe("processSyncJob", () => {
         mailboxId: "mbx_demo",
         syncRunId: "sr_lost",
         leaseOwnerId: "lease_lost",
+        transportMode: "gcp",
+        occurredAt: expect.any(String),
+      },
+    ]);
+  });
+
+  it("forces a retryable staging Pub/Sub smoke failure for configured synthetic mailboxes", async () => {
+    const logs: unknown[] = [];
+    const processSyncJob = withStagingPubSubRetrySmokeSyncFailure(
+      async ({ mailboxId }) => ({
+        mailboxId,
+        syncRunId: "sr_sync",
+        startedAt: "2026-04-22T00:00:00.000Z",
+        status: "completed" as const,
+        completedAt: "2026-04-22T00:00:01.000Z",
+        eventsEmitted: 0,
+        nextCursor: "hist_456",
+      }),
+      new Set(["mbx_smoke"]),
+      {
+        log: (event) => logs.push(event),
+        transportMode: "gcp",
+      },
+    );
+
+    await expect(processSyncJob({ mailboxId: "mbx_smoke" })).rejects.toMatchObject({
+      code: "staging_pubsub_retry_smoke_forced_retry",
+      status: 503,
+      retryable: true,
+    });
+    await expect(processSyncJob({ mailboxId: "mbx_normal" })).resolves.toMatchObject({
+      mailboxId: "mbx_normal",
+      status: "completed",
+    });
+    expect(logs).toEqual([
+      {
+        event: "mailbox_sync_staging_pubsub_retry_smoke_forced_retry",
+        mailboxId: "mbx_smoke",
         transportMode: "gcp",
         occurredAt: expect.any(String),
       },

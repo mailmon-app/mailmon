@@ -12,6 +12,7 @@ import {
   type SyncMailboxResult,
   type WebhookDeliveryScheduleRequest,
   ingestGmailPushNotification,
+  makeProblem,
   recordMailboxSyncDispatchExhausted,
   runControlJob,
   runWebhookDelivery,
@@ -54,6 +55,12 @@ type MailboxSyncOperationalLogEvent =
       readonly mailboxId: string;
       readonly syncRunId: string | null;
       readonly leaseOwnerId: string | null;
+      readonly transportMode: WorkerTransportMode;
+      readonly occurredAt: string;
+    }
+  | {
+      readonly event: "mailbox_sync_staging_pubsub_retry_smoke_forced_retry";
+      readonly mailboxId: string;
       readonly transportMode: WorkerTransportMode;
       readonly occurredAt: string;
     }
@@ -173,6 +180,19 @@ const logRecoveredWebhookDeliveryScheduling = (
 
 type SyncProcessorRuntime = WorkerProcessorRuntime<ReturnType<typeof runMailboxSync>>;
 
+const createStagingPubSubRetrySmokeProblem = (mailboxId: string): ProblemDetails =>
+  makeProblem({
+    type: "https://api.mailmon.dev/problems/staging-pubsub-retry-smoke-forced-retry",
+    title: "Staging Pub/Sub retry smoke forced retry",
+    status: 503,
+    code: "staging_pubsub_retry_smoke_forced_retry",
+    detail: `Synthetic mailbox ${mailboxId} is configured to force a retryable worker response for staging Pub/Sub validation.`,
+    resource: {
+      mailbox_id: mailboxId,
+    },
+    retryable: true,
+  });
+
 type WebhookDeliveryProcessorRuntime = WorkerProcessorRuntime<
   ReturnType<typeof runWebhookDelivery>
 >;
@@ -206,6 +226,29 @@ export const createProcessSyncJob = (
 
       throw error;
     }
+  };
+};
+
+export const withStagingPubSubRetrySmokeSyncFailure = (
+  processSyncJob: (job: MailboxSyncJobData) => Promise<SyncMailboxResult>,
+  mailboxIds: ReadonlySet<string>,
+  options?: OperationalLogOptions,
+) => {
+  const operationalLogOptions = getOperationalLogOptions(options);
+
+  return async (job: MailboxSyncJobData) => {
+    if (!mailboxIds.has(job.mailboxId)) {
+      return processSyncJob(job);
+    }
+
+    operationalLogOptions.log({
+      event: "mailbox_sync_staging_pubsub_retry_smoke_forced_retry",
+      mailboxId: job.mailboxId,
+      transportMode: operationalLogOptions.transportMode,
+      occurredAt: new Date().toISOString(),
+    });
+
+    throw createStagingPubSubRetrySmokeProblem(job.mailboxId);
   };
 };
 

@@ -13,6 +13,7 @@ import {
   createProcessMailboxSyncDeadLetter,
   createProcessSyncJob,
   createProcessWebhookDelivery,
+  withStagingPubSubRetrySmokeSyncFailure,
 } from "./processor.js";
 import {
   createInProcessWebhookDeliverySchedulerLayer,
@@ -55,6 +56,7 @@ const createWorkerProcessorRuntime = (
     | "gcpTasksServiceAccountEmail"
     | "gcpWebhookDeliveryQueueId"
     | "nodeEnv"
+    | "stagingPubSubRetrySmokeMailboxIds"
     | "syncDispatchPubSubTopicName"
     | "workerBaseUrl"
   >,
@@ -112,9 +114,19 @@ const createWorkerProcessorRuntime = (
   const processGmailPushNotification = createProcessGmailPushNotification(
     runtime as Parameters<typeof createProcessGmailPushNotification>[0],
   );
-  const processSyncJob = createProcessSyncJob(runtime, {
+  const processSyncJobBase = createProcessSyncJob(runtime, {
     transportMode: env.asyncTransportMode,
   });
+  const processSyncJob =
+    env.stagingPubSubRetrySmokeMailboxIds.length === 0
+      ? processSyncJobBase
+      : withStagingPubSubRetrySmokeSyncFailure(
+          processSyncJobBase,
+          new Set(env.stagingPubSubRetrySmokeMailboxIds),
+          {
+            transportMode: env.asyncTransportMode,
+          },
+        );
   const processMailboxSyncDeadLetter = createProcessMailboxSyncDeadLetter(runtime, {
     transportMode: env.asyncTransportMode,
   });

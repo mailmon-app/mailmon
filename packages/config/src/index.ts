@@ -66,6 +66,9 @@ const loadMailboxSyncLeaseTtlMs = Config.int("MAILMON_SYNC_LEASE_TTL_MS").pipe(
 const loadMailboxSyncHeartbeatIntervalMs = Config.int("MAILMON_SYNC_HEARTBEAT_INTERVAL_MS").pipe(
   Config.orElse(() => Config.succeed(30_000)),
 );
+const loadStagingPubSubRetrySmokeMailboxIds = Config.option(
+  Config.nonEmptyString("MAILMON_STAGING_PUBSUB_RETRY_SMOKE_MAILBOX_IDS"),
+);
 
 const normalizeOptional = <T>(value: Option.Option<T>) => Option.getOrNull(value);
 
@@ -123,6 +126,17 @@ const parsePreviousEncryptionKeys = (
   });
 };
 
+const parseCommaSeparatedValues = (value: string | null): ReadonlyArray<string> => {
+  if (value === null) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+};
+
 export interface CommonEnv {
   readonly nodeEnv: NodeEnv;
 }
@@ -167,6 +181,7 @@ export interface WorkerEnv extends CommonEnv {
   readonly mailboxSyncLeaseTtlMs: number;
   readonly port: number;
   readonly redisUrl: string | null;
+  readonly stagingPubSubRetrySmokeMailboxIds: ReadonlyArray<string>;
   readonly workerBaseUrl: string;
 }
 
@@ -259,6 +274,7 @@ const workerConfig = Config.all({
   nodeEnv: loadNodeEnv,
   port: loadPort(3001),
   redisUrl: loadRedisUrl,
+  stagingPubSubRetrySmokeMailboxIds: loadStagingPubSubRetrySmokeMailboxIds,
   workerBaseUrl: loadMailboxWorkerBaseUrl,
 }).pipe(
   Config.map((config): WorkerEnv => {
@@ -270,6 +286,9 @@ const workerConfig = Config.all({
     const gcpTasksAudience = normalizeOptional(config.gcpTasksAudience);
     const gcpTasksServiceAccountEmail = normalizeOptional(config.gcpTasksServiceAccountEmail);
     const gmailPubSubTopicName = normalizeOptional(config.gmailPubSubTopicName);
+    const stagingPubSubRetrySmokeMailboxIds = parseCommaSeparatedValues(
+      normalizeOptional(config.stagingPubSubRetrySmokeMailboxIds),
+    );
     const syncDispatchPubSubTopicName = normalizeOptional(config.syncDispatchPubSubTopicName);
 
     return {
@@ -316,6 +335,7 @@ const workerConfig = Config.all({
       nodeEnv: config.nodeEnv,
       port: config.port,
       redisUrl: normalizeOptional(config.redisUrl),
+      stagingPubSubRetrySmokeMailboxIds,
       syncDispatchPubSubTopicName:
         config.asyncTransportMode === "gcp"
           ? requireGcpValue(syncDispatchPubSubTopicName, "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME")
@@ -416,6 +436,7 @@ export class WorkerConfig extends Context.Service<WorkerConfig, WorkerEnv>()(
     nodeEnv: "test",
     port: 3001,
     redisUrl: null,
+    stagingPubSubRetrySmokeMailboxIds: [],
     workerBaseUrl: "http://127.0.0.1:3001",
   } satisfies WorkerEnv);
 }

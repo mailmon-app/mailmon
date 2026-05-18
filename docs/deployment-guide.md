@@ -197,6 +197,11 @@ The worker service runs with:
 The worker base URL must be the externally reachable URL that Cloud Tasks, Pub/Sub, and Cloud Scheduler can call.
 The worker verifies Google OIDC tokens on all `/internal/*` routes in `gcp` mode and rejects unauthenticated requests.
 
+For staging transport validation only, the worker can also be configured with
+`MAILMON_STAGING_PUBSUB_RETRY_SMOKE_MAILBOX_IDS`, a comma-separated list of synthetic mailbox IDs
+that should force retryable `503` responses from `/internal/sync`. Keep this unset outside a
+bounded staging smoke-test window.
+
 ## Migration workflow
 
 Run migrations before sending traffic to the new deployment.

@@ -375,3 +375,59 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
   --limit=100 \
   --format='table(timestamp,severity,httpRequest.status,httpRequest.requestUrl,textPayload,jsonPayload.message,jsonPayload.code,jsonPayload.detail)'
 ```
+
+---
+
+## 4. Validating Pub/Sub Sync Retry And Dead-Letter Handling
+
+**Goal:** Verify that the deployed mailbox sync dispatch topic, push subscription, retry policy, dead-letter topic, and `/internal/sync-dead-letter` handler work together with synthetic data only.
+
+This validation is manual/staging-only. Do not add it to PR-time CI.
+
+### Prerequisites
+
+- `gcloud` is authenticated for the staging project.
+- `DATABASE_URL` points to staging through an approved access path, usually Cloud SQL Auth Proxy.
+- The worker service is temporarily configured with:
+
+  ```bash
+  MAILMON_STAGING_PUBSUB_RETRY_SMOKE_MAILBOX_IDS=mbx_pubsub_retry_smoke_<run_id>
+  ```
+
+  Use the run ID form from the command below, replacing dashes with underscores. This fixture makes only that synthetic mailbox return a retryable `503` from `/internal/sync`.
+
+### Run
+
+```bash
+export RUN_ID="$(date -u +%Y%m%d%H%M%S)"
+
+pnpm build:libs
+pnpm exec tsx scripts/staging-pubsub-retry-smoke.ts \
+  --run-id "$RUN_ID" \
+  --project-id "$GCP_PROJECT_ID" \
+  --topic "$MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME" \
+  --subscription "$MAILMON_SYNC_DISPATCH_PUBSUB_SUBSCRIPTION_NAME" \
+  --dead-letter-subscription "$MAILMON_SYNC_DISPATCH_DEAD_LETTER_SUBSCRIPTION_NAME" \
+  --worker-service mailmon-worker \
+  --region "$GCP_REGION"
+```
+
+Expected final output includes `staging_pubsub_retry_smoke_passed`, the synthetic mailbox ID, the recorded `syncRunId`, and a cleanup command. The pass condition is durable DB state: a `dispatch_retry_exhausted` sync run and mailbox Last Error `mailbox_sync_dispatch_retry_exhausted`.
+
+To require Cloud Logging evidence that the forced retry happened more than once, add:
+
+```bash
+--require-retry-log
+```
+
+### Cleanup
+
+Run the cleanup command printed by the smoke script, or:
+
+```bash
+pnpm exec tsx scripts/staging-pubsub-retry-smoke.ts \
+  --run-id "$RUN_ID" \
+  --cleanup-only
+```
+
+Remove the synthetic mailbox ID from `MAILMON_STAGING_PUBSUB_RETRY_SMOKE_MAILBOX_IDS` after the validation window.

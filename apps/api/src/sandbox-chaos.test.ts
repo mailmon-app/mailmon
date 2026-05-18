@@ -600,6 +600,7 @@ const createWorkerEnv = (
   nodeEnv: "test",
   port,
   redisUrl: null,
+  stagingPubSubRetrySmokeMailboxIds: [],
   workerBaseUrl,
 });
 
