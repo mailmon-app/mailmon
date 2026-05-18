@@ -25,7 +25,7 @@ interface JsonRequestReader {
 export interface InternalRouteSpec<TRequest, TResult> {
   readonly decode: (payload: unknown) => InternalMessageDecodeResult<TRequest>;
   readonly internalErrorDetail: string;
-  readonly invalidRequest: (error: string) => Response | Promise<Response>;
+  readonly invalidRequest: (error: string) => Effect.Effect<Response, never, any> | Response | Promise<Response>;
   readonly precondition?: () => Response | null;
   readonly problemStatus?: (problem: ProblemDetails) => number;
   readonly selectProcessor: (
@@ -122,7 +122,8 @@ export const interpretInternalRouteEffect = Effect.fn("worker.interpretInternalR
     });
 
     if ("error" in parsed) {
-      return yield* responseFromMaybePromise(spec.invalidRequest(parsed.error));
+      const response = spec.invalidRequest(parsed.error);
+      return yield* Effect.isEffect(response) ? response : responseFromMaybePromise(response);
     }
 
     const processors = yield* WorkerHttpProcessors;
@@ -142,10 +143,9 @@ export const interpretInternalRouteEffect = Effect.fn("worker.interpretInternalR
         );
       }
 
-      return Effect.sync(() => {
-        console.error(spec.internalErrorDetail, routeError);
-        return createWorkerInternalErrorResponse(spec.internalErrorDetail);
-      });
+      return Effect.logError(spec.internalErrorDetail, routeError).pipe(
+        Effect.map(() => createWorkerInternalErrorResponse(spec.internalErrorDetail)),
+      );
     }),
   );
 });

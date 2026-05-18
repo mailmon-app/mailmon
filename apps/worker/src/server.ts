@@ -17,7 +17,7 @@ import {
   type SyncMailboxResult,
   type WebhookDeliveryScheduleRequest,
 } from "@mailmon/core";
-import { Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, References } from "effect";
 import { Hono } from "hono";
 
 import { authorizeInternalRequest, type WorkerInternalAuthOptions } from "./internal-auth.js";
@@ -54,15 +54,10 @@ interface WorkerHttpRuntimeHandle {
   readonly transport: "http";
 }
 
-const logInvalidMailboxSyncDeadLetter = (detail: string) => {
-  console.log(
-    JSON.stringify({
-      event: "mailbox_sync_dispatch_dead_letter_invalid",
-      detail,
-      occurredAt: new Date().toISOString(),
-    }),
+const logInvalidMailboxSyncDeadLetter = (detail: string) =>
+  Effect.logInfo("mailbox_sync_dispatch_dead_letter_invalid").pipe(
+    Effect.annotateLogs("detail", detail),
   );
-};
 
 const closeServer = (server: ServerType) => {
   return new Promise<void>((resolve, reject) => {
@@ -125,17 +120,18 @@ const createWorkerApp = (
   > = {
     decode: decodeMailboxSyncDeadLetterRequest,
     internalErrorDetail: "The worker failed while processing the sync dead-letter request.",
-    invalidRequest: (detail) => {
-      logInvalidMailboxSyncDeadLetter(detail);
-
-      return createJsonResponse(
-        {
-          status: "accepted",
-          detail,
-        },
-        200,
-      );
-    },
+    invalidRequest: (detail) =>
+      logInvalidMailboxSyncDeadLetter(detail).pipe(
+        Effect.map(() =>
+          createJsonResponse(
+            {
+              status: "accepted",
+              detail,
+            },
+            200,
+          ),
+        ),
+      ),
     problemStatus: (problem) => (problem.status >= 500 ? problem.status : 500),
     selectProcessor: (processors) => processors.processMailboxSyncDeadLetter,
   };
@@ -239,21 +235,24 @@ export const startWorkerHttpRuntime = async (
   }
 
   const runtime = ManagedRuntime.make(
-    Layer.succeed(WorkerHttpProcessors, {
-      processControlJob: options.processControlJob,
-      processGmailPushNotification: options.processGmailPushNotification,
-      processMailboxSyncDeadLetter:
-        options.processMailboxSyncDeadLetter ??
-        (async ({ mailboxId }) => ({
-          mailboxId,
-          status: "mailbox_not_found" as const,
-          syncRunId: null,
-          recordedAt: new Date().toISOString(),
-          detail: "mailbox_not_found" as const,
-        })),
-      processSyncJob: options.processSyncJob,
-      processWebhookDelivery: options.processWebhookDelivery,
-    }),
+    Layer.mergeAll(
+      Layer.succeed(WorkerHttpProcessors, {
+        processControlJob: options.processControlJob,
+        processGmailPushNotification: options.processGmailPushNotification,
+        processMailboxSyncDeadLetter:
+          options.processMailboxSyncDeadLetter ??
+          (async ({ mailboxId }) => ({
+            mailboxId,
+            status: "mailbox_not_found" as const,
+            syncRunId: null,
+            recordedAt: new Date().toISOString(),
+            detail: "mailbox_not_found" as const,
+          })),
+        processSyncJob: options.processSyncJob,
+        processWebhookDelivery: options.processWebhookDelivery,
+      }),
+      process.env.NODE_ENV === "test" ? Layer.succeed(References.MinimumLogLevel, "None") : Layer.empty,
+    ),
   );
   const app = createWorkerApp(options, runtime);
 
