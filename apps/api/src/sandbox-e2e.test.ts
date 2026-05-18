@@ -767,6 +767,8 @@ const startSandboxE2eHarness = async (
       gcpTasksServiceAccountEmail: null,
       gcpWebhookDeliveryQueueId: "mailmon-webhook-deliveries",
       host: "127.0.0.1",
+      mailboxSyncHeartbeatIntervalMs: 30_000,
+      mailboxSyncLeaseTtlMs: 90_000,
       nodeEnv: "test",
       port: workerPort,
       redisUrl: null,

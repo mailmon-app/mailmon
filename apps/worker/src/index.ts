@@ -46,6 +46,8 @@ const createWorkerProcessorRuntime = (
     | "gmailRefreshTokenPreviousEncryptionKeys"
     | "gmailOauthTokenUrl"
     | "gmailPubSubTopicName"
+    | "mailboxSyncHeartbeatIntervalMs"
+    | "mailboxSyncLeaseTtlMs"
     | "gcpProjectId"
     | "gcpRegion"
     | "gcpSchedulerServiceAccountEmail"

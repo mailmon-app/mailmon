@@ -157,6 +157,8 @@ export const createWorkerRuntimeLayer = (
     | "gmailOauthTokenUrl"
     | "gmailPubSubTopicName"
     | "nodeEnv"
+    | "mailboxSyncHeartbeatIntervalMs"
+    | "mailboxSyncLeaseTtlMs"
     | "syncDispatchPubSubTopicName"
     | "workerBaseUrl"
   >,
@@ -201,7 +203,10 @@ export const createWorkerRuntimeLayer = (
     gmailSyncProviderLayer,
     gmailWatchProviderLayer,
     mailboxSyncDispatcherLayer,
-    MailboxSyncLeaseTiming.defaultLayer,
+    MailboxSyncLeaseTiming.layer({
+      heartbeatIntervalMs: env.mailboxSyncHeartbeatIntervalMs,
+      leaseTtlMs: env.mailboxSyncLeaseTtlMs,
+    }),
     webhookDeliverySenderLayer,
   );
 };

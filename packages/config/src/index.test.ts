@@ -72,6 +72,8 @@ describe("WorkerConfig", () => {
         gcpTasksServiceAccountEmail: null,
         gcpWebhookDeliveryQueueId: DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
         host: "127.0.0.1",
+        mailboxSyncHeartbeatIntervalMs: 30_000,
+        mailboxSyncLeaseTtlMs: 90_000,
         nodeEnv: "test",
         port: 3001,
         redisUrl: null,
@@ -83,6 +85,26 @@ describe("WorkerConfig", () => {
         testConfigLayer({
           DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
           MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+          NODE_ENV: "test",
+        }),
+      ),
+    ),
+  );
+
+  it.effect("loads test-tuned mailbox sync lease timings", () =>
+    Effect.gen(function* () {
+      const config = yield* WorkerConfig.asEffect();
+
+      expect(config.mailboxSyncHeartbeatIntervalMs).toBe(250);
+      expect(config.mailboxSyncLeaseTtlMs).toBe(800);
+    }).pipe(
+      Effect.provide(WorkerConfig.layer),
+      Effect.provide(
+        testConfigLayer({
+          DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+          MAILMON_SYNC_HEARTBEAT_INTERVAL_MS: "250",
+          MAILMON_SYNC_LEASE_TTL_MS: "800",
           NODE_ENV: "test",
         }),
       ),

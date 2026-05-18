@@ -113,6 +113,7 @@ export const interpretInternalRoute =
         return createJsonResponse(error, spec.problemStatus?.(error) ?? error.status);
       }
 
+      console.error(spec.internalErrorDetail, error);
       return createWorkerInternalErrorResponse(spec.internalErrorDetail);
     }
   };

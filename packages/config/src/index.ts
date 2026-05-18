@@ -60,6 +60,12 @@ const loadGcpTasksAudience = Config.option(Config.nonEmptyString("MAILMON_GCP_TA
 const loadGcpSchedulerServiceAccountEmail = Config.option(
   Config.nonEmptyString("MAILMON_GCP_SCHEDULER_SERVICE_ACCOUNT_EMAIL"),
 );
+const loadMailboxSyncLeaseTtlMs = Config.int("MAILMON_SYNC_LEASE_TTL_MS").pipe(
+  Config.orElse(() => Config.succeed(90_000)),
+);
+const loadMailboxSyncHeartbeatIntervalMs = Config.int("MAILMON_SYNC_HEARTBEAT_INTERVAL_MS").pipe(
+  Config.orElse(() => Config.succeed(30_000)),
+);
 
 const normalizeOptional = <T>(value: Option.Option<T>) => Option.getOrNull(value);
 
@@ -157,6 +163,8 @@ export interface WorkerEnv extends CommonEnv {
   readonly gcpTasksServiceAccountEmail: string | null;
   readonly gcpWebhookDeliveryQueueId: string;
   readonly host: string;
+  readonly mailboxSyncHeartbeatIntervalMs: number;
+  readonly mailboxSyncLeaseTtlMs: number;
   readonly port: number;
   readonly redisUrl: string | null;
   readonly workerBaseUrl: string;
@@ -246,6 +254,8 @@ const workerConfig = Config.all({
   gcpTasksServiceAccountEmail: loadGcpTasksServiceAccountEmail,
   gcpWebhookDeliveryQueueId: loadGcpWebhookDeliveryQueueId,
   host: loadHost,
+  mailboxSyncHeartbeatIntervalMs: loadMailboxSyncHeartbeatIntervalMs,
+  mailboxSyncLeaseTtlMs: loadMailboxSyncLeaseTtlMs,
   nodeEnv: loadNodeEnv,
   port: loadPort(3001),
   redisUrl: loadRedisUrl,
@@ -301,6 +311,8 @@ const workerConfig = Config.all({
         onNone: () => defaultHostFor(config.asyncTransportMode),
         onSome: (value) => value,
       }),
+      mailboxSyncHeartbeatIntervalMs: config.mailboxSyncHeartbeatIntervalMs,
+      mailboxSyncLeaseTtlMs: config.mailboxSyncLeaseTtlMs,
       nodeEnv: config.nodeEnv,
       port: config.port,
       redisUrl: normalizeOptional(config.redisUrl),
@@ -399,6 +411,8 @@ export class WorkerConfig extends Context.Service<WorkerConfig, WorkerEnv>()(
     gcpTasksServiceAccountEmail: null,
     gcpWebhookDeliveryQueueId: DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID,
     host: "127.0.0.1",
+    mailboxSyncHeartbeatIntervalMs: 30_000,
+    mailboxSyncLeaseTtlMs: 90_000,
     nodeEnv: "test",
     port: 3001,
     redisUrl: null,

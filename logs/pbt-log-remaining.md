@@ -66,3 +66,59 @@ Results:
 - `@mailmon/worker` processor test command: 4 files passed, 37 tests passed.
 - `pnpm typecheck`: passed.
 - `pnpm format:check`: passed after formatting `packages/core/src/use-cases.test.ts`.
+
+## 2026-05-18 - Phase 3: Local Worker-Death Chaos Harness
+
+Completed `worker-death-lease-expiry-takeover` from
+`plans/antithesis-remaining-testing-work-plan.md`.
+
+- Added `apps/api/src/sandbox-chaos.test.ts`, a local chaos harness that runs
+  PostgreSQL through the existing isolated DB helper, an API runtime, worker B
+  in-process, worker A as a real child process, a Gmail sandbox, and a webhook
+  receiver.
+- Added a Gmail sandbox pause point on message fetch so worker A can acquire a
+  real mailbox lease and enter provider sync before being killed.
+- Added worker process lease timing env/config for
+  `MAILMON_SYNC_LEASE_TTL_MS` and `MAILMON_SYNC_HEARTBEAT_INTERVAL_MS`, with
+  production defaults preserved at 90,000 ms and 30,000 ms.
+- Verified the test kills worker A with `SIGKILL`, waits for the shortened
+  lease to expire, recovers through worker B's real `/internal/control-jobs`
+  route, and asserts:
+  - the old sync run is marked `lease_lost` with
+    `stuck_mailbox_execution_recovered`
+  - worker B completes the takeover sync
+  - active lease fields are cleared
+  - cursor, message, thread, and event rows reflect exactly one committed
+    provider result
+- Added logging for unexpected non-ProblemDetails worker route failures so
+  future chaos failures include server-side context instead of only
+  `worker_internal_error`.
+
+Reference context:
+
+- Rechecked `antithesis/scratchbook/properties/worker-death-lease-expiry-takeover.md`.
+- Checked local Hegel context in `./.repos/hegel`; no native Antithesis output
+  path was added, consistent with the plan's constraint that current Hegel usage
+  remains Vitest-oriented.
+
+Verification:
+
+```bash
+pnpm exec vitest run apps/api/src/sandbox-chaos.test.ts
+pnpm exec vitest run apps/api/src/sandbox-e2e.test.ts
+pnpm --filter @mailmon/worker test -- src/index.test.ts src/server.test.ts
+pnpm --filter @mailmon/api typecheck
+pnpm --filter @mailmon/worker typecheck
+pnpm typecheck
+pnpm format:check
+```
+
+Results:
+
+- `apps/api/src/sandbox-chaos.test.ts`: 1 passed.
+- `apps/api/src/sandbox-e2e.test.ts`: 7 passed.
+- `@mailmon/worker` focused test command: 4 files passed, 37 tests passed.
+- `@mailmon/api typecheck`: passed with 0 warnings and 0 errors.
+- `@mailmon/worker typecheck`: passed with 0 warnings and 0 errors.
+- `pnpm typecheck`: passed.
+- `pnpm format:check`: passed.
