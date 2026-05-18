@@ -44,30 +44,37 @@ export const runProblemEffect = async <A, E extends ProblemDetails, R>(
   runtime: ApiServerRuntime,
   effect: Effect.Effect<A, E, R>,
 ): Promise<HandlerResult<A>> => {
-  return runtime.runPromise(
-    effect.pipe(
-      Effect.match({
-        onFailure: (problem) => ({ tag: "failure" as const, problem }),
-        onSuccess: (value) => ({ tag: "success" as const, value }),
-      }),
-    ),
+  return runtime.runPromise(toHandlerResult(effect));
+};
+
+export const toHandlerResult = <A, E extends ProblemDetails, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<HandlerResult<A>, never, R> => {
+  return effect.pipe(
+    Effect.match({
+      onFailure: (problem) => ({ tag: "failure" as const, problem }),
+      onSuccess: (value) => ({ tag: "success" as const, value }),
+    }),
   );
 };
+
+export const authenticateRequestEffect = Effect.fn("api.authenticateRequest")(function* (
+  authorizationHeader: string | undefined,
+) {
+  const apiKey = extractBearerApiKey(authorizationHeader);
+
+  if (apiKey === null) {
+    return yield* Effect.fail(invalidRequest("Authorization must use Bearer <mailmon_api_key>."));
+  }
+
+  return yield* authenticateWorkspaceApiKeyOrFail(apiKey);
+});
 
 export const authenticateRequest = async (
   runtime: ApiServerRuntime,
   authorizationHeader: string | undefined,
 ): Promise<AuthResult> => {
-  const apiKey = extractBearerApiKey(authorizationHeader);
-
-  if (apiKey === null) {
-    return {
-      tag: "failure",
-      problem: invalidRequest("Authorization must use Bearer <mailmon_api_key>."),
-    };
-  }
-
-  const result = await runProblemEffect(runtime, authenticateWorkspaceApiKeyOrFail(apiKey));
+  const result = await runProblemEffect(runtime, authenticateRequestEffect(authorizationHeader));
 
   if (result.tag === "failure") {
     return result;

@@ -3,11 +3,12 @@ import {
   getConnectSessionOrFail,
   getGmailMailboxConnectAuthorizationUrl,
 } from "@mailmon/core";
+import { Effect } from "effect";
 import { Hono } from "hono";
 import { openAPIRouteHandler, type GenerateSpecOptions } from "hono-openapi";
 import { HTTPException } from "hono/http-exception";
 
-import { createProblemResponse, runProblemEffect, type ApiServerRuntime } from "./http/handlers.js";
+import { createProblemResponse, toHandlerResult, type ApiServerRuntime } from "./http/handlers.js";
 import { INVALID_JSON_DETAIL, invalidRequest } from "./http/parsers.js";
 import { getRequestOrigin } from "./http/route-runtime.js";
 import { registerPublicRoutes } from "./http/route-specs.js";
@@ -95,68 +96,76 @@ export const createApp = (runtime: ApiServerRuntime) => {
       );
     }
 
-    const connectSessionResult = await runProblemEffect(
-      runtime,
-      getConnectSessionOrFail(connectSessionId),
+    return runtime.runPromise(
+      Effect.gen(function* () {
+        const connectSessionResult = yield* toHandlerResult(
+          getConnectSessionOrFail(connectSessionId),
+        );
+
+        if (connectSessionResult.tag === "failure") {
+          return createProblemResponse(connectSessionResult.problem);
+        }
+
+        const connectSession = connectSessionResult.value;
+
+        if (context.req.query("error") !== undefined) {
+          return redirectToConnectResult(connectSession.redirectUrl, {
+            code: context.req.query("error") ?? "gmail_authorization_denied",
+            detail:
+              context.req.query("error_description") ??
+              "The Gmail authorization flow was cancelled.",
+            status: "error",
+          });
+        }
+
+        const code = context.req.query("code");
+
+        if (code === undefined || code.length === 0) {
+          return redirectToConnectResult(connectSession.redirectUrl, {
+            code: "gmail_authorization_code_missing",
+            status: "error",
+          });
+        }
+
+        const completion = yield* toHandlerResult(
+          completeGmailMailboxConnectSession(connectSessionId, code, getRequestOrigin(context.req)),
+        );
+
+        if (completion.tag === "failure") {
+          return redirectToConnectResult(connectSession.redirectUrl, {
+            code: completion.problem.code,
+            detail: completion.problem.detail,
+            mailbox_id: completion.problem.resource?.mailbox_id ?? null,
+            status: "error",
+          });
+        }
+
+        return redirectToConnectResult(completion.value.redirectUrl, {
+          created: completion.value.created ? "true" : "false",
+          mailbox_id: completion.value.mailbox.id,
+          status: "success",
+        });
+      }),
     );
-
-    if (connectSessionResult.tag === "failure") {
-      return createProblemResponse(connectSessionResult.problem);
-    }
-
-    if (context.req.query("error") !== undefined) {
-      return redirectToConnectResult(connectSessionResult.value.redirectUrl, {
-        code: context.req.query("error") ?? "gmail_authorization_denied",
-        detail:
-          context.req.query("error_description") ?? "The Gmail authorization flow was cancelled.",
-        status: "error",
-      });
-    }
-
-    const code = context.req.query("code");
-
-    if (code === undefined || code.length === 0) {
-      return redirectToConnectResult(connectSessionResult.value.redirectUrl, {
-        code: "gmail_authorization_code_missing",
-        status: "error",
-      });
-    }
-
-    const completion = await runProblemEffect(
-      runtime,
-      completeGmailMailboxConnectSession(connectSessionId, code, getRequestOrigin(context.req)),
-    );
-
-    if (completion.tag === "failure") {
-      return redirectToConnectResult(connectSessionResult.value.redirectUrl, {
-        code: completion.problem.code,
-        detail: completion.problem.detail,
-        mailbox_id: completion.problem.resource?.mailbox_id ?? null,
-        status: "error",
-      });
-    }
-
-    return redirectToConnectResult(completion.value.redirectUrl, {
-      created: completion.value.created ? "true" : "false",
-      mailbox_id: completion.value.mailbox.id,
-      status: "success",
-    });
   });
 
   app.get("/oauth/gmail/:connectSessionId", async (context) => {
-    const result = await runProblemEffect(
-      runtime,
-      getGmailMailboxConnectAuthorizationUrl(
-        context.req.param("connectSessionId"),
-        getRequestOrigin(context.req),
-      ),
+    return runtime.runPromise(
+      Effect.gen(function* () {
+        const result = yield* toHandlerResult(
+          getGmailMailboxConnectAuthorizationUrl(
+            context.req.param("connectSessionId"),
+            getRequestOrigin(context.req),
+          ),
+        );
+
+        if (result.tag === "failure") {
+          return createProblemResponse(result.problem);
+        }
+
+        return Response.redirect(result.value, 302);
+      }),
     );
-
-    if (result.tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
-
-    return Response.redirect(result.value, 302);
   });
 
   app.get("/openapi.json", openAPIRouteHandler(app, mailmonOpenApiOptions));

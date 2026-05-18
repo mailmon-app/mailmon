@@ -13,6 +13,7 @@ import {
   listMailboxThreads,
   type MailboxSyncRunInspectionResource,
 } from "@mailmon/core";
+import { Effect } from "effect";
 import type { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 
@@ -72,13 +73,13 @@ const toMailboxListParams = (query: MailboxListQueryParams) => {
   const mailboxId = query.mailboxId ?? query.mailbox_id;
 
   if (mailboxId === undefined) {
-    throw new Error("Validated mailbox list query is missing a mailbox id.");
+    return Effect.die(new Error("Validated mailbox list query is missing a mailbox id."));
   }
 
-  return {
+  return Effect.succeed({
     ...toCursorLimitParams(query),
     mailboxId,
-  };
+  });
 };
 
 const toWebhookEndpointSubscriptionRequest = (request: CreateWebhookEndpointSubscriptionBody) => {
@@ -194,13 +195,17 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
     createAuthenticatedRouteHandler(
       runtime,
       ({ context, workspace }) =>
-        createWebhookEndpointSubscription(
-          workspace.workspaceId,
-          pathParam(context, "endpointId"),
-          toWebhookEndpointSubscriptionRequest(
-            validatedJson<CreateWebhookEndpointSubscriptionBody>(context),
-          ),
-        ),
+        Effect.gen(function* () {
+          const endpointId = yield* pathParam(context, "endpointId");
+
+          return yield* createWebhookEndpointSubscription(
+            workspace.workspaceId,
+            endpointId,
+            toWebhookEndpointSubscriptionRequest(
+              validatedJson<CreateWebhookEndpointSubscriptionBody>(context),
+            ),
+          );
+        }),
       { successStatus: 201 },
     ),
   );
@@ -218,8 +223,12 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
       },
     }),
     createAuthenticatedRouteHandler(runtime, ({ context, workspace }) =>
-      getMailboxOrFail(pathParam(context, "mailboxId"), {
-        workspaceId: workspace.workspaceId,
+      Effect.gen(function* () {
+        const mailboxId = yield* pathParam(context, "mailboxId");
+
+        return yield* getMailboxOrFail(mailboxId, {
+          workspaceId: workspace.workspaceId,
+        });
       }),
     ),
   );
@@ -236,15 +245,17 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
     validate("query", CursorLimitQuerySchema, INVALID_LIMIT_DETAIL),
     createAuthenticatedRouteHandler(
       runtime,
-      ({ context, workspace }) => {
-        const params = toCursorLimitParams(validatedQuery<CursorLimitQueryParams>(context));
+      ({ context, workspace }) =>
+        Effect.gen(function* () {
+          const mailboxId = yield* pathParam(context, "mailboxId");
+          const params = toCursorLimitParams(validatedQuery<CursorLimitQueryParams>(context));
 
-        return listMailboxSyncRuns(pathParam(context, "mailboxId"), {
-          cursor: params.cursor,
-          limit: params.limit,
-          workspaceId: workspace.workspaceId,
-        });
-      },
+          return yield* listMailboxSyncRuns(mailboxId, {
+            cursor: params.cursor,
+            limit: params.limit,
+            workspaceId: workspace.workspaceId,
+          });
+        }),
       { mapResponse: toSyncRunsResponse },
     ),
   );
@@ -262,8 +273,12 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
       },
     }),
     createAuthenticatedRouteHandler(runtime, ({ context, workspace }) =>
-      getMailboxObservability(pathParam(context, "mailboxId"), {
-        workspaceId: workspace.workspaceId,
+      Effect.gen(function* () {
+        const mailboxId = yield* pathParam(context, "mailboxId");
+
+        return yield* getMailboxObservability(mailboxId, {
+          workspaceId: workspace.workspaceId,
+        });
       }),
     ),
   );
@@ -303,8 +318,12 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
       },
     }),
     createAuthenticatedRouteHandler(runtime, ({ context, workspace }) =>
-      getReplayOrFail(pathParam(context, "replayId"), {
-        workspaceId: workspace.workspaceId,
+      Effect.gen(function* () {
+        const replayId = yield* pathParam(context, "replayId");
+
+        return yield* getReplayOrFail(replayId, {
+          workspaceId: workspace.workspaceId,
+        });
       }),
     ),
   );
@@ -319,15 +338,17 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
       },
     }),
     validate("query", MailboxListQuerySchema, mailboxListQueryDetail),
-    createAuthenticatedRouteHandler(runtime, ({ context, workspace }) => {
-      const params = toMailboxListParams(validatedQuery<MailboxListQueryParams>(context));
+    createAuthenticatedRouteHandler(runtime, ({ context, workspace }) =>
+      Effect.gen(function* () {
+        const params = yield* toMailboxListParams(validatedQuery<MailboxListQueryParams>(context));
 
-      return listMailboxMessages(params.mailboxId, {
-        cursor: params.cursor,
-        limit: params.limit,
-        workspaceId: workspace.workspaceId,
-      });
-    }),
+        return yield* listMailboxMessages(params.mailboxId, {
+          cursor: params.cursor,
+          limit: params.limit,
+          workspaceId: workspace.workspaceId,
+        });
+      }),
+    ),
   );
 
   app.get(
@@ -343,8 +364,12 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
       },
     }),
     createAuthenticatedRouteHandler(runtime, ({ context, workspace }) =>
-      getMessageOrFail(pathParam(context, "messageId"), {
-        workspaceId: workspace.workspaceId,
+      Effect.gen(function* () {
+        const messageId = yield* pathParam(context, "messageId");
+
+        return yield* getMessageOrFail(messageId, {
+          workspaceId: workspace.workspaceId,
+        });
       }),
     ),
   );
@@ -359,15 +384,17 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
       },
     }),
     validate("query", MailboxListQuerySchema, mailboxListQueryDetail),
-    createAuthenticatedRouteHandler(runtime, ({ context, workspace }) => {
-      const params = toMailboxListParams(validatedQuery<MailboxListQueryParams>(context));
+    createAuthenticatedRouteHandler(runtime, ({ context, workspace }) =>
+      Effect.gen(function* () {
+        const params = yield* toMailboxListParams(validatedQuery<MailboxListQueryParams>(context));
 
-      return listMailboxThreads(params.mailboxId, {
-        cursor: params.cursor,
-        limit: params.limit,
-        workspaceId: workspace.workspaceId,
-      });
-    }),
+        return yield* listMailboxThreads(params.mailboxId, {
+          cursor: params.cursor,
+          limit: params.limit,
+          workspaceId: workspace.workspaceId,
+        });
+      }),
+    ),
   );
 
   app.get(
@@ -383,8 +410,12 @@ export const registerPublicRoutes = (app: Hono, runtime: ApiServerRuntime) => {
       },
     }),
     createAuthenticatedRouteHandler(runtime, ({ context, workspace }) =>
-      getThreadOrFail(pathParam(context, "threadId"), {
-        workspaceId: workspace.workspaceId,
+      Effect.gen(function* () {
+        const threadId = yield* pathParam(context, "threadId");
+
+        return yield* getThreadOrFail(threadId, {
+          workspaceId: workspace.workspaceId,
+        });
       }),
     ),
   );

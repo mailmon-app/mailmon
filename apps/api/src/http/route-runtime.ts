@@ -3,9 +3,9 @@ import { Effect } from "effect";
 import type { Context, HonoRequest } from "hono";
 
 import {
-  authenticateRequest,
+  authenticateRequestEffect,
   createProblemResponse,
-  runProblemEffect,
+  toHandlerResult,
   type ApiServerRuntime,
 } from "./handlers.js";
 
@@ -57,10 +57,10 @@ export const pathParam = (context: Context, name: string) => {
   const value = context.req.param(name);
 
   if (value === undefined) {
-    throw new Error(`Route path parameter ${name} is missing.`);
+    return Effect.die(new Error(`Route path parameter ${name} is missing.`));
   }
 
-  return value;
+  return Effect.succeed(value);
 };
 
 export const createAuthenticatedRouteHandler = <A extends {}, B extends {} = A>(
@@ -69,30 +69,29 @@ export const createAuthenticatedRouteHandler = <A extends {}, B extends {} = A>(
   options: AuthenticatedRouteOptions<A, B> = {},
 ) => {
   return async (context: Context) => {
-    const auth = await authenticateRequest(runtime, context.req.header("authorization"));
+    return runtime.runPromise(
+      Effect.gen(function* () {
+        const workspace = yield* authenticateRequestEffect(context.req.header("authorization"));
+        return yield* run({
+          context,
+          workspace,
+          origin: getRequestOrigin(context.req),
+        });
+      }).pipe(
+        toHandlerResult,
+        Effect.map((result) => {
+          if (result.tag === "failure") {
+            return createProblemResponse(result.problem);
+          }
 
-    if (auth.tag === "failure") {
-      return createProblemResponse(auth.problem);
-    }
+          const responseBody = options.mapResponse?.(result.value) ?? result.value;
+          const successStatus = options.successStatus ?? 200;
 
-    const result = await runProblemEffect(
-      runtime,
-      run({
-        context,
-        workspace: auth.workspace,
-        origin: getRequestOrigin(context.req),
-      }),
+          return successStatus === 200
+            ? context.json(responseBody)
+            : context.json(responseBody, successStatus);
+        }),
+      ),
     );
-
-    if (result.tag === "failure") {
-      return createProblemResponse(result.problem);
-    }
-
-    const responseBody = options.mapResponse?.(result.value) ?? result.value;
-    const successStatus = options.successStatus ?? 200;
-
-    return successStatus === 200
-      ? context.json(responseBody)
-      : context.json(responseBody, successStatus);
   };
 };
