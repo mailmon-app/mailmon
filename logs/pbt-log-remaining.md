@@ -314,3 +314,48 @@ scripts/run-load-smoke.sh all`: exercised both scenarios against a local
     report-only webhook claim-contention beta budget was marked over budget;
     this is expected with generated/unseeded delivery IDs and confirms the
     budget comparison path is visible without failing the run.
+
+## 2026-05-19 - Phase 7: Keep The Hegel Lane Healthy
+
+Completed the implemented backend PBT baseline maintenance pass from
+`plans/antithesis-remaining-testing-work-plan.md`.
+
+- Kept `vitest.pbt.config.ts` as the PBT-only entrypoint. It still defaults to
+  `packages/{core,gmail,db}/src/**/*.pbt.test.ts` and supports explicit
+  `PBT_INCLUDE` groups for the scheduled/manual workflow.
+- Verified `.github/workflows/pbt-nightly.yml` still runs the Hegel lane with
+  `PBT_TEST_CASES=10`, explicit include groups, and the `~/.cache/hegel` cache.
+  No case-count increase was made because the current phase was a health pass,
+  not a runtime-baseline expansion.
+- Verified the three package-local `test-hegel.ts` helpers remain identical and
+  still emit JSON `tc.note(...)` diagnostics with a `propertySlug`. No shared
+  production/test utility dependency was introduced.
+- Confirmed the operational tests from phases 1-6 stay outside the PBT-only
+  config and that `pnpm test:coverage` continues to exclude `**/*.pbt.test.ts`.
+- Fixed a coverage-lane regression found during verification:
+  `apps/api/src/sandbox-chaos.test.ts` now passes
+  `stagingPubSubRetrySmokeMailboxIds: []` to the worker child-process
+  `WorkerEnv`, matching the field added for the staging Pub/Sub retry smoke
+  fixture.
+- Rechecked local Hegel context in `./.repos/hegel`; the current public package
+  remains Vitest-oriented and uses `~/.cache/hegel` for the uv/core cache, so no
+  native Antithesis output path was added.
+
+Verification:
+
+```bash
+PBT_TEST_CASES=5 pnpm exec vitest run --config vitest.pbt.config.ts --reporter=dot
+pnpm exec vitest run apps/api/src/sandbox-chaos.test.ts
+pnpm test:coverage
+pnpm --filter @mailmon/api typecheck
+pnpm format:check
+```
+
+Results:
+
+- PBT-only smoke: 11 files passed, 32 tests passed, duration 31.78 s.
+- Focused worker-death chaos regression check: 1 file passed, 1 test passed.
+- `pnpm test:coverage`: 30 files passed, 277 tests passed; statements 80.71%,
+  branches 70.51%, functions 79.92%, lines 81.04%.
+- `@mailmon/api typecheck`: passed with 0 warnings and 0 errors.
+- `pnpm format:check`: passed; 9 tasks successful.

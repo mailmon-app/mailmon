@@ -687,6 +687,7 @@ const startWorkerChildProcess = async (
       nodeEnv: "test",
       port: Number.parseInt(requireEnv("PORT"), 10),
       redisUrl: null,
+      stagingPubSubRetrySmokeMailboxIds: [],
       workerBaseUrl: requireEnv("MAILMON_WORKER_BASE_URL"),
     });
 
