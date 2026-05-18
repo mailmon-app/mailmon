@@ -25,7 +25,9 @@ interface JsonRequestReader {
 export interface InternalRouteSpec<TRequest, TResult> {
   readonly decode: (payload: unknown) => InternalMessageDecodeResult<TRequest>;
   readonly internalErrorDetail: string;
-  readonly invalidRequest: (error: string) => Effect.Effect<Response, never, any> | Response | Promise<Response>;
+  readonly invalidRequest: (
+    error: string,
+  ) => Effect.Effect<Response, never, any> | Response | Promise<Response>;
   readonly precondition?: () => Response | null;
   readonly problemStatus?: (problem: ProblemDetails) => number;
   readonly selectProcessor: (

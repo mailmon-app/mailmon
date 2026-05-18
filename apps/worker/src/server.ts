@@ -251,7 +251,9 @@ export const startWorkerHttpRuntime = async (
         processSyncJob: options.processSyncJob,
         processWebhookDelivery: options.processWebhookDelivery,
       }),
-      process.env.NODE_ENV === "test" ? Layer.succeed(References.MinimumLogLevel, "None") : Layer.empty,
+      process.env.NODE_ENV === "test"
+        ? Layer.succeed(References.MinimumLogLevel, "None")
+        : Layer.empty,
     ),
   );
   const app = createWorkerApp(options, runtime);
