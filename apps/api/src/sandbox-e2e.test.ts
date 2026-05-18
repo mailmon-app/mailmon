@@ -180,6 +180,17 @@ interface SandboxMessageRequest {
   readonly to: string;
 }
 
+type GmailSandboxFaultTarget = "history" | "message" | "message-list" | "profile";
+
+type GmailSandboxFault =
+  | {
+      readonly kind: "expired-history-cursor";
+    }
+  | {
+      readonly kind: "quota-403" | "rate-limit-429" | "transient-503";
+      readonly targets: ReadonlyArray<GmailSandboxFaultTarget>;
+    };
+
 const parseSandboxMessageRequest = (value: unknown): SandboxMessageRequest => {
   if (!isReadonlyRecord(value)) {
     throw new Error("Expected sandbox message payload to be an object.");
@@ -237,6 +248,7 @@ const startGmailSandbox = async (emailAddress: string) => {
   const refreshToken = "sandbox_refresh_token";
   const accessToken = "sandbox_access_token";
   let refreshTokenRevoked = false;
+  let activeFault: GmailSandboxFault | null = null;
   let currentHistoryId = 1;
   const knownHistoryIds = new Set<string>([String(currentHistoryId)]);
   const messages: SandboxMessageRecord[] = [];
@@ -251,6 +263,73 @@ const startGmailSandbox = async (emailAddress: string) => {
     };
   }> = [];
   const baseTimestampMs = Date.parse("2026-04-24T12:00:00.000Z");
+
+  const sendGmailApiError = (
+    response: ServerResponse,
+    statusCode: number,
+    params: Readonly<{
+      message: string;
+      reason?: string;
+    }>,
+  ) => {
+    sendJson(response, statusCode, {
+      error: {
+        code: statusCode,
+        message: params.message,
+        errors:
+          params.reason === undefined
+            ? undefined
+            : [
+                {
+                  domain: "usageLimits",
+                  message: params.message,
+                  reason: params.reason,
+                },
+              ],
+      },
+    });
+  };
+
+  const maybeSendFault = (target: GmailSandboxFaultTarget, response: ServerResponse) => {
+    if (activeFault === null) {
+      return false;
+    }
+
+    if (activeFault.kind === "expired-history-cursor") {
+      if (target !== "history") {
+        return false;
+      }
+
+      sendGmailApiError(response, 404, {
+        message: "History cursor not found",
+      });
+      return true;
+    }
+
+    if (!activeFault.targets.includes(target)) {
+      return false;
+    }
+
+    if (activeFault.kind === "quota-403") {
+      sendGmailApiError(response, 403, {
+        message: "Quota exceeded for this mailbox.",
+        reason: "rateLimitExceeded",
+      });
+      return true;
+    }
+
+    if (activeFault.kind === "rate-limit-429") {
+      sendGmailApiError(response, 429, {
+        message: "Too many Gmail requests.",
+      });
+      return true;
+    }
+
+    sendGmailApiError(response, 503, {
+      message: "Gmail is temporarily unavailable.",
+    });
+    return true;
+  };
 
   const server = await startHttpServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -376,6 +455,10 @@ const startGmailSandbox = async (emailAddress: string) => {
     }
 
     if (request.method === "GET" && url.pathname === "/gmail/v1/users/me/profile") {
+      if (maybeSendFault("profile", response)) {
+        return;
+      }
+
       sendJson(response, 200, {
         emailAddress,
         historyId: String(currentHistoryId),
@@ -384,6 +467,10 @@ const startGmailSandbox = async (emailAddress: string) => {
     }
 
     if (request.method === "GET" && url.pathname === "/gmail/v1/users/me/messages") {
+      if (maybeSendFault("message-list", response)) {
+        return;
+      }
+
       sendJson(response, 200, {
         messages: messages.map((message) => ({
           id: message.id,
@@ -393,6 +480,10 @@ const startGmailSandbox = async (emailAddress: string) => {
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/gmail/v1/users/me/messages/")) {
+      if (maybeSendFault("message", response)) {
+        return;
+      }
+
       const messageId = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
       const message = messages.find((candidate) => candidate.id === messageId);
 
@@ -429,6 +520,10 @@ const startGmailSandbox = async (emailAddress: string) => {
     }
 
     if (request.method === "GET" && url.pathname === "/gmail/v1/users/me/history") {
+      if (maybeSendFault("history", response)) {
+        return;
+      }
+
       const startHistoryId = url.searchParams.get("startHistoryId");
 
       if (startHistoryId === null || !knownHistoryIds.has(startHistoryId)) {
@@ -466,8 +561,14 @@ const startGmailSandbox = async (emailAddress: string) => {
     baseUrl: server.baseUrl,
     close: server.close,
     emailAddress,
+    clearFault: () => {
+      activeFault = null;
+    },
     revokeRefreshToken: () => {
       refreshTokenRevoked = true;
+    },
+    setFault: (fault: GmailSandboxFault) => {
+      activeFault = fault;
     },
     sendEmail: async (params: {
       readonly fromEmail: string;
@@ -545,31 +646,37 @@ const readMailboxPersistence = async (connectionString: string, mailboxId: strin
   const database = createDb(connectionString);
 
   try {
-    const [mailbox, messages, threads, mailboxEvents, webhookDeliveries] = await Promise.all([
-      database.db
-        .select()
-        .from(schema.mailboxes)
-        .then((rows) => rows.find((row) => row.id === mailboxId) ?? null),
-      database.db
-        .select()
-        .from(schema.messages)
-        .then((rows) => rows.filter((row) => row.mailboxId === mailboxId)),
-      database.db
-        .select()
-        .from(schema.threads)
-        .then((rows) => rows.filter((row) => row.mailboxId === mailboxId)),
-      database.db
-        .select()
-        .from(schema.mailboxEvents)
-        .then((rows) => rows.filter((row) => row.mailboxId === mailboxId)),
-      database.db.select().from(schema.webhookDeliveries),
-    ]);
+    const [mailbox, messages, syncRuns, threads, mailboxEvents, webhookDeliveries] =
+      await Promise.all([
+        database.db
+          .select()
+          .from(schema.mailboxes)
+          .then((rows) => rows.find((row) => row.id === mailboxId) ?? null),
+        database.db
+          .select()
+          .from(schema.messages)
+          .then((rows) => rows.filter((row) => row.mailboxId === mailboxId)),
+        database.db
+          .select()
+          .from(schema.syncRuns)
+          .then((rows) => rows.filter((row) => row.mailboxId === mailboxId)),
+        database.db
+          .select()
+          .from(schema.threads)
+          .then((rows) => rows.filter((row) => row.mailboxId === mailboxId)),
+        database.db
+          .select()
+          .from(schema.mailboxEvents)
+          .then((rows) => rows.filter((row) => row.mailboxId === mailboxId)),
+        database.db.select().from(schema.webhookDeliveries),
+      ]);
     const mailboxEventIds = new Set(mailboxEvents.map((event) => event.id));
 
     return {
       mailbox,
       mailboxEvents,
       messages,
+      syncRuns,
       threads,
       webhookDeliveries: webhookDeliveries.filter((delivery) =>
         mailboxEventIds.has(delivery.mailboxEventId),
@@ -578,6 +685,29 @@ const readMailboxPersistence = async (connectionString: string, mailboxId: strin
   } finally {
     await database.client.end();
   }
+};
+
+type MailboxPersistenceSnapshot = Awaited<ReturnType<typeof readMailboxPersistence>>;
+
+const readSortedRowIds = (rows: ReadonlyArray<{ readonly id: string }>) =>
+  rows.reduce<ReadonlyArray<string>>((ids, row) => {
+    const insertionIndex = ids.findIndex((id) => row.id.localeCompare(id) < 0);
+
+    if (insertionIndex === -1) {
+      return [...ids, row.id];
+    }
+
+    return [...ids.slice(0, insertionIndex), row.id, ...ids.slice(insertionIndex)];
+  }, []);
+
+const readCanonicalFingerprint = (state: MailboxPersistenceSnapshot) => {
+  return {
+    cursor: state.mailbox?.cursor ?? null,
+    mailboxEventIds: readSortedRowIds(state.mailboxEvents),
+    messageIds: readSortedRowIds(state.messages),
+    threadIds: readSortedRowIds(state.threads),
+    webhookDeliveryIds: readSortedRowIds(state.webhookDeliveries),
+  };
 };
 
 interface SandboxE2eHarness {
@@ -815,6 +945,90 @@ const runWorkerSync = async (workerBaseUrl: string, mailboxId: string) => {
   };
 };
 
+interface ProviderFailureScenario {
+  readonly emailAddress: string;
+  readonly expectedMailboxLastErrorRetryable: boolean;
+  readonly expectedProblemCode: string;
+  readonly expectedProblemRetryable: boolean;
+  readonly expectedSyncState: string;
+  readonly fault: GmailSandboxFault;
+  readonly prepare?: (
+    harness: SandboxE2eHarness,
+    connectionString: string,
+    mailboxId: string,
+  ) => Promise<void>;
+  readonly slug: string;
+  readonly status: number;
+}
+
+const seedPendingSandboxMessage = async (harness: SandboxE2eHarness) => {
+  await harness.sandbox.sendEmail({
+    to: harness.sandbox.emailAddress,
+    fromEmail: "faults@sandbox.mailmon.dev",
+    fromName: "Sandbox Faults",
+    subject: "Provider failure fixture",
+    snippet: "This message should not be committed while the provider is failing.",
+  });
+};
+
+const providerFailureScenarios: ReadonlyArray<ProviderFailureScenario> = [
+  {
+    emailAddress: "quota-403@mailmon.dev",
+    expectedMailboxLastErrorRetryable: true,
+    expectedProblemCode: "gmail_rate_limited",
+    expectedProblemRetryable: true,
+    expectedSyncState: "lagging",
+    fault: {
+      kind: "quota-403",
+      targets: ["history"],
+    },
+    prepare: seedPendingSandboxMessage,
+    slug: "quota-style-403-rate-limit",
+    status: 403,
+  },
+  {
+    emailAddress: "rate-limit-429@mailmon.dev",
+    expectedMailboxLastErrorRetryable: true,
+    expectedProblemCode: "gmail_rate_limited",
+    expectedProblemRetryable: true,
+    expectedSyncState: "lagging",
+    fault: {
+      kind: "rate-limit-429",
+      targets: ["message"],
+    },
+    prepare: seedPendingSandboxMessage,
+    slug: "message-429-rate-limit",
+    status: 429,
+  },
+  {
+    emailAddress: "history-503@mailmon.dev",
+    expectedMailboxLastErrorRetryable: true,
+    expectedProblemCode: "gmail_history_fetch_failed",
+    expectedProblemRetryable: true,
+    expectedSyncState: "failed",
+    fault: {
+      kind: "transient-503",
+      targets: ["history"],
+    },
+    prepare: seedPendingSandboxMessage,
+    slug: "history-503-transient",
+    status: 503,
+  },
+  {
+    emailAddress: "expired-history@mailmon.dev",
+    expectedMailboxLastErrorRetryable: true,
+    expectedProblemCode: "gmail_history_cursor_invalid",
+    expectedProblemRetryable: false,
+    expectedSyncState: "lagging",
+    fault: {
+      kind: "expired-history-cursor",
+    },
+    prepare: seedPendingSandboxMessage,
+    slug: "expired-history-cursor",
+    status: 409,
+  },
+];
+
 describe("sandbox end-to-end happy path", () => {
   it("connects a sandbox mailbox, syncs a new message, and delivers a webhook through the real runtimes", async () => {
     await withIsolatedDatabasePromise(async ({ connectionString }) => {
@@ -952,6 +1166,70 @@ describe("sandbox end-to-end happy path", () => {
 });
 
 describe("sandbox end-to-end resilience matrix", () => {
+  for (const scenario of providerFailureScenarios) {
+    it(`provider-failure-e2e-preserves-operational-state: ${scenario.slug}`, async () => {
+      await withIsolatedDatabasePromise(async ({ connectionString }) => {
+        const harness = await startSandboxE2eHarness(connectionString, {
+          emailAddress: scenario.emailAddress,
+        });
+
+        try {
+          const mailboxId = await connectSandboxMailbox(harness, {
+            tenantExternalId: `tenant_${scenario.slug}`,
+            mailboxExternalId: `mailbox_${scenario.slug}`,
+          });
+
+          await waitFor(
+            () => readMailboxPersistence(connectionString, mailboxId),
+            (value) => value.mailbox?.cursor === "1",
+          );
+
+          await scenario.prepare?.(harness, connectionString, mailboxId);
+
+          const stateBeforeFailure = await readMailboxPersistence(connectionString, mailboxId);
+          const canonicalStateBeforeFailure = readCanonicalFingerprint(stateBeforeFailure);
+
+          harness.sandbox.setFault(scenario.fault);
+
+          const failureSync = await runWorkerSync(harness.workerBaseUrl, mailboxId);
+
+          expect(failureSync.status).toBe(scenario.status);
+          expect(failureSync.body).toMatchObject({
+            code: scenario.expectedProblemCode,
+            retryable: scenario.expectedProblemRetryable,
+            status: scenario.status,
+          });
+
+          const stateAfterFailure = await readMailboxPersistence(connectionString, mailboxId);
+          const providerFailureSyncRun = stateAfterFailure.syncRuns.find(
+            (syncRun) => syncRun.detail === scenario.expectedProblemCode,
+          );
+
+          expect(readCanonicalFingerprint(stateAfterFailure)).toEqual(canonicalStateBeforeFailure);
+          expect(stateAfterFailure.mailbox).toMatchObject({
+            id: mailboxId,
+            status: "active",
+            syncState: scenario.expectedSyncState,
+            cursor: canonicalStateBeforeFailure.cursor,
+            lastErrorCode: scenario.expectedProblemCode,
+            lastErrorRetryable: scenario.expectedMailboxLastErrorRetryable,
+          });
+          expect(providerFailureSyncRun).toMatchObject({
+            mailboxId,
+            status: "failed_after_lease_acquired",
+            detail: scenario.expectedProblemCode,
+            eventsEmitted: "0",
+            previousCursor: canonicalStateBeforeFailure.cursor,
+            nextCursor: null,
+          });
+        } finally {
+          harness.sandbox.clearFault();
+          await harness.close();
+        }
+      });
+    }, 30_000);
+  }
+
   it("moves a mailbox to reconnect_required when the sandbox refresh token is revoked", async () => {
     await withIsolatedDatabasePromise(async ({ connectionString }) => {
       const harness = await startSandboxE2eHarness(connectionString, {
