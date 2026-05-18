@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+commit: 8f544ea13a0afb0b16f13e221dca8e20f4e989ab
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -23,6 +23,16 @@ external_references:
     why: TypeScript/JavaScript instrumentation constraints for future platform use.
   - path: https://antithesis.com/docs/best_practices/optimizing/
     why: Test-environment tuning guidance.
+  - path: /home/satty/projects/mailmon-dev/docs/testing-requirements.md
+    why: Target testing requirements document for this reanalysis.
+  - path: /home/satty/projects/mailmon-dev/docs/launch-readiness.md
+    why: Cross-check for current launch and verification claims.
+  - path: /home/satty/projects/mailmon-dev/docs/staging-validation-guide.md
+    why: Manual live validation scope for Cloud Tasks and Gmail push/watch production paths.
+  - path: /home/satty/projects/mailmon-dev/plans/antithesis-pbt-implementation-plan.md
+    why: Historical implementation plan used to identify what is now complete versus stale.
+  - path: /home/satty/projects/mailmon-dev/plans/clouldflare-findings.md
+    why: Independent plan noting chaos/load baselining as migration prerequisites.
 ---
 
 # SUT Analysis
@@ -33,7 +43,7 @@ Captured user scope:
 
 > $antithesis-research figure out how to PBT this repo using hegel typescript client https://github.com/hegeldev/hegel-typescript and https://github.com/antithesishq/bombadil and important NOTE: i don't have access to antithesis platform (not a customer) just use the approprtiate skills and context form the repo do PBT well
 
-This research treats Antithesis as vocabulary and future portability only. The actionable test plan is local/CI property-based testing using Hegel for TypeScript/Vitest and Bombadil for browser-facing docs/marketing surfaces.
+This research treats Antithesis as vocabulary and future portability only. The actionable test plan is local/CI property-based testing using Hegel for TypeScript/Vitest. Bombadil is deferred until Mailmon has a product web interface worth browser fuzzing; it is not targeted at docs or marketing.
 
 ## Product And Architecture
 
@@ -52,7 +62,7 @@ The repo is an Effect-based TypeScript monorepo:
 - `packages/queue`: local HTTP dispatch, Pub/Sub dispatch, and Cloud Tasks scheduling adapters.
 - `apps/api`: public Hono HTTP API and OAuth callbacks.
 - `apps/worker`: internal Hono worker API for sync, Gmail push, webhook delivery, dead letters, and control jobs.
-- `apps/docs`: Mintlify docs. `apps/marketing` also exists in the worktree but is currently untracked.
+- `apps/docs`: Mintlify docs. `apps/marketing` exists, but neither docs nor marketing are Bombadil targets for this plan.
 
 ## State Model
 
@@ -98,7 +108,21 @@ The current suite already has useful example-based and integration coverage:
 - Sandbox E2E in `apps/api/src/sandbox-e2e.test.ts`.
 - Worker route tests in `apps/worker/src/server.test.ts`.
 
-The repo docs explicitly list deterministic simulation/PBT as remaining work: concurrent mailbox sync contention and randomized out-of-order Gmail history sequences. The current worktree now has a first Hegel increment for pure/backend-adjacent properties; concurrent mailbox sync contention remains the main missing PBT target.
+`docs/testing-requirements.md` now treats the local Hegel/Vitest lane as implemented baseline, not future work. The current executable test surface has moved beyond the original plan:
+
+- CI coverage runs `pnpm test:coverage`, excluding `**/*.pbt.test.ts`.
+- Scheduled/manual `PBT Nightly` runs `vitest.pbt.config.ts` with grouped includes and `PBT_TEST_CASES=10`.
+- Hegel PBT exists across `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db`.
+- Local verification on this pass showed `pnpm test:coverage` passing 28 test files / 265 tests and `PBT_TEST_CASES=5 pnpm exec vitest run --config vitest.pbt.config.ts --reporter=dot` passing 11 PBT files / 32 tests.
+
+The remaining testing requirements are no longer "write core PBT." They are higher-level fault and operations properties:
+
+- provider-side failure E2E through the real worker boundary for Gmail `429`, quota-style `403`, transient `503`, and expired history cursors
+- live/deployed worker-death recovery where lease expiry allows takeover without corrupting canonical state
+- PostgreSQL impairment handling under latency and dropped connections
+- Pub/Sub retry/dead-letter behavior in deployed `gcp` mode
+- repeatable load tests for `/internal/sync` and `/internal/webhook-deliveries`
+- optional live Gmail sandbox validation with dedicated test accounts
 
 ## Hegel Fit
 
@@ -121,11 +145,11 @@ Recommended local pattern:
 
 Bombadil is useful, but not for the core backend guarantees. It explores web UIs from a browser, using TypeScript specifications with `extract`, `actions`, `always`, `eventually`, `next`, and default properties for uncaught exceptions, promise rejections, console errors, and HTTP error responses.
 
-For Mailmon, Bombadil should be secondary:
+For Mailmon, Bombadil should be deferred:
 
-- Run it against `apps/docs` once Mintlify can be started locally.
-- Optionally run it against `apps/marketing` after that app is committed and considered in scope.
-- Use it to catch broken docs navigation, API reference route errors, console errors, and regressions in the integration path copy.
+- Do not run it against `apps/docs`; docs navigation is not the next product risk.
+- Do not run it against `apps/marketing`; marketing is not expected to become the browser-PBT target for this roadmap.
+- Revisit Bombadil only when there is a real product web interface with authenticated or operational workflows that benefit from browser exploration.
 
 Do not use Bombadil as a substitute for Hegel tests over `@mailmon/core`, `@mailmon/db`, and `@mailmon/gmail`.
 
@@ -142,15 +166,21 @@ Do not use Bombadil as a substitute for Hegel tests over `@mailmon/core`, `@mail
 - Replay overlap conflicts under concurrent creates.
 - Internal worker route payload decoding for direct, Pub/Sub, and dead-letter payloads.
 - Pagination cursor round trips and invalid cursor rejection.
+- Provider failure translation at the full API/worker/Gmail boundary, especially rate limits and invalid history cursor repair.
+- Worker process death during active sync after provider work but before or during DB commit.
+- PostgreSQL impairment that can surface as connection drops, slow transactions, or pool exhaustion.
+- Deployed transport retries where Pub/Sub and Cloud Tasks invoke internal worker routes with OIDC authentication.
+- Load-induced contention across mailbox leases, DB pools, and webhook delivery claims.
 
 ## Assumptions
 
 - The PBT implementation should not require Antithesis platform access.
 - Hegel has been added as a dev dependency in `@mailmon/core`, `@mailmon/gmail`, and `@mailmon/db` in the current uncommitted worktree.
-- Bombadil should be added only for browser-facing specs, not backend properties.
+- Bombadil should be added only for a future product web interface, not backend properties, docs, or marketing.
 - DB-backed properties can reuse `withIsolatedDatabasePromise` / `withIsolatedDatabaseEffect`.
-- The untracked `apps/marketing` app is treated as optional until committed.
+- Current testing-requirements analysis is scoped to local `docs/` and `plans/` references only, per the user's answer.
 
 ## Open Questions
 
-- None for research. Implementation should decide CI split between PR-time small `testCases` and nightly larger `testCases`.
+- Should the sandbox E2E suite stay in `pnpm test:coverage`, or should a heavier provider-failure matrix move to a separate nightly/release lane?
+- What deployed environment should own the first chaos tier: local Docker Compose with fault proxies, staging GCP, or future Antithesis topology?

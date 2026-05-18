@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+commit: 8f544ea13a0afb0b16f13e221dca8e20f4e989ab
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -23,13 +23,21 @@ external_references:
     why: TypeScript/JavaScript instrumentation constraints for future platform use.
   - path: https://antithesis.com/docs/best_practices/optimizing/
     why: Test-environment tuning guidance.
+  - path: /home/satty/projects/mailmon-dev/docs/testing-requirements.md
+    why: Target testing requirements document for this reanalysis.
+  - path: /home/satty/projects/mailmon-dev/docs/launch-readiness.md
+    why: Cross-check for current launch and verification claims.
+  - path: /home/satty/projects/mailmon-dev/docs/staging-validation-guide.md
+    why: Manual live validation scope for Cloud Tasks and Gmail push/watch production paths.
+  - path: /home/satty/projects/mailmon-dev/plans/clouldflare-findings.md
+    why: Independent plan noting chaos/load baselining as migration prerequisites.
 ---
 
 # Property Relationships
 
 ## Summary
 
-The properties cluster around four implementation areas: mailbox sync execution, Gmail projection, webhook/replay durability, and protocol/read surfaces. The first implemented Hegel increment covers mostly Gmail projection, protocol/read surfaces, and webhook retry classification; mailbox sync execution and DB-backed webhook/replay durability remain the next highest-value clusters. The Bombadil browser property is intentionally separate because it tests documentation/customer-facing behavior rather than backend state correctness.
+The properties cluster around four implementation areas: mailbox sync execution, Gmail projection, webhook/replay durability, and protocol/read surfaces. The first implemented Hegel increment covers mostly Gmail projection, protocol/read surfaces, and webhook retry classification; mailbox sync execution and DB-backed webhook/replay durability remain the next highest-value clusters. The deferred Bombadil property is intentionally separate because it would test a future product web interface rather than backend state correctness.
 
 ## Cluster: Mailbox Execution Safety
 
@@ -93,22 +101,41 @@ Notes:
 - Gmail push fanout depends on the push notification store and dispatcher; it should remain state-free.
 - Pagination cursor PBT protects public read correctness after state mutations created by sync properties.
 
-## Cluster: Browser/Documentation Surface
+## Cluster: Deferred Product Web Interface
 
 Properties:
 
-- `docs-browser-navigation-has-no-runtime-errors`
+- `product-web-interface-has-no-runtime-errors`
 
 Notes:
 
-- This is intentionally isolated from backend correctness. It validates customer-facing docs/navigation with Bombadil.
-- It should not block core PBT implementation.
+- This is intentionally isolated from backend correctness.
+- Bombadil should not target docs or marketing in this roadmap.
+- Revisit only when a real product web interface exists.
+
+## Cluster: Failure Injection And Operations
+
+Properties:
+
+- `provider-failure-e2e-preserves-operational-state`
+- `worker-death-lease-expiry-takeover`
+- `postgres-impairment-does-not-partially-commit`
+- `deployed-pubsub-retries-redispatch-sync`
+- `internal-route-load-maintains-backpressure`
+
+Notes:
+
+- These are the main gaps from `docs/testing-requirements.md`.
+- `worker-death-lease-expiry-takeover` depends on `lease-loss-prevents-stale-commit`, but adds process death and takeover liveness.
+- `postgres-impairment-does-not-partially-commit` depends on `state-cursor-events-commit-atomically`, but adds latency/drop faults rather than generated DB states.
+- `deployed-pubsub-retries-redispatch-sync` is not covered by local worker codec PBT because it needs deployed Pub/Sub retry/dead-letter semantics.
+- `internal-route-load-maintains-backpressure` can reveal resource exhaustion that functional properties miss.
 
 ## Assumptions
 
 - No property is invalidated by current code inspection.
-- The DB-backed cluster should be implemented first because it carries the highest production risk.
+- The DB-backed cluster is now largely implemented locally; the next highest production risk is failure injection around deployed async transport and DB/process impairment.
 
 ## Open Questions
 
-- None.
+- The failure-injection cluster needs a topology decision before implementation: local Docker fault harness, staging GCP validation, or future native Antithesis.

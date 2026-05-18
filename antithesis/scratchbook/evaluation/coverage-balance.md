@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+commit: 8f544ea13a0afb0b16f13e221dca8e20f4e989ab
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -19,26 +19,27 @@ external_references:
     why: Test property definition and assertion cataloging context.
   - path: https://antithesis.com/docs/best_practices/optimizing/
     why: Test-environment tuning guidance.
+  - path: /home/satty/projects/mailmon-dev/docs/testing-requirements.md
+    why: Target testing requirements document for this reanalysis.
 ---
 
 # Evaluation: Coverage Balance
 
 ## Findings
 
-- The catalog remains well balanced across mailbox sync, Gmail projection, webhook delivery, replay, worker protocol, pagination, and browser/docs surfaces.
-- The implemented PBT increment covers mostly pure deterministic properties: codecs, history compaction, initial-sync merge, label normalization, webhook retry classification, terminal classification, and pagination cursors.
-- The highest-risk properties are still mostly unimplemented because they require generated state-machine operations against PostgreSQL: mailbox leasing, stale commits, cursor regression at commit time, sync snapshot idempotency, webhook claim recovery, and replay overlap.
-- The browser/docs property is intentionally isolated and should not compete with backend state-machine work.
+- The catalog remains well balanced across mailbox sync, Gmail projection, webhook delivery, replay, worker protocol, pagination, and deferred product-web-interface surfaces.
+- The implemented PBT lane now covers pure deterministic properties and DB-backed state-machine properties: codecs, history compaction, initial-sync merge, label normalization, webhook retry classification, terminal classification, pagination cursors, mailbox leasing, stale commits, cursor regression, sync snapshot idempotency, webhook claim recovery, and replay overlap.
+- The highest-risk gaps have moved up a level into provider-failure E2E, process/DB fault injection, deployed Pub/Sub retry behavior, and load/backpressure.
+- The product-web-interface property is intentionally deferred and should not compete with backend state-machine work.
 - Watch renewal and credential crypto remain reasonable second-pass candidates, but they do not beat the DB-backed sync/webhook/replay cluster for first risk reduction.
 
 ## Current Coverage Map
 
-| Status                                     | Properties                                                                                                                                                                                                         |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Implemented local Hegel                    | `history-delete-wins-compaction`, `initial-sync-catchup-delete-wins`, `webhook-retry-delay-bounded-monotonic`, `internal-worker-codecs-reject-malformed-envelopes`, `pagination-cursors-roundtrip-and-reject-junk` |
-| Partially implemented local Hegel          | `label-ids-are-normalized`, `terminal-webhook-outcomes-do-not-reschedule`                                                                                                                                          |
-| Existing example/integration coverage only | `thread-summary-follows-latest-message`, `gmail-push-is-wakeup-only-and-fans-out`, several mailbox sync and webhook/replay state-machine properties                                                                |
-| Not implemented                            | `docs-browser-navigation-has-no-runtime-errors` and the DB-backed generated state-machine versions of the sync/webhook/replay properties                                                                           |
+| Status                                     | Properties                                                                                                                                                 |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Implemented local Hegel                    | All backend catalog properties in the mailbox sync, Gmail projection, webhook/replay, worker protocol, and pagination clusters have Hegel/Vitest coverage. |
+| Existing example/integration coverage only | Provider-failure E2E through real runtime composition, deployed Pub/Sub retry/dead-letter behavior, and staging/live Gmail validation.                     |
+| Not implemented/deferred                   | `product-web-interface-has-no-runtime-errors`, worker-death chaos, PostgreSQL impairment, and repeatable load/backpressure budgets.                        |
 
 ## Passes
 
@@ -48,18 +49,22 @@ external_references:
 
 ## Gaps
 
-- Add generated PostgreSQL tests before broadening protocol fuzzing.
-- Extend Gmail history PBT across multiple pages and missing-message races.
-- Update `docs/testing-requirements.md` once Hegel fully replaces the old fast-check wording.
+- Add provider-failure E2E before broadening pure generator coverage.
+- Add worker-death and PostgreSQL impairment harnesses.
+- Add repeatable load budgets for internal routes.
 
 ## Actions Taken
 
-- Updated evaluation synthesis to make DB-backed state-machine PBT the next explicit implementation focus.
+- Updated evaluation synthesis to make failure-injection and operations testing the next explicit implementation focus.
 
 ## Assumptions
 
-- First implementation should target the highest-risk sync/webhook/replay paths.
+- First implementation should target the highest-risk operations paths from `docs/testing-requirements.md`.
 
 ## Open Questions
 
 - None.
+
+## 2026-05-17 Testing Requirements Reanalysis
+
+The old "DB-backed properties are mostly unimplemented" finding is stale. The PBT-only config now runs 11 PBT files, and the testing requirements identify higher-level gaps: provider-failure E2E, worker death, PostgreSQL impairment, deployed Pub/Sub retries, and load/performance budgets. The catalog now has a new Failure Injection And Operations category for those gaps.

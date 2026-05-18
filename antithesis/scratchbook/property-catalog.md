@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: 81f8e3344f95c73d5c628864270afe9c763b555f
+commit: 8f544ea13a0afb0b16f13e221dca8e20f4e989ab
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -23,15 +23,27 @@ external_references:
     why: TypeScript/JavaScript instrumentation constraints for future platform use.
   - path: https://antithesis.com/docs/best_practices/optimizing/
     why: Test-environment tuning guidance.
+  - path: /home/satty/projects/mailmon-dev/docs/testing-requirements.md
+    why: Target testing requirements document for this reanalysis.
+  - path: /home/satty/projects/mailmon-dev/docs/launch-readiness.md
+    why: Cross-check for current launch and verification claims.
+  - path: /home/satty/projects/mailmon-dev/docs/staging-validation-guide.md
+    why: Manual live validation scope for Cloud Tasks and Gmail push/watch production paths.
+  - path: /home/satty/projects/mailmon-dev/plans/antithesis-pbt-implementation-plan.md
+    why: Historical implementation plan used to identify what is now complete versus stale.
+  - path: /home/satty/projects/mailmon-dev/plans/clouldflare-findings.md
+    why: Independent plan noting chaos/load baselining as migration prerequisites.
 ---
 
 # Property Catalog
 
 ## Summary
 
-This catalog is local PBT first. Hegel should own backend properties through Vitest. Bombadil should own browser-facing docs/marketing properties. Antithesis assertion names are included as semantic labels and future-portability hints, not as a platform dependency.
+This catalog is local PBT first. Hegel should own backend properties through Vitest. Bombadil is deferred until Mailmon has a product web interface worth browser fuzzing; it should not target docs or marketing. Antithesis assertion names are included as semantic labels and future-portability hints, not as a platform dependency.
 
-Hegel/Vitest is the executable backend PBT lane for `packages/core`, `packages/gmail`, and `packages/db`. The high-priority DB-backed concurrency, transaction, idempotency, webhook, Replay, Gmail history, and push fanout properties passed local package test runs on 2026-05-17. Browser Bombadil properties remain a later workload increment.
+Hegel/Vitest is the executable backend PBT lane for `packages/core`, `packages/gmail`, and `packages/db`. The high-priority DB-backed concurrency, transaction, idempotency, webhook, Replay, Gmail history, and push fanout properties passed local package test runs on 2026-05-17. Browser fuzzing remains a later product-web-interface increment.
+
+Testing requirements reanalysis on 2026-05-17 changes the next work from "add backend PBT" to "add failure-injection and operations properties." `docs/testing-requirements.md` now says the real gaps are provider-failure E2E, worker death, PostgreSQL impairment, deployed Pub/Sub retries, and load/performance budgets.
 
 ## Mailbox Sync And Cursor Safety
 
@@ -329,18 +341,101 @@ Hegel/Vitest is the executable backend PBT lane for `packages/core`, `packages/g
 
 - None
 
-## Browser-Facing Bombadil Properties
+## Failure Injection And Operations
 
-### docs-browser-navigation-has-no-runtime-errors - Docs Browser Navigation Has No Runtime Errors
+### provider-failure-e2e-preserves-operational-state - Provider Failure E2E Preserves Operational State
 
-|                      |                                                                                                                                                                                                                                 |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**             | Safety / Reachability                                                                                                                                                                                                           |
-| **Priority**         | Low                                                                                                                                                                                                                             |
-| **Property**         | Random docs navigation and interaction should not produce HTTP error pages, uncaught exceptions, unhandled promise rejections, or console errors.                                                                               |
-| **Invariant**        | `Always` in Bombadil: re-export default properties and add route-specific extractors for Mailmon docs navigation. `Reachable`: API reference pages, Quickstart, Webhooks, and Replay docs should all be reachable during a run. |
-| **Antithesis Angle** | Not a backend fault property. This is local/CI browser PBT for the integration surface customers read.                                                                                                                          |
-| **Why It Matters**   | Docs are part of launch readiness and the first-webhook workflow.                                                                                                                                                               |
+|                      |                                                                                                                                                                                                                                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety / Liveness                                                                                                                                                                                                                                                                                                                   |
+| **Priority**         | High                                                                                                                                                                                                                                                                                                                                |
+| **Property**         | Provider-side Gmail failures exercised through the real worker HTTP boundary transition the mailbox into the correct retryable, lagging, reconnect-required, or repairable state without partial canonical mutation.                                                                                                                |
+| **Invariant**        | `Always`: after generated Gmail `429`, quota-style `403`, transient `503`, `invalid_grant`, and expired-history responses, durable mailbox status, last error, sync run result, cursor, events, and webhook deliveries match the documented operational policy. `Sometimes`: each provider failure family is reached at least once. |
+| **Workload Status**  | Missing. Unit/provider tests and core/DB PBT cover pieces, but the sandbox E2E matrix does not yet cover these provider failures through the real worker route.                                                                                                                                                                     |
+| **Antithesis Angle** | Faults around provider calls, worker retries, and DB commits can expose mismatches between provider classification, worker HTTP retry signaling, and durable operational state.                                                                                                                                                     |
+| **Why It Matters**   | `docs/testing-requirements.md` names this as the first remaining sandbox E2E gap. Gmail rate limits and expired cursors are expected production modes.                                                                                                                                                                              |
+
+**Open Questions:**
+
+- Should this run in the existing PR-time sandbox E2E suite or move to a nightly/release lane?
+
+### worker-death-lease-expiry-takeover - Worker Death Lease Expiry Takeover
+
+|                      |                                                                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety / Liveness                                                                                                                                                                                               |
+| **Priority**         | High                                                                                                                                                                                                            |
+| **Property**         | If a worker dies during `runMailboxSync`, the active lease eventually expires, another worker can take over, and no stale worker result corrupts canonical state.                                               |
+| **Invariant**        | `Always`: a killed or paused worker never commits after losing ownership. `Sometimes`: after lease expiry and redispatch, a second worker completes the mailbox sync or records the expected retryable failure. |
+| **Workload Status**  | Missing as process-level chaos. Hegel and DB tests cover stale commits and single-flight semantics without killing a real worker process.                                                                       |
+| **Antithesis Angle** | Process faults at exact points between lease acquisition, provider fetch, heartbeat renewal, DB commit, and finalizer release are exactly the interleavings deterministic unit tests do not cover.              |
+| **Why It Matters**   | This is the concrete chaos requirement in `docs/testing-requirements.md`; it validates that the lease model survives real runtime failure, not only generated service models.                                   |
+
+**Open Questions:**
+
+- What lease and heartbeat durations should be shortened in the test environment so takeover occurs quickly without changing production behavior? `(needs human input)`
+
+### postgres-impairment-does-not-partially-commit - PostgreSQL Impairment Does Not Partially Commit
+
+|                      |                                                                                                                                                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety / Reachability                                                                                                                                                                                                                          |
+| **Priority**         | High                                                                                                                                                                                                                                           |
+| **Property**         | PostgreSQL latency, dropped connections, or transaction errors during sync and webhook work do not leave partial mailbox state, partial cursor advancement, or inconsistent delivery claims.                                                   |
+| **Invariant**        | `Always`: after injected DB impairment, every observed durable state is either pre-operation state or a complete valid post-operation state. `Reachable`: DB timeout/drop paths are exercised in sync commit and webhook claim/finalize paths. |
+| **Workload Status**  | Missing. DB-backed PBT covers transaction boundaries under generated inputs, but not impaired network/database behavior.                                                                                                                       |
+| **Antithesis Angle** | Network and process faults can cut the DB connection at points the in-process isolated database harness cannot simulate.                                                                                                                       |
+| **Why It Matters**   | `docs/testing-requirements.md` explicitly calls out Toxiproxy-style PostgreSQL latency and dropped connections.                                                                                                                                |
+
+**Open Questions:**
+
+- Which DB impairment mechanism should be canonical for local runs: Toxiproxy, Postgres restart, or direct driver-level fault injection?
+
+### deployed-pubsub-retries-redispatch-sync - Deployed Pub/Sub Retries Redispatch Sync
+
+|                      |                                                                                                                                                                                                                                                                      |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Liveness / Safety                                                                                                                                                                                                                                                    |
+| **Priority**         | High                                                                                                                                                                                                                                                                 |
+| **Property**         | In deployed `gcp` mode, failed mailbox sync push requests are retried or dead-lettered according to Pub/Sub policy, and retry exhaustion is recorded durably without silently dropping mailbox work.                                                                 |
+| **Invariant**        | `Sometimes`: a failed `/internal/sync` push is retried and eventually succeeds or reaches `/internal/sync-dead-letter`. `Always`: dead-letter handling records `mailbox_sync_dispatch_retry_exhausted` for the mailbox and does not mutate canonical state directly. |
+| **Workload Status**  | Missing as automated deployed validation. Worker route tests cover envelope decoding and dead-letter handling locally; staging guide covers the production path manually.                                                                                            |
+| **Antithesis Angle** | This requires real transport semantics: OIDC-authenticated Pub/Sub pushes, non-`2xx` worker responses, retry scheduling, and dead-letter delivery.                                                                                                                   |
+| **Why It Matters**   | The system depends on at-least-once transport and explicitly does not trust queue ordering. Silent dispatch loss would strand a mailbox.                                                                                                                             |
+
+**Open Questions:**
+
+- Can this be automated safely in staging without using real customer data or exhausting Gmail/PubSub quotas? `(needs human input)`
+
+### internal-route-load-maintains-backpressure - Internal Route Load Maintains Backpressure
+
+|                      |                                                                                                                                                                                                                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety / Reachability                                                                                                                                                                                                                                                                                 |
+| **Priority**         | Medium                                                                                                                                                                                                                                                                                                |
+| **Property**         | High concurrency against `/internal/sync` and `/internal/webhook-deliveries` preserves bounded DB pool usage, bounded lease contention, and correct retry signaling instead of timing out unpredictably or accepting unbounded work.                                                                  |
+| **Invariant**        | `Always`: under configured load budgets, internal routes return success, explicit retryable `5xx`, or validation/auth failures; they do not produce unhandled exceptions, corrupt state, or unbounded in-flight work. `Reachable`: active lease contention and webhook claim contention are observed. |
+| **Workload Status**  | Missing. Existing suites exercise functional behavior, not concurrency/load budgets.                                                                                                                                                                                                                  |
+| **Antithesis Angle** | Resource pressure can amplify races and retry storms, especially when DB pool pressure and internal HTTP retries overlap.                                                                                                                                                                             |
+| **Why It Matters**   | `docs/testing-requirements.md` names load and performance testing as a remaining launch-grade confidence gap.                                                                                                                                                                                         |
+
+**Open Questions:**
+
+- What p95/p99 latency, DB pool, and error-rate budgets should define pass/fail for early beta? `(needs human input)`
+
+## Deferred Product Web Interface Properties
+
+### product-web-interface-has-no-runtime-errors - Product Web Interface Has No Runtime Errors
+
+|                      |                                                                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**             | Safety / Reachability                                                                                                                                                                             |
+| **Priority**         | Deferred                                                                                                                                                                                          |
+| **Property**         | Once Mailmon has a product web interface, generated browser navigation and interaction should not produce HTTP error pages, uncaught exceptions, unhandled promise rejections, or console errors. |
+| **Invariant**        | Future `Always` in Bombadil: default browser/runtime properties hold across generated product-interface actions. Future `Reachable`: critical product workflows can be reached during a run.      |
+| **Workload Status**  | Deferred. No Bombadil dependency or spec should be added for docs or marketing; revisit only when a product web interface exists.                                                                 |
+| **Antithesis Angle** | Not a backend fault property. This is future local/CI browser PBT for product UI workflows, separate from backend state-sync correctness.                                                         |
+| **Why It Matters**   | A product web interface may eventually become part of customer operations, but today the launch-grade gaps are backend E2E, failure injection, deployed transport validation, and load budgets.   |
 
 **Open Questions:**
 
@@ -348,9 +443,9 @@ Hegel/Vitest is the executable backend PBT lane for `packages/core`, `packages/g
 
 ## Assumptions
 
-- Hegel should replace the roadmap's fast-check idea unless a future decision says otherwise.
+- Hegel has replaced the roadmap's older fast-check idea unless a future decision says otherwise.
 - Hegel 0.2.2 has internal Antithesis-output plumbing, but the package root exports `test` and `testAsync`, not the `.testLocation(...)` builder; local test names and failure messages must stay specific, and native Antithesis cataloging remains future work.
-- Bombadil is experimental and should stay isolated from core PR-time tests until stable in CI.
+- Bombadil is deferred until a product web interface exists and should stay isolated from core PR-time tests.
 
 ## Open Questions
 

@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+commit: 8f544ea13a0afb0b16f13e221dca8e20f4e989ab
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -19,6 +19,8 @@ external_references:
     why: Test property definition and assertion cataloging context.
   - path: https://antithesis.com/docs/best_practices/optimizing/
     why: Test-environment tuning guidance.
+  - path: /home/satty/projects/mailmon-dev/docs/testing-requirements.md
+    why: Target testing requirements document for this reanalysis.
 ---
 
 # Evaluation: Antithesis Fit
@@ -28,13 +30,13 @@ external_references:
 - High Antithesis/fault fit remains concentrated in `mailbox-lease-single-flight`, `lease-loss-prevents-stale-commit`, `state-cursor-events-commit-atomically`, `webhook-claim-is-exclusive-and-stale-recoverable`, and replay claim/overlap properties.
 - Current Hegel tests are good local PBT, but most are not Antithesis sweet-spot properties. They are deterministic generator checks that benefit from shrinking, not from fault injection.
 - This is acceptable for the first increment because the user does not have Antithesis platform access. The next step should still move toward generated interleavings and partial-failure analogues in real PostgreSQL.
-- Assertion type check still looks sane: implemented backend properties are safety invariants and fit `Always` semantics. Browser/docs remains low-priority safety/reachability.
+- Assertion type check still looks sane: implemented backend properties are safety invariants and fit `Always` semantics. Product-web-interface browser fuzzing is deferred.
 - Hegel 0.2.2 should not be described as providing implemented Antithesis assertion cataloging in this repo; the public root export does not expose `.testLocation(...)`.
 
 ## Passes
 
-- The catalog does not overuse `Sometimes`; liveness/reachability language is kept to browser/docs and future guidance.
-- Properties are specific enough to fail locally under Hegel or Bombadil.
+- The catalog does not overuse `Sometimes`; liveness/reachability language is kept to future product-web-interface guidance and operations properties.
+- Backend properties are specific enough to fail locally under Hegel; future product web interface properties can use Bombadil when that interface exists.
 - The current PBT suite aligns with the "properties as assertions" guidance from Antithesis docs even though local assertions are Vitest expectations.
 
 ## Refinements
@@ -53,3 +55,7 @@ external_references:
 ## Open Questions
 
 - None.
+
+## 2026-05-17 Testing Requirements Reanalysis
+
+The best Antithesis fit is now the failure-injection cluster, not the already-implemented local Hegel cluster. `worker-death-lease-expiry-takeover`, `postgres-impairment-does-not-partially-commit`, and `deployed-pubsub-retries-redispatch-sync` are high-fit because they depend on process faults, timing, transport retries, and partial DB failure. `provider-failure-e2e-preserves-operational-state` is medium/high fit: it can start as deterministic sandbox E2E, but gains value under worker/DB faults. `internal-route-load-maintains-backpressure` is partly load-test territory and should have numeric budgets before it consumes fault-search time.

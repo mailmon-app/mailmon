@@ -1,6 +1,6 @@
 ---
 sut_path: /home/satty/projects/mailmon-dev
-commit: e6786833c6b30e398f8d7bf0540d1732673942c7
+commit: 8f544ea13a0afb0b16f13e221dca8e20f4e989ab
 updated: 2026-05-17
 external_references:
   - path: https://github.com/hegeldev/hegel-typescript
@@ -19,6 +19,8 @@ external_references:
     why: Test property definition and assertion cataloging context.
   - path: https://antithesis.com/docs/best_practices/optimizing/
     why: Test-environment tuning guidance.
+  - path: /home/satty/projects/mailmon-dev/docs/testing-requirements.md
+    why: Target testing requirements document for this reanalysis.
 ---
 
 # Evaluation: Wildcard
@@ -29,8 +31,8 @@ external_references:
 - The biggest hidden risk is not missing generator variety; it is false confidence from pure properties while the actual product risk lives in DB-backed commit and claim boundaries.
 - CI may pay a cold-start cost because Hegel uses `uv` and a Python `hegel-core` component. The GitHub Actions workflow caches pnpm but not Hegel's own cache.
 - Current tests do not use `tc.note`, which means a failing shrunk case may not include enough final-replay context for generated operation sequences.
-- `docs/testing-requirements.md` still names fast-check. That should be updated when this branch is ready so the repo does not carry two competing PBT directions.
-- Bombadil remains tempting because it is Antithesis-adjacent, but it is still the wrong next investment for a backend state-sync product.
+- `docs/testing-requirements.md` now names Hegel and correctly separates CI coverage from the PBT-only lane.
+- Bombadil remains tempting because it is Antithesis-adjacent, but it should be deferred until there is a product web interface; docs and marketing should not be the target.
 
 ## Passes
 
@@ -56,3 +58,7 @@ external_references:
 ## Open Questions
 
 - None.
+
+## 2026-05-17 Testing Requirements Reanalysis
+
+The surprising risk is now documentation skew in the scratchbook itself. The code and `docs/testing-requirements.md` have moved faster than the original Antithesis research artifacts: the local Hegel lane is real, CI caches Hegel, and the next useful work is operations testing. Future research passes should start by checking `.github/workflows/pbt-nightly.yml` and `vitest.pbt.config.ts`, not the older phase plan.
