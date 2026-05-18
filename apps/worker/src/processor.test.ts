@@ -1,3 +1,4 @@
+import { MailboxSyncLeaseTiming } from "@mailmon/core";
 import { bootstrap } from "@mailmon/db";
 import { createStubMailboxSyncProviderLayer } from "@mailmon/gmail";
 import { Layer, ManagedRuntime } from "effect";
@@ -22,6 +23,7 @@ describe("processSyncJob", () => {
         bootstrap.createBootstrapSyncRunStoreLayer,
         bootstrap.createBootstrapWebhookDeliveryStoreLayer,
         bootstrap.createBootstrapWebhookDeliverySchedulerLayer,
+        MailboxSyncLeaseTiming.defaultLayer,
         createStubMailboxSyncProviderLayer,
       ),
     );

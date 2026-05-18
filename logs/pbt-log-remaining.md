@@ -29,3 +29,40 @@ Results:
 - `pnpm typecheck`: passed.
 - `pnpm format:check`: passed.
 - `pnpm test:coverage`: 28 files passed, 269 tests passed; statements 80.51%, branches 70.43%, functions 79.62%, lines 80.85%.
+
+## 2026-05-18 - Phase 2: Test-Time Lease Tuning
+
+Completed `worker-death-lease-expiry-takeover`, `mailbox-lease-single-flight`,
+and `lease-loss-prevents-stale-commit` setup work from
+`plans/antithesis-remaining-testing-work-plan.md`.
+
+- Added `MailboxSyncLeaseTiming` in `@mailmon/core` with production defaults:
+  90,000 ms lease TTL and 30,000 ms heartbeat interval.
+- Updated `runMailboxSync` to read lease TTL and heartbeat interval from the
+  Effect service instead of hard-coded constants.
+- Wired the worker runtime to `MailboxSyncLeaseTiming.defaultLayer`, preserving
+  production behavior unless a test or runtime supplies explicit values.
+- Updated core, DB, and worker test runtimes that call `runMailboxSync` to
+  provide the timing layer.
+- Shortened the core heartbeat tests to use a 300 ms TTL and 100 ms heartbeat
+  interval, avoiding test waits tied to production lease intervals.
+
+Verification:
+
+```bash
+pnpm --filter @mailmon/core test -- src/use-cases.test.ts src/mailbox-sync-execution.pbt.test.ts
+pnpm --filter @mailmon/core build
+pnpm --filter @mailmon/db test -- src/mailbox-sync-execution.pbt.test.ts src/mailbox-sync-commit.pbt.test.ts
+pnpm --filter @mailmon/worker test -- src/processor.test.ts
+pnpm typecheck
+pnpm format:check
+```
+
+Results:
+
+- `@mailmon/core` focused test command: 10 files passed, 96 tests passed.
+- `@mailmon/db` package test command: 15 files passed, 64 tests passed. The
+  command runs the full DB Vitest project from the workspace root.
+- `@mailmon/worker` processor test command: 4 files passed, 37 tests passed.
+- `pnpm typecheck`: passed.
+- `pnpm format:check`: passed after formatting `packages/core/src/use-cases.test.ts`.

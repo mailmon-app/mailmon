@@ -17,6 +17,7 @@ import {
   MailboxCatalog,
   MailboxStateStore,
   MailboxSyncCoordinator,
+  MailboxSyncLeaseTiming,
   MailboxSyncProvider,
   SyncRunStore,
   WebhookDeliveryScheduler,
@@ -244,6 +245,7 @@ describe("Mailbox sync execution properties", () => {
                 }
               }),
           }),
+          MailboxSyncLeaseTiming.defaultLayer,
           Layer.succeed(MailboxSyncProvider, {
             syncMailbox: ({ cursor }) =>
               Effect.gen(function* () {

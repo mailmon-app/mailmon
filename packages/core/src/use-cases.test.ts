@@ -21,6 +21,8 @@ import {
   MailboxSyncCoordinator,
   MailboxSyncDispatchExhaustionStore,
   MailboxSyncDispatcher,
+  MailboxSyncLeaseTiming,
+  type MailboxSyncLeaseTimingConfig,
   MailboxSyncProvider,
   MailboxStateStore,
   MailboxWatchProvider,
@@ -262,38 +264,42 @@ const createSyncCoordinatorTestLayer = (
       expiresAt: string;
     }>;
     renewResults?: ReadonlyArray<boolean>;
+    leaseTiming?: MailboxSyncLeaseTimingConfig;
   }> = {},
 ) =>
-  Layer.succeed(MailboxSyncCoordinator, {
-    acquireMailboxSyncLease: (lease) =>
-      Effect.sync(() => {
-        params.acquisitionCalls?.push(lease);
+  Layer.mergeAll(
+    Layer.succeed(MailboxSyncCoordinator, {
+      acquireMailboxSyncLease: (lease) =>
+        Effect.sync(() => {
+          params.acquisitionCalls?.push(lease);
 
-        return {
-          acquired: params.acquisitionSucceeds ?? true,
-          expiresAt: "2026-03-24T00:01:30.000Z",
-          leaseOwnerId:
-            (params.acquisitionSucceeds ?? true)
-              ? lease.leaseOwnerId
-              : (params.activeLeaseOwnerId ?? null),
-        };
-      }),
-    renewMailboxSyncLease: (lease) =>
-      Effect.sync(() => {
-        params.renewCalls?.push(lease);
-        const renewAttempt = params.renewCalls?.length ?? 1;
-        const renewed = params.renewResults?.[renewAttempt - 1] ?? true;
+          return {
+            acquired: params.acquisitionSucceeds ?? true,
+            expiresAt: "2026-03-24T00:01:30.000Z",
+            leaseOwnerId:
+              (params.acquisitionSucceeds ?? true)
+                ? lease.leaseOwnerId
+                : (params.activeLeaseOwnerId ?? null),
+          };
+        }),
+      renewMailboxSyncLease: (lease) =>
+        Effect.sync(() => {
+          params.renewCalls?.push(lease);
+          const renewAttempt = params.renewCalls?.length ?? 1;
+          const renewed = params.renewResults?.[renewAttempt - 1] ?? true;
 
-        return {
-          renewed,
-          expiresAt: renewed ? lease.expiresAt : null,
-        };
-      }),
-    releaseMailboxSyncLease: (lease) =>
-      Effect.sync(() => {
-        params.releaseCalls?.push(lease);
-      }),
-  });
+          return {
+            renewed,
+            expiresAt: renewed ? lease.expiresAt : null,
+          };
+        }),
+      releaseMailboxSyncLease: (lease) =>
+        Effect.sync(() => {
+          params.releaseCalls?.push(lease);
+        }),
+    }),
+    MailboxSyncLeaseTiming.layer(params.leaseTiming ?? MailboxSyncLeaseTiming.defaults),
+  );
 
 const createWebhookDeliveryStoreTestLayer = (
   params: Readonly<{
@@ -2572,10 +2578,14 @@ describe("runMailboxSync", () => {
             Layer.mergeAll(
               catalogLayer,
               createMailboxStateStoreTestLayer(null, appliedSnapshots, {
-                applyDelayMs: 31_000,
+                applyDelayMs: 110,
               }),
               createSyncRunStoreTestLayer(completedSyncRuns),
               createSyncCoordinatorTestLayer({
+                leaseTiming: {
+                  leaseTtlMs: 300,
+                  heartbeatIntervalMs: 100,
+                },
                 releaseCalls,
                 renewCalls,
               }),
@@ -2586,7 +2596,7 @@ describe("runMailboxSync", () => {
         ),
       );
 
-      yield* TestClock.adjust(Duration.millis(31_000));
+      yield* TestClock.adjust(Duration.millis(110));
 
       const result = yield* Fiber.join(fiber);
 
@@ -2639,10 +2649,14 @@ describe("runMailboxSync", () => {
             Layer.mergeAll(
               catalogLayer,
               createMailboxStateStoreTestLayer(null, appliedSnapshots, {
-                applyDelayMs: 31_000,
+                applyDelayMs: 110,
               }),
               createSyncRunStoreTestLayer(completedSyncRuns),
               createSyncCoordinatorTestLayer({
+                leaseTiming: {
+                  leaseTtlMs: 300,
+                  heartbeatIntervalMs: 100,
+                },
                 releaseCalls,
                 renewCalls,
                 renewResults: [false],
@@ -2655,7 +2669,7 @@ describe("runMailboxSync", () => {
         ),
       );
 
-      yield* TestClock.adjust(Duration.millis(30_000));
+      yield* TestClock.adjust(Duration.millis(100));
 
       const result = yield* Fiber.join(fiber);
 

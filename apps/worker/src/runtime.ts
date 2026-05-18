@@ -2,6 +2,7 @@ import type { WorkerEnv } from "@mailmon/config";
 import {
   buildWebhookDeliveryHttpRequest,
   classifyWebhookDeliveryTransportFailure,
+  MailboxSyncLeaseTiming,
   type PreparedWebhookDelivery,
   type ProcessWebhookDeliveryResult,
   type WebhookDeliveryScheduleRequest,
@@ -200,6 +201,7 @@ export const createWorkerRuntimeLayer = (
     gmailSyncProviderLayer,
     gmailWatchProviderLayer,
     mailboxSyncDispatcherLayer,
+    MailboxSyncLeaseTiming.defaultLayer,
     webhookDeliverySenderLayer,
   );
 };

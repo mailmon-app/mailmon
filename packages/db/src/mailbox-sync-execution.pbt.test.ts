@@ -3,6 +3,7 @@ import * as hegel from "@hegeldev/hegel";
 import * as gs from "@hegeldev/hegel/generators";
 import {
   MailboxStateStore,
+  MailboxSyncLeaseTiming,
   MailboxSyncProvider,
   WebhookDeliveryScheduler,
   runMailboxSync,
@@ -282,6 +283,7 @@ describe("DB-backed mailbox sync execution properties", () => {
             createCorePersistenceLayer(connectionString).pipe(
               Layer.provide(testGmailRefreshTokenCipherLayer),
             ),
+            MailboxSyncLeaseTiming.defaultLayer,
             createGeneratedProviderLayer(providerCalls, {
               beforeSnapshot: () => providerGate,
               providerDelayMs,
@@ -372,6 +374,7 @@ describe("DB-backed mailbox sync execution properties", () => {
             createCorePersistenceLayer(connectionString).pipe(
               Layer.provide(testGmailRefreshTokenCipherLayer),
             ),
+            MailboxSyncLeaseTiming.defaultLayer,
             createGeneratedProviderLayer(providerCalls, { providerDelayMs }),
             createRecordingSchedulerLayer([]),
           );

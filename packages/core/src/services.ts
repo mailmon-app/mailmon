@@ -1,4 +1,4 @@
-import { Context, Effect, Option } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 
 import type {
   CompletedWebhookDeliveryAttempt,
@@ -214,6 +214,31 @@ export class MailboxSyncProvider extends Context.Service<
     ) => Effect.Effect<MailboxProviderSyncResult, ProblemDetails>;
   }
 >()("@mailmon/core/MailboxSyncProvider") {}
+
+export interface MailboxSyncLeaseTimingConfig {
+  readonly leaseTtlMs: number;
+  readonly heartbeatIntervalMs: number;
+}
+
+export const defaultMailboxSyncLeaseTiming: MailboxSyncLeaseTimingConfig = {
+  leaseTtlMs: 90_000,
+  heartbeatIntervalMs: 30_000,
+};
+
+export class MailboxSyncLeaseTiming extends Context.Service<
+  MailboxSyncLeaseTiming,
+  MailboxSyncLeaseTimingConfig
+>()("@mailmon/core/MailboxSyncLeaseTiming") {
+  static readonly defaults = defaultMailboxSyncLeaseTiming;
+
+  static readonly defaultLayer = Layer.succeed(
+    MailboxSyncLeaseTiming,
+    defaultMailboxSyncLeaseTiming,
+  );
+
+  static readonly layer = (config: MailboxSyncLeaseTimingConfig) =>
+    Layer.succeed(MailboxSyncLeaseTiming, config);
+}
 
 export class MailboxConnectProvider extends Context.Service<
   MailboxConnectProvider,

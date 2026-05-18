@@ -15,12 +15,10 @@ import {
   MailboxCatalog,
   MailboxStateStore,
   MailboxSyncCoordinator,
+  MailboxSyncLeaseTiming,
   MailboxSyncProvider,
   SyncRunStore,
 } from "./services.js";
-
-const DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS = 90_000;
-const DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS = 30_000;
 
 interface AcquiredMailboxSyncExecution {
   readonly cursor: string | null;
@@ -164,6 +162,7 @@ const completeReconnectRequiredMailbox = (mailbox: MailboxResource) =>
 const acquireMailboxSyncExecution = (mailbox: MailboxResource) =>
   Effect.gen(function* () {
     const mailboxStateStore = yield* MailboxStateStore;
+    const mailboxSyncLeaseTiming = yield* MailboxSyncLeaseTiming;
     const syncRunStore = yield* SyncRunStore;
     const syncCoordinator = yield* MailboxSyncCoordinator;
     const cursor = yield* mailboxStateStore.getMailboxCursor(mailbox.id);
@@ -176,7 +175,7 @@ const acquireMailboxSyncExecution = (mailbox: MailboxResource) =>
       acquiredAt: syncRun.startedAt,
       expiresAt: addMillisecondsToIsoTimestamp(
         syncRun.startedAt,
-        DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS,
+        mailboxSyncLeaseTiming.leaseTtlMs,
       ),
     });
 
@@ -211,31 +210,35 @@ const acquireMailboxSyncExecution = (mailbox: MailboxResource) =>
   });
 
 const createMailboxSyncHeartbeat = (execution: AcquiredMailboxSyncExecution) =>
-  Effect.forever(
-    Effect.gen(function* () {
-      yield* Effect.sleep(Duration.millis(DEFAULT_MAILBOX_SYNC_LEASE_HEARTBEAT_INTERVAL_MS));
+  Effect.gen(function* () {
+    const mailboxSyncLeaseTiming = yield* MailboxSyncLeaseTiming;
 
-      const syncCoordinator = yield* MailboxSyncCoordinator;
-      const heartbeatAt = nowIso();
-      const renewal = yield* syncCoordinator.renewMailboxSyncLease({
-        mailboxId: execution.mailbox.id,
-        leaseOwnerId: execution.leaseOwnerId,
-        heartbeatAt,
-        expiresAt: addMillisecondsToIsoTimestamp(heartbeatAt, DEFAULT_MAILBOX_SYNC_LEASE_TTL_MS),
-      });
+    return yield* Effect.forever(
+      Effect.gen(function* () {
+        yield* Effect.sleep(Duration.millis(mailboxSyncLeaseTiming.heartbeatIntervalMs));
 
-      if (!renewal.renewed) {
-        return yield* Effect.fail(
-          mailboxSyncLeaseLost(execution.mailbox.id, {
-            leaseOwnerId: execution.leaseOwnerId,
-            syncRunId: execution.syncRun.syncRunId,
-          }),
-        );
-      }
+        const syncCoordinator = yield* MailboxSyncCoordinator;
+        const heartbeatAt = nowIso();
+        const renewal = yield* syncCoordinator.renewMailboxSyncLease({
+          mailboxId: execution.mailbox.id,
+          leaseOwnerId: execution.leaseOwnerId,
+          heartbeatAt,
+          expiresAt: addMillisecondsToIsoTimestamp(heartbeatAt, mailboxSyncLeaseTiming.leaseTtlMs),
+        });
 
-      return yield* Effect.void;
-    }),
-  );
+        if (!renewal.renewed) {
+          return yield* Effect.fail(
+            mailboxSyncLeaseLost(execution.mailbox.id, {
+              leaseOwnerId: execution.leaseOwnerId,
+              syncRunId: execution.syncRun.syncRunId,
+            }),
+          );
+        }
+
+        return yield* Effect.void;
+      }),
+    );
+  });
 
 const commitProviderSyncResult = (execution: AcquiredMailboxSyncExecution) =>
   Effect.gen(function* () {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   MailboxStateStore,
+  MailboxSyncLeaseTiming,
   MailboxSyncProvider,
   WebhookDeliveryScheduler,
   runMailboxSync,
@@ -664,6 +665,7 @@ describe("DB-backed durable mailbox event emission", () => {
             Effect.provide(
               Layer.mergeAll(
                 persistenceLayer,
+                MailboxSyncLeaseTiming.defaultLayer,
                 regressingProviderLayer,
                 noopWebhookDeliverySchedulerLayer,
               ),
