@@ -1,4 +1,5 @@
 import type { AsyncTransportMode } from "@mailmon/config";
+import { Effect } from "effect";
 import { OAuth2Client } from "google-auth-library";
 
 export interface VerifiedGoogleOidcToken {
@@ -82,113 +83,109 @@ const tokenAudienceMatches = (
 
 const normalizeEmail = (email: string) => email.toLowerCase();
 
-export const authorizeInternalRequest = async (
+const authorizeSuccess: InternalAuthResult = {
+  authorized: true,
+};
+
+const authorizeFailure = (
+  code: string,
+  detail: string,
+  statusCode: number,
+): InternalAuthResult => ({
+  authorized: false,
+  body: {
+    code,
+    detail,
+  },
+  statusCode,
+});
+
+export const authorizeInternalRequestEffect = Effect.fn("worker.authorizeInternalRequest")(
+  function* (
+    authorizationHeader: string | undefined,
+    options: Readonly<{
+      readonly asyncTransportMode: AsyncTransportMode;
+      readonly internalAuth?: WorkerInternalAuthOptions;
+    }>,
+  ) {
+    if (options.asyncTransportMode === "local") {
+      return authorizeSuccess;
+    }
+
+    if (options.internalAuth === undefined) {
+      return authorizeFailure(
+        "worker_internal_auth_not_configured",
+        "Internal worker authentication is not configured.",
+        500,
+      );
+    }
+
+    const token = extractBearerToken(authorizationHeader);
+
+    if (token === null) {
+      return authorizeFailure(
+        "worker_internal_auth_required",
+        "Internal worker requests must include Authorization: Bearer <google_oidc_token>.",
+        401,
+      );
+    }
+
+    const internalAuth = options.internalAuth;
+    const verifier = internalAuth.verifier ?? createGoogleOidcVerifier();
+    const verifiedToken = yield* Effect.tryPromise({
+      catch: () => "invalid_oidc_token" as const,
+      try: () => verifier.verify(token, internalAuth.audience),
+    }).pipe(Effect.catch(() => Effect.succeed(null)));
+
+    if (verifiedToken === null) {
+      return authorizeFailure(
+        "worker_internal_auth_invalid",
+        "The internal worker authorization token is invalid.",
+        401,
+      );
+    }
+
+    if (
+      verifiedToken.issuer === null ||
+      !GOOGLE_OIDC_ISSUERS.has(verifiedToken.issuer) ||
+      !tokenAudienceMatches(verifiedToken.audience, internalAuth.audience)
+    ) {
+      return authorizeFailure(
+        "worker_internal_auth_forbidden",
+        "The internal worker authorization token is not trusted for this worker.",
+        403,
+      );
+    }
+
+    if (verifiedToken.email === null || verifiedToken.emailVerified !== true) {
+      return authorizeFailure(
+        "worker_internal_auth_forbidden",
+        "The internal worker authorization token is missing a verified service account.",
+        403,
+      );
+    }
+
+    const allowedEmails = new Set(
+      internalAuth.allowedServiceAccountEmails.map((email) => normalizeEmail(email)),
+    );
+
+    if (!allowedEmails.has(normalizeEmail(verifiedToken.email))) {
+      return authorizeFailure(
+        "worker_internal_auth_forbidden",
+        "The internal worker authorization token was issued for an unauthorized service account.",
+        403,
+      );
+    }
+
+    return authorizeSuccess;
+  },
+);
+
+export const authorizeInternalRequest = (
   authorizationHeader: string | undefined,
   options: Readonly<{
     readonly asyncTransportMode: AsyncTransportMode;
     readonly internalAuth?: WorkerInternalAuthOptions;
   }>,
-): Promise<InternalAuthResult> => {
-  if (options.asyncTransportMode === "local") {
-    return {
-      authorized: true,
-    };
-  }
-
-  if (options.internalAuth === undefined) {
-    return {
-      authorized: false,
-      body: {
-        code: "worker_internal_auth_not_configured",
-        detail: "Internal worker authentication is not configured.",
-      },
-      statusCode: 500,
-    };
-  }
-
-  const token = extractBearerToken(authorizationHeader);
-
-  if (token === null) {
-    return {
-      authorized: false,
-      body: {
-        code: "worker_internal_auth_required",
-        detail: "Internal worker requests must include Authorization: Bearer <google_oidc_token>.",
-      },
-      statusCode: 401,
-    };
-  }
-
-  const verifier = options.internalAuth.verifier ?? createGoogleOidcVerifier();
-  let verifiedToken: VerifiedGoogleOidcToken | null;
-
-  try {
-    verifiedToken = await verifier.verify(token, options.internalAuth.audience);
-  } catch {
-    return {
-      authorized: false,
-      body: {
-        code: "worker_internal_auth_invalid",
-        detail: "The internal worker authorization token is invalid.",
-      },
-      statusCode: 401,
-    };
-  }
-
-  if (verifiedToken === null) {
-    return {
-      authorized: false,
-      body: {
-        code: "worker_internal_auth_invalid",
-        detail: "The internal worker authorization token is invalid.",
-      },
-      statusCode: 401,
-    };
-  }
-
-  if (
-    verifiedToken.issuer === null ||
-    !GOOGLE_OIDC_ISSUERS.has(verifiedToken.issuer) ||
-    !tokenAudienceMatches(verifiedToken.audience, options.internalAuth.audience)
-  ) {
-    return {
-      authorized: false,
-      body: {
-        code: "worker_internal_auth_forbidden",
-        detail: "The internal worker authorization token is not trusted for this worker.",
-      },
-      statusCode: 403,
-    };
-  }
-
-  if (verifiedToken.email === null || verifiedToken.emailVerified !== true) {
-    return {
-      authorized: false,
-      body: {
-        code: "worker_internal_auth_forbidden",
-        detail: "The internal worker authorization token is missing a verified service account.",
-      },
-      statusCode: 403,
-    };
-  }
-
-  const allowedEmails = new Set(
-    options.internalAuth.allowedServiceAccountEmails.map((email) => normalizeEmail(email)),
-  );
-
-  if (!allowedEmails.has(normalizeEmail(verifiedToken.email))) {
-    return {
-      authorized: false,
-      body: {
-        code: "worker_internal_auth_forbidden",
-        detail:
-          "The internal worker authorization token was issued for an unauthorized service account.",
-      },
-      statusCode: 403,
-    };
-  }
-
-  return {
-    authorized: true,
-  };
-};
+): Promise<InternalAuthResult> =>
+  Effect.runPromise(authorizeInternalRequestEffect(authorizationHeader, options));

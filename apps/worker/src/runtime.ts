@@ -37,6 +37,13 @@ const classifyWebhookDeliveryFailure = (error: unknown) => {
   });
 };
 
+const webhookDeliveryTimeoutFailure = () => {
+  const error = new Error("Webhook delivery timed out.");
+  error.name = "AbortError";
+
+  return classifyWebhookDeliveryFailure(error);
+};
+
 export const createWebhookDeliverySenderLayer = (
   options: Readonly<{
     fetch?: typeof globalThis.fetch;
@@ -50,33 +57,29 @@ export const createWebhookDeliverySenderLayer = (
     send: (delivery: PreparedWebhookDelivery, attemptedAt: string) =>
       Effect.tryPromise({
         catch: classifyWebhookDeliveryFailure,
-        try: async () => {
-          const abortController = new AbortController();
-          const timeout = globalThis.setTimeout(() => {
-            abortController.abort();
-          }, timeoutMs);
+        try: async (signal) => {
+          const request = buildWebhookDeliveryHttpRequest({
+            attemptedAt,
+            delivery,
+            userAgent: "mailmon-worker/phase-6c",
+          });
+          const response = await fetchImpl(delivery.url, {
+            method: "POST",
+            headers: request.headers,
+            body: request.body,
+            signal,
+          });
 
-          try {
-            const request = buildWebhookDeliveryHttpRequest({
-              attemptedAt,
-              delivery,
-              userAgent: "mailmon-worker/phase-6c",
-            });
-            const response = await fetchImpl(delivery.url, {
-              method: "POST",
-              headers: request.headers,
-              body: request.body,
-              signal: abortController.signal,
-            });
-
-            return {
-              statusCode: response.status,
-            };
-          } finally {
-            globalThis.clearTimeout(timeout);
-          }
+          return {
+            statusCode: response.status,
+          };
         },
-      }),
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: `${timeoutMs} millis`,
+          orElse: () => Effect.fail(webhookDeliveryTimeoutFailure()),
+        }),
+      ),
   });
 };
 

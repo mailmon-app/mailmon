@@ -20,15 +20,13 @@ import {
 } from "@mailmon/core";
 import { Data, Effect } from "effect";
 
-type EffectSuccess<T> = T extends Effect.Effect<infer A, any, any> ? A : never;
-
-type WorkerProcessorRuntime<TEffect extends Effect.Effect<any, any, any>> = {
+type WorkerProcessorRuntime = {
   readonly runPromise: (
-    effect: TEffect,
+    effect: Effect.Effect<any, any, any>,
     options?: {
       readonly signal?: AbortSignal;
     },
-  ) => Promise<EffectSuccess<TEffect>>;
+  ) => Promise<any>;
 };
 
 class WorkerProcessorUnknownError extends Data.TaggedError("WorkerProcessorUnknownError")<{
@@ -210,20 +208,76 @@ const createStagingPubSubRetrySmokeProblem = (mailboxId: string): ProblemDetails
     retryable: true,
   });
 
+const observeSyncResult = <A extends SyncMailboxResult, R>(
+  effect: Effect.Effect<A, unknown, R>,
+  options: ReturnType<typeof getOperationalLogOptions>,
+) =>
+  effect.pipe(
+    Effect.tapError((error) =>
+      isProblemDetails(error) ? logMailboxSyncLeaseLost(error, options) : Effect.void,
+    ),
+    Effect.tap((result) => logSyncResult(result, options)),
+  );
+
+const observeMailboxSyncDeadLetterResult = <A extends MailboxSyncDispatchExhaustedResult, R>(
+  effect: Effect.Effect<A, unknown, R>,
+  options: ReturnType<typeof getOperationalLogOptions>,
+) =>
+  effect.pipe(
+    Effect.tap((result) =>
+      emitOperationalLog(options, {
+        event: "mailbox_sync_dispatch_retry_exhausted",
+        mailboxId: result.mailboxId,
+        syncRunId: result.syncRunId,
+        transportMode: options.transportMode,
+        occurredAt: result.recordedAt,
+        detail: result.detail,
+      }),
+    ),
+  );
+
+const observeWebhookDeliveryResult = <A extends ProcessWebhookDeliveryResult, R>(
+  effect: Effect.Effect<A, unknown, R>,
+  options: ReturnType<typeof getOperationalLogOptions>,
+) =>
+  effect.pipe(
+    Effect.tap((result) =>
+      result.status === "retry_exhausted"
+        ? emitOperationalLog(options, {
+            event: "webhook_delivery_retry_exhausted",
+            deliveryId: result.deliveryId,
+            attemptCount: result.attemptCount,
+            transportMode: options.transportMode,
+            occurredAt: new Date().toISOString(),
+          })
+        : Effect.void,
+    ),
+  );
+
+const observeControlJobResult = <A extends ControlJobRunResult, R>(
+  effect: Effect.Effect<A, unknown, R>,
+  options: ReturnType<typeof getOperationalLogOptions>,
+) =>
+  effect.pipe(
+    Effect.tap((result) =>
+      Effect.gen(function* () {
+        if (result.kind === "recover_stuck_syncs") {
+          yield* logRecoveredStuckSyncExecutions(result, options);
+        }
+
+        if (result.kind === "recover_webhook_deliveries") {
+          yield* logRecoveredWebhookDeliveryScheduling(result, options);
+        }
+      }),
+    ),
+  );
+
 export const processSyncJobEffect = Effect.fn("worker.processSyncJob")(function* (
   job: MailboxSyncJobData,
   options?: OperationalLogOptions,
 ) {
   const operationalLogOptions = getOperationalLogOptions(options);
-  const result = yield* runMailboxSync(job.mailboxId).pipe(
-    Effect.tapError((error) =>
-      isProblemDetails(error) ? logMailboxSyncLeaseLost(error, operationalLogOptions) : Effect.void,
-    ),
-  );
-
-  yield* logSyncResult(result, operationalLogOptions);
-
-  return result;
+  return yield* observeSyncResult(runMailboxSync(job.mailboxId), operationalLogOptions);
 });
 
 export const stagingPubSubRetrySmokeSyncFailureEffect = Effect.fn(
@@ -244,18 +298,10 @@ export const stagingPubSubRetrySmokeSyncFailureEffect = Effect.fn(
 export const processMailboxSyncDeadLetterEffect = Effect.fn("worker.processMailboxSyncDeadLetter")(
   function* (job: MailboxSyncJobData, options?: OperationalLogOptions) {
     const operationalLogOptions = getOperationalLogOptions(options);
-    const result = yield* recordMailboxSyncDispatchExhausted(job.mailboxId);
-
-    yield* emitOperationalLog(operationalLogOptions, {
-      event: "mailbox_sync_dispatch_retry_exhausted",
-      mailboxId: result.mailboxId,
-      syncRunId: result.syncRunId,
-      transportMode: operationalLogOptions.transportMode,
-      occurredAt: result.recordedAt,
-      detail: result.detail,
-    });
-
-    return result;
+    return yield* observeMailboxSyncDeadLetterResult(
+      recordMailboxSyncDispatchExhausted(job.mailboxId),
+      operationalLogOptions,
+    );
   },
 );
 
@@ -264,19 +310,10 @@ export const processWebhookDeliveryEffect = Effect.fn("worker.processWebhookDeli
   options?: OperationalLogOptions,
 ) {
   const operationalLogOptions = getOperationalLogOptions(options);
-  const result = yield* runWebhookDelivery(request.deliveryId);
-
-  if (result.status === "retry_exhausted") {
-    yield* emitOperationalLog(operationalLogOptions, {
-      event: "webhook_delivery_retry_exhausted",
-      deliveryId: result.deliveryId,
-      attemptCount: result.attemptCount,
-      transportMode: operationalLogOptions.transportMode,
-      occurredAt: new Date().toISOString(),
-    });
-  }
-
-  return result;
+  return yield* observeWebhookDeliveryResult(
+    runWebhookDelivery(request.deliveryId),
+    operationalLogOptions,
+  );
 });
 
 export const processControlJobEffect = Effect.fn("worker.processControlJob")(function* (
@@ -284,17 +321,7 @@ export const processControlJobEffect = Effect.fn("worker.processControlJob")(fun
   options?: OperationalLogOptions,
 ) {
   const operationalLogOptions = getOperationalLogOptions(options);
-  const result = yield* runControlJob(request);
-
-  if (result.kind === "recover_stuck_syncs") {
-    yield* logRecoveredStuckSyncExecutions(result, operationalLogOptions);
-  }
-
-  if (result.kind === "recover_webhook_deliveries") {
-    yield* logRecoveredWebhookDeliveryScheduling(result, operationalLogOptions);
-  }
-
-  return result;
+  return yield* observeControlJobResult(runControlJob(request), operationalLogOptions);
 });
 
 export const processGmailPushNotificationEffect = Effect.fn("worker.processGmailPushNotification")(
@@ -303,41 +330,26 @@ export const processGmailPushNotificationEffect = Effect.fn("worker.processGmail
   },
 );
 
-type SyncProcessorRuntime = WorkerProcessorRuntime<ReturnType<typeof runMailboxSync>>;
-
-type WebhookDeliveryProcessorRuntime = WorkerProcessorRuntime<
-  ReturnType<typeof runWebhookDelivery>
->;
-
-type ControlJobProcessorRuntime = WorkerProcessorRuntime<ReturnType<typeof runControlJob>>;
-
-type GmailPushProcessorRuntime = WorkerProcessorRuntime<
-  ReturnType<typeof ingestGmailPushNotification>
->;
-
-type SyncDeadLetterProcessorRuntime = WorkerProcessorRuntime<
-  ReturnType<typeof recordMailboxSyncDispatchExhausted>
->;
+const runProcessorEffect = <A, E, R>(
+  runtime: WorkerProcessorRuntime,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  Effect.tryPromise({
+    catch: wrapProcessorError,
+    try: async (): Promise<A> => runtime.runPromise(effect),
+  }).pipe(Effect.mapError(unwrapProcessorError));
 
 export const createProcessSyncJob = (
-  runtime: SyncProcessorRuntime,
+  runtime: WorkerProcessorRuntime,
   options?: OperationalLogOptions,
 ) => {
   const operationalLogOptions = getOperationalLogOptions(options);
 
   return (job: MailboxSyncJobData) =>
     Effect.runPromise(
-      Effect.tryPromise({
-        catch: wrapProcessorError,
-        try: () => runtime.runPromise(runMailboxSync(job.mailboxId)),
-      }).pipe(
-        Effect.mapError(unwrapProcessorError),
-        Effect.tapError((error) =>
-          isProblemDetails(error)
-            ? logMailboxSyncLeaseLost(error, operationalLogOptions)
-            : Effect.void,
-        ),
-        Effect.tap((result) => logSyncResult(result, operationalLogOptions)),
+      observeSyncResult(
+        runProcessorEffect(runtime, runMailboxSync(job.mailboxId)),
+        operationalLogOptions,
       ),
     );
 };
@@ -357,89 +369,51 @@ export const withStagingPubSubRetrySmokeSyncFailure = (
 };
 
 export const createProcessMailboxSyncDeadLetter = (
-  runtime: SyncDeadLetterProcessorRuntime,
+  runtime: WorkerProcessorRuntime,
   options?: OperationalLogOptions,
 ) => {
   const operationalLogOptions = getOperationalLogOptions(options);
 
   return (job: MailboxSyncJobData): Promise<MailboxSyncDispatchExhaustedResult> =>
     Effect.runPromise(
-      Effect.tryPromise({
-        catch: wrapProcessorError,
-        try: () => runtime.runPromise(recordMailboxSyncDispatchExhausted(job.mailboxId)),
-      }).pipe(
-        Effect.mapError(unwrapProcessorError),
-        Effect.tap((result) =>
-          emitOperationalLog(operationalLogOptions, {
-            event: "mailbox_sync_dispatch_retry_exhausted",
-            mailboxId: result.mailboxId,
-            syncRunId: result.syncRunId,
-            transportMode: operationalLogOptions.transportMode,
-            occurredAt: result.recordedAt,
-            detail: result.detail,
-          }),
-        ),
+      observeMailboxSyncDeadLetterResult(
+        runProcessorEffect(runtime, recordMailboxSyncDispatchExhausted(job.mailboxId)),
+        operationalLogOptions,
       ),
     );
 };
 
 export const createProcessWebhookDelivery = (
-  runtime: WebhookDeliveryProcessorRuntime,
+  runtime: WorkerProcessorRuntime,
   options?: OperationalLogOptions,
 ) => {
   const operationalLogOptions = getOperationalLogOptions(options);
 
   return (request: WebhookDeliveryScheduleRequest): Promise<ProcessWebhookDeliveryResult> =>
     Effect.runPromise(
-      Effect.tryPromise({
-        catch: wrapProcessorError,
-        try: () => runtime.runPromise(runWebhookDelivery(request.deliveryId)),
-      }).pipe(
-        Effect.mapError(unwrapProcessorError),
-        Effect.tap((result) =>
-          result.status === "retry_exhausted"
-            ? emitOperationalLog(operationalLogOptions, {
-                event: "webhook_delivery_retry_exhausted",
-                deliveryId: result.deliveryId,
-                attemptCount: result.attemptCount,
-                transportMode: operationalLogOptions.transportMode,
-                occurredAt: new Date().toISOString(),
-              })
-            : Effect.void,
-        ),
+      observeWebhookDeliveryResult(
+        runProcessorEffect(runtime, runWebhookDelivery(request.deliveryId)),
+        operationalLogOptions,
       ),
     );
 };
 
 export const createProcessControlJob = (
-  runtime: ControlJobProcessorRuntime,
+  runtime: WorkerProcessorRuntime,
   options?: OperationalLogOptions,
 ) => {
   const operationalLogOptions = getOperationalLogOptions(options);
 
   return (request: ControlJobDispatchRequest): Promise<ControlJobRunResult> =>
     Effect.runPromise(
-      Effect.tryPromise({
-        catch: wrapProcessorError,
-        try: () => runtime.runPromise(runControlJob(request)),
-      }).pipe(
-        Effect.mapError(unwrapProcessorError),
-        Effect.tap((result) =>
-          Effect.gen(function* () {
-            if (result.kind === "recover_stuck_syncs") {
-              yield* logRecoveredStuckSyncExecutions(result, operationalLogOptions);
-            }
-
-            if (result.kind === "recover_webhook_deliveries") {
-              yield* logRecoveredWebhookDeliveryScheduling(result, operationalLogOptions);
-            }
-          }),
-        ),
+      observeControlJobResult(
+        runProcessorEffect(runtime, runControlJob(request)),
+        operationalLogOptions,
       ),
     );
 };
 
-export const createProcessGmailPushNotification = (runtime: GmailPushProcessorRuntime) => {
+export const createProcessGmailPushNotification = (runtime: WorkerProcessorRuntime) => {
   return (notification: GmailPushNotification): Promise<GmailPushNotificationResult> =>
-    runtime.runPromise(ingestGmailPushNotification(notification));
+    runtime.runPromise(processGmailPushNotificationEffect(notification));
 };

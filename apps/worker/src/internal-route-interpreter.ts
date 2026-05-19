@@ -100,6 +100,10 @@ const responseFromMaybePromise = (response: Response | Promise<Response>) =>
     try: () => Promise.resolve(response),
   });
 
+const responseFromRouteResult = (
+  response: Effect.Effect<Response, never, any> | Response | Promise<Response>,
+) => (Effect.isEffect(response) ? response : responseFromMaybePromise(response));
+
 const wrapRouteError = (error: unknown) =>
   isProblemDetails(error) ? error : new WorkerRouteUnknownError({ error });
 
@@ -124,8 +128,7 @@ export const interpretInternalRouteEffect = Effect.fn("worker.interpretInternalR
     });
 
     if ("error" in parsed) {
-      const response = spec.invalidRequest(parsed.error);
-      return yield* Effect.isEffect(response) ? response : responseFromMaybePromise(response);
+      return yield* responseFromRouteResult(spec.invalidRequest(parsed.error));
     }
 
     const processors = yield* WorkerHttpProcessors;
