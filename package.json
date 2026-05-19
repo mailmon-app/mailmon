@@ -1,6 +1,6 @@
 {
   "name": "@mailmon.dev/sdk",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",
