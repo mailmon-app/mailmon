@@ -272,15 +272,7 @@ const observeControlJobResult = <A extends ControlJobRunResult, R>(
     ),
   );
 
-export const processSyncJobEffect = Effect.fn("worker.processSyncJob")(function* (
-  job: MailboxSyncJobData,
-  options?: OperationalLogOptions,
-) {
-  const operationalLogOptions = getOperationalLogOptions(options);
-  return yield* observeSyncResult(runMailboxSync(job.mailboxId), operationalLogOptions);
-});
-
-export const stagingPubSubRetrySmokeSyncFailureEffect = Effect.fn(
+const stagingPubSubRetrySmokeSyncFailureEffect = Effect.fn(
   "worker.stagingPubSubRetrySmokeSyncFailure",
 )(function* (job: MailboxSyncJobData, options?: OperationalLogOptions) {
   const operationalLogOptions = getOperationalLogOptions(options);
@@ -295,36 +287,7 @@ export const stagingPubSubRetrySmokeSyncFailureEffect = Effect.fn(
   return yield* Effect.fail(createStagingPubSubRetrySmokeProblem(job.mailboxId));
 });
 
-export const processMailboxSyncDeadLetterEffect = Effect.fn("worker.processMailboxSyncDeadLetter")(
-  function* (job: MailboxSyncJobData, options?: OperationalLogOptions) {
-    const operationalLogOptions = getOperationalLogOptions(options);
-    return yield* observeMailboxSyncDeadLetterResult(
-      recordMailboxSyncDispatchExhausted(job.mailboxId),
-      operationalLogOptions,
-    );
-  },
-);
-
-export const processWebhookDeliveryEffect = Effect.fn("worker.processWebhookDelivery")(function* (
-  request: WebhookDeliveryScheduleRequest,
-  options?: OperationalLogOptions,
-) {
-  const operationalLogOptions = getOperationalLogOptions(options);
-  return yield* observeWebhookDeliveryResult(
-    runWebhookDelivery(request.deliveryId),
-    operationalLogOptions,
-  );
-});
-
-export const processControlJobEffect = Effect.fn("worker.processControlJob")(function* (
-  request: ControlJobDispatchRequest,
-  options?: OperationalLogOptions,
-) {
-  const operationalLogOptions = getOperationalLogOptions(options);
-  return yield* observeControlJobResult(runControlJob(request), operationalLogOptions);
-});
-
-export const processGmailPushNotificationEffect = Effect.fn("worker.processGmailPushNotification")(
+const processGmailPushNotificationEffect = Effect.fn("worker.processGmailPushNotification")(
   function* (notification: GmailPushNotification) {
     return yield* ingestGmailPushNotification(notification);
   },

@@ -14,7 +14,9 @@ import { createApiRuntime } from "./runtime.js";
 import { createApp } from "./server.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const tsxBin = fileURLToPath(new URL("../../../node_modules/.bin/tsx", import.meta.url));
+const tsxBin = fileURLToPath(
+  new URL(["..", "..", "..", "node_modules", ".bin", "tsx"].join("/"), import.meta.url),
+);
 const testRefreshTokenEncryptionKey = "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=";
 const primaryWorkspaceId = "ws_worker_death_chaos";
 const primaryApiKey = "mailmon_worker_death_api_key";

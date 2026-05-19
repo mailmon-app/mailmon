@@ -19,7 +19,7 @@ import {
   createGcpMailboxSyncDispatcherLayer,
   createWorkerHttpMailboxSyncDispatcherLayer,
 } from "@mailmon/queue";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer } from "effect";
 
 const DEFAULT_WEBHOOK_DELIVERY_TIMEOUT_MS = 5_000;
 
@@ -221,8 +221,4 @@ export const createWorkerRuntimeLayer = (env: WorkerRuntimeEnv) => {
     }),
     webhookDeliverySenderLayer,
   );
-};
-
-export const createWorkerRuntime = (env: WorkerRuntimeEnv) => {
-  return ManagedRuntime.make(createWorkerRuntimeLayer(env));
 };

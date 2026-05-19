@@ -1,5 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "load/*.k6.js",
+    "scripts/staging-pubsub-retry-smoke.ts"
+  ],
   "ignorePatterns": [
     "sdks/typescript/**",
     "**/*.d.ts",
@@ -23,7 +27,11 @@
     // Varlock loads this plugin from .env.schema comments at runtime.
     "@varlock/google-secret-manager-plugin",
     // hono-openapi wires this validator integration indirectly.
-    "@hono/standard-validator"
+    "@hono/standard-validator",
+    // k6 is imported globally by k6 load test scripts
+    "k6",
+    // Next.js React compiler plugin used by marketing package
+    "babel-plugin-react-compiler"
   ],
   "ignoreDependencyOverrides": [
     // Root pnpm override pins the transitive esbuild version used by tsx/vite/vitest.

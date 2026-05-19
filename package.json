@@ -39,6 +39,7 @@
     "@vitest/coverage-v8": "^4.1.6",
     "effect": "catalog:",
     "effect-solutions": "^0.5.3",
+    "fallow": "^2.76.0",
     "fern-api": "^5.22.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.4",

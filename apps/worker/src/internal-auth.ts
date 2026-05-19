@@ -99,87 +99,84 @@ const authorizeFailure = (
   },
   statusCode,
 });
-
-export const authorizeInternalRequestEffect = Effect.fn("worker.authorizeInternalRequest")(
-  function* (
-    authorizationHeader: string | undefined,
-    options: Readonly<{
-      readonly asyncTransportMode: AsyncTransportMode;
-      readonly internalAuth?: WorkerInternalAuthOptions;
-    }>,
-  ) {
-    if (options.asyncTransportMode === "local") {
-      return authorizeSuccess;
-    }
-
-    if (options.internalAuth === undefined) {
-      return authorizeFailure(
-        "worker_internal_auth_not_configured",
-        "Internal worker authentication is not configured.",
-        500,
-      );
-    }
-
-    const token = extractBearerToken(authorizationHeader);
-
-    if (token === null) {
-      return authorizeFailure(
-        "worker_internal_auth_required",
-        "Internal worker requests must include Authorization: Bearer <google_oidc_token>.",
-        401,
-      );
-    }
-
-    const internalAuth = options.internalAuth;
-    const verifier = internalAuth.verifier ?? createGoogleOidcVerifier();
-    const verifiedToken = yield* Effect.tryPromise({
-      catch: () => "invalid_oidc_token" as const,
-      try: () => verifier.verify(token, internalAuth.audience),
-    }).pipe(Effect.catch(() => Effect.succeed(null)));
-
-    if (verifiedToken === null) {
-      return authorizeFailure(
-        "worker_internal_auth_invalid",
-        "The internal worker authorization token is invalid.",
-        401,
-      );
-    }
-
-    if (
-      verifiedToken.issuer === null ||
-      !GOOGLE_OIDC_ISSUERS.has(verifiedToken.issuer) ||
-      !tokenAudienceMatches(verifiedToken.audience, internalAuth.audience)
-    ) {
-      return authorizeFailure(
-        "worker_internal_auth_forbidden",
-        "The internal worker authorization token is not trusted for this worker.",
-        403,
-      );
-    }
-
-    if (verifiedToken.email === null || verifiedToken.emailVerified !== true) {
-      return authorizeFailure(
-        "worker_internal_auth_forbidden",
-        "The internal worker authorization token is missing a verified service account.",
-        403,
-      );
-    }
-
-    const allowedEmails = new Set(
-      internalAuth.allowedServiceAccountEmails.map((email) => normalizeEmail(email)),
-    );
-
-    if (!allowedEmails.has(normalizeEmail(verifiedToken.email))) {
-      return authorizeFailure(
-        "worker_internal_auth_forbidden",
-        "The internal worker authorization token was issued for an unauthorized service account.",
-        403,
-      );
-    }
-
+const authorizeInternalRequestEffect = Effect.fn("worker.authorizeInternalRequest")(function* (
+  authorizationHeader: string | undefined,
+  options: Readonly<{
+    readonly asyncTransportMode: AsyncTransportMode;
+    readonly internalAuth?: WorkerInternalAuthOptions;
+  }>,
+) {
+  if (options.asyncTransportMode === "local") {
     return authorizeSuccess;
-  },
-);
+  }
+
+  if (options.internalAuth === undefined) {
+    return authorizeFailure(
+      "worker_internal_auth_not_configured",
+      "Internal worker authentication is not configured.",
+      500,
+    );
+  }
+
+  const token = extractBearerToken(authorizationHeader);
+
+  if (token === null) {
+    return authorizeFailure(
+      "worker_internal_auth_required",
+      "Internal worker requests must include Authorization: Bearer <google_oidc_token>.",
+      401,
+    );
+  }
+
+  const internalAuth = options.internalAuth;
+  const verifier = internalAuth.verifier ?? createGoogleOidcVerifier();
+  const verifiedToken = yield* Effect.tryPromise({
+    catch: () => "invalid_oidc_token" as const,
+    try: () => verifier.verify(token, internalAuth.audience),
+  }).pipe(Effect.catch(() => Effect.succeed(null)));
+
+  if (verifiedToken === null) {
+    return authorizeFailure(
+      "worker_internal_auth_invalid",
+      "The internal worker authorization token is invalid.",
+      401,
+    );
+  }
+
+  if (
+    verifiedToken.issuer === null ||
+    !GOOGLE_OIDC_ISSUERS.has(verifiedToken.issuer) ||
+    !tokenAudienceMatches(verifiedToken.audience, internalAuth.audience)
+  ) {
+    return authorizeFailure(
+      "worker_internal_auth_forbidden",
+      "The internal worker authorization token is not trusted for this worker.",
+      403,
+    );
+  }
+
+  if (verifiedToken.email === null || verifiedToken.emailVerified !== true) {
+    return authorizeFailure(
+      "worker_internal_auth_forbidden",
+      "The internal worker authorization token is missing a verified service account.",
+      403,
+    );
+  }
+
+  const allowedEmails = new Set(
+    internalAuth.allowedServiceAccountEmails.map((email) => normalizeEmail(email)),
+  );
+
+  if (!allowedEmails.has(normalizeEmail(verifiedToken.email))) {
+    return authorizeFailure(
+      "worker_internal_auth_forbidden",
+      "The internal worker authorization token was issued for an unauthorized service account.",
+      403,
+    );
+  }
+
+  return authorizeSuccess;
+});
 
 export const authorizeInternalRequest = (
   authorizationHeader: string | undefined,

@@ -110,7 +110,7 @@ const wrapRouteError = (error: unknown) =>
 const unwrapRouteError = (error: unknown) =>
   error instanceof WorkerRouteUnknownError ? error.error : error;
 
-export const interpretInternalRouteEffect = Effect.fn("worker.interpretInternalRoute")(function* <
+const interpretInternalRouteEffect = Effect.fn("worker.interpretInternalRoute")(function* <
   TRequest,
   TResult,
 >(spec: InternalRouteSpec<TRequest, TResult>, request: JsonRequestReader) {
