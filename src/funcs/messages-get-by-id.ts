@@ -28,17 +28,17 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * Get a thread
+ * Get a message
  */
-export function getV1ThreadsByThreadId(
+export function messagesGetById(
   client: MailmonCore,
-  request: operations.GetV1ThreadsByThreadIdRequest,
+  request: operations.GetV1MessagesByMessageIdRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.GetV1ThreadsByThreadIdResponse,
-    | errors.GetV1ThreadsByThreadIdBadRequestError
-    | errors.GetV1ThreadsByThreadIdNotFoundError
+    operations.GetV1MessagesByMessageIdResponse,
+    | errors.GetV1MessagesByMessageIdBadRequestError
+    | errors.GetV1MessagesByMessageIdNotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -58,14 +58,14 @@ export function getV1ThreadsByThreadId(
 
 async function $do(
   client: MailmonCore,
-  request: operations.GetV1ThreadsByThreadIdRequest,
+  request: operations.GetV1MessagesByMessageIdRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.GetV1ThreadsByThreadIdResponse,
-      | errors.GetV1ThreadsByThreadIdBadRequestError
-      | errors.GetV1ThreadsByThreadIdNotFoundError
+      operations.GetV1MessagesByMessageIdResponse,
+      | errors.GetV1MessagesByMessageIdBadRequestError
+      | errors.GetV1MessagesByMessageIdNotFoundError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -81,7 +81,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.GetV1ThreadsByThreadIdRequest$outboundSchema, value),
+      z.parse(operations.GetV1MessagesByMessageIdRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -91,12 +91,12 @@ async function $do(
   const body = null;
 
   const pathParams = {
-    threadId: encodeSimple("threadId", payload.threadId, {
+    messageId: encodeSimple("messageId", payload.messageId, {
       explode: false,
       charEncoding: "percent",
     }),
   };
-  const path = pathToFunc("/v1/threads/{threadId}")(pathParams);
+  const path = pathToFunc("/v1/messages/{messageId}")(pathParams);
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -109,7 +109,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getV1ThreadsByThreadId",
+    operationID: "getV1MessagesByMessageId",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -153,9 +153,9 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.GetV1ThreadsByThreadIdResponse,
-    | errors.GetV1ThreadsByThreadIdBadRequestError
-    | errors.GetV1ThreadsByThreadIdNotFoundError
+    operations.GetV1MessagesByMessageIdResponse,
+    | errors.GetV1MessagesByMessageIdBadRequestError
+    | errors.GetV1MessagesByMessageIdNotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -165,9 +165,12 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.GetV1ThreadsByThreadIdResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1ThreadsByThreadIdBadRequestError$inboundSchema),
-    M.jsonErr(404, errors.GetV1ThreadsByThreadIdNotFoundError$inboundSchema),
+    M.json(200, operations.GetV1MessagesByMessageIdResponse$inboundSchema),
+    M.jsonErr(
+      400,
+      errors.GetV1MessagesByMessageIdBadRequestError$inboundSchema,
+    ),
+    M.jsonErr(404, errors.GetV1MessagesByMessageIdNotFoundError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { MailmonCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -28,17 +28,16 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * Get a message
+ * List mailbox threads
  */
-export function getV1MessagesByMessageId(
+export function threadsList(
   client: MailmonCore,
-  request: operations.GetV1MessagesByMessageIdRequest,
+  request: operations.GetV1ThreadsRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.GetV1MessagesByMessageIdResponse,
-    | errors.GetV1MessagesByMessageIdBadRequestError
-    | errors.GetV1MessagesByMessageIdNotFoundError
+    operations.GetV1ThreadsResponse,
+    | errors.GetV1ThreadsBadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -58,14 +57,13 @@ export function getV1MessagesByMessageId(
 
 async function $do(
   client: MailmonCore,
-  request: operations.GetV1MessagesByMessageIdRequest,
+  request: operations.GetV1ThreadsRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.GetV1MessagesByMessageIdResponse,
-      | errors.GetV1MessagesByMessageIdBadRequestError
-      | errors.GetV1MessagesByMessageIdNotFoundError
+      operations.GetV1ThreadsResponse,
+      | errors.GetV1ThreadsBadRequestError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -80,8 +78,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(operations.GetV1MessagesByMessageIdRequest$outboundSchema, value),
+    (value) => z.parse(operations.GetV1ThreadsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -90,13 +87,13 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const pathParams = {
-    messageId: encodeSimple("messageId", payload.messageId, {
-      explode: false,
-      charEncoding: "percent",
-    }),
-  };
-  const path = pathToFunc("/v1/messages/{messageId}")(pathParams);
+  const path = pathToFunc("/v1/threads")();
+
+  const query = encodeFormQuery({
+    "cursor": payload.cursor,
+    "limit": payload.limit,
+    "mailboxId": payload.mailboxId,
+  });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -109,7 +106,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getV1MessagesByMessageId",
+    operationID: "getV1Threads",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -127,6 +124,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -153,9 +151,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.GetV1MessagesByMessageIdResponse,
-    | errors.GetV1MessagesByMessageIdBadRequestError
-    | errors.GetV1MessagesByMessageIdNotFoundError
+    operations.GetV1ThreadsResponse,
+    | errors.GetV1ThreadsBadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -165,12 +162,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.GetV1MessagesByMessageIdResponse$inboundSchema),
-    M.jsonErr(
-      400,
-      errors.GetV1MessagesByMessageIdBadRequestError$inboundSchema,
-    ),
-    M.jsonErr(404, errors.GetV1MessagesByMessageIdNotFoundError$inboundSchema),
+    M.json(200, operations.GetV1ThreadsResponse$inboundSchema),
+    M.jsonErr(400, errors.GetV1ThreadsBadRequestError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

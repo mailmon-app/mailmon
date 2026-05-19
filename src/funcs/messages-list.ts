@@ -28,16 +28,16 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * List mailbox threads
+ * List mailbox messages
  */
-export function getV1Threads(
+export function messagesList(
   client: MailmonCore,
-  request: operations.GetV1ThreadsRequest,
+  request: operations.GetV1MessagesRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.GetV1ThreadsResponse,
-    | errors.GetV1ThreadsBadRequestError
+    operations.GetV1MessagesResponse,
+    | errors.GetV1MessagesBadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -57,13 +57,13 @@ export function getV1Threads(
 
 async function $do(
   client: MailmonCore,
-  request: operations.GetV1ThreadsRequest,
+  request: operations.GetV1MessagesRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.GetV1ThreadsResponse,
-      | errors.GetV1ThreadsBadRequestError
+      operations.GetV1MessagesResponse,
+      | errors.GetV1MessagesBadRequestError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -78,7 +78,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.GetV1ThreadsRequest$outboundSchema, value),
+    (value) => z.parse(operations.GetV1MessagesRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -87,7 +87,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/v1/threads")();
+  const path = pathToFunc("/v1/messages")();
 
   const query = encodeFormQuery({
     "cursor": payload.cursor,
@@ -106,7 +106,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getV1Threads",
+    operationID: "getV1Messages",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -151,8 +151,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.GetV1ThreadsResponse,
-    | errors.GetV1ThreadsBadRequestError
+    operations.GetV1MessagesResponse,
+    | errors.GetV1MessagesBadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -162,8 +162,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.GetV1ThreadsResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1ThreadsBadRequestError$inboundSchema),
+    M.json(200, operations.GetV1MessagesResponse$inboundSchema),
+    M.jsonErr(400, errors.GetV1MessagesBadRequestError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

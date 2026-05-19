@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
 /**
  * Get a mailbox
  */
-export function getV1MailboxesByMailboxId(
+export function mailboxesGetById(
   client: MailmonCore,
   request: operations.GetV1MailboxesByMailboxIdRequest,
   options?: RequestOptions,

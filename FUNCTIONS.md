@@ -20,7 +20,7 @@ specific category of applications.
 
 ```typescript
 import { MailmonCore } from "@mailmon.dev/sdk/core.js";
-import { postV1MailboxesConnectSessions } from "@mailmon.dev/sdk/funcs/post-v1-mailboxes-connect-sessions.js";
+import { mailboxesCreateConnectSession } from "@mailmon.dev/sdk/funcs/mailboxes-create-connect-session.js";
 
 // Use `MailmonCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
@@ -29,7 +29,7 @@ const mailmon = new MailmonCore({
 });
 
 async function run() {
-  const res = await postV1MailboxesConnectSessions(mailmon, {
+  const res = await mailboxesCreateConnectSession(mailmon, {
     provider: "gmail",
     tenantExternalId: "<id>",
     mailboxExternalId: "<id>",
@@ -39,7 +39,7 @@ async function run() {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("postV1MailboxesConnectSessions failed:", res.error);
+    console.log("mailboxesCreateConnectSession failed:", res.error);
   }
 }
 

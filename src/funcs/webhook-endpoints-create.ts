@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
 /**
  * Create a webhook endpoint
  */
-export function postV1WebhookEndpoints(
+export function webhookEndpointsCreate(
   client: MailmonCore,
   request: operations.PostV1WebhookEndpointsRequest,
   options?: RequestOptions,

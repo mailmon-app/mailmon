@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
 /**
  * Get mailbox observability
  */
-export function getV1MailboxesByMailboxIdObservability(
+export function mailboxesGetObservability(
   client: MailmonCore,
   request: operations.GetV1MailboxesByMailboxIdObservabilityRequest,
   options?: RequestOptions,

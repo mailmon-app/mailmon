@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
 /**
  * Create a mailbox connect session
  */
-export function postV1MailboxesConnectSessions(
+export function mailboxesCreateConnectSession(
   client: MailmonCore,
   request: operations.PostV1MailboxesConnectSessionsRequest,
   options?: RequestOptions,

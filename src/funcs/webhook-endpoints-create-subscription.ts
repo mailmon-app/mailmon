@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { MailmonCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -28,17 +28,17 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * Get a replay
+ * Create mailbox-scoped webhook subscriptions
  */
-export function getV1ReplaysByReplayId(
+export function webhookEndpointsCreateSubscription(
   client: MailmonCore,
-  request: operations.GetV1ReplaysByReplayIdRequest,
+  request: operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.GetV1ReplaysByReplayIdResponse,
-    | errors.GetV1ReplaysByReplayIdBadRequestError
-    | errors.GetV1ReplaysByReplayIdNotFoundError
+    operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse,
+    | errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsBadRequestError
+    | errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsNotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -58,14 +58,14 @@ export function getV1ReplaysByReplayId(
 
 async function $do(
   client: MailmonCore,
-  request: operations.GetV1ReplaysByReplayIdRequest,
+  request: operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.GetV1ReplaysByReplayIdResponse,
-      | errors.GetV1ReplaysByReplayIdBadRequestError
-      | errors.GetV1ReplaysByReplayIdNotFoundError
+      operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse,
+      | errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsBadRequestError
+      | errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsNotFoundError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -81,24 +81,31 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(operations.GetV1ReplaysByReplayIdRequest$outboundSchema, value),
+      z.parse(
+        operations
+          .PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.body, { explode: true });
 
   const pathParams = {
-    replayId: encodeSimple("replayId", payload.replayId, {
+    endpointId: encodeSimple("endpointId", payload.endpointId, {
       explode: false,
       charEncoding: "percent",
     }),
   };
-  const path = pathToFunc("/v1/replays/{replayId}")(pathParams);
+  const path = pathToFunc("/v1/webhook-endpoints/{endpointId}/subscriptions")(
+    pathParams,
+  );
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
   }));
 
@@ -109,7 +116,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getV1ReplaysByReplayId",
+    operationID: "postV1WebhookEndpointsByEndpointIdSubscriptions",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -123,7 +130,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -153,9 +160,9 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.GetV1ReplaysByReplayIdResponse,
-    | errors.GetV1ReplaysByReplayIdBadRequestError
-    | errors.GetV1ReplaysByReplayIdNotFoundError
+    operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse,
+    | errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsBadRequestError
+    | errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsNotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -165,9 +172,21 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.GetV1ReplaysByReplayIdResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1ReplaysByReplayIdBadRequestError$inboundSchema),
-    M.jsonErr(404, errors.GetV1ReplaysByReplayIdNotFoundError$inboundSchema),
+    M.json(
+      201,
+      operations
+        .PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse$inboundSchema,
+    ),
+    M.jsonErr(
+      400,
+      errors
+        .PostV1WebhookEndpointsByEndpointIdSubscriptionsBadRequestError$inboundSchema,
+    ),
+    M.jsonErr(
+      404,
+      errors
+        .PostV1WebhookEndpointsByEndpointIdSubscriptionsNotFoundError$inboundSchema,
+    ),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

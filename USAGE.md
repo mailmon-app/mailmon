@@ -7,7 +7,7 @@ const mailmon = new Mailmon({
 });
 
 async function run() {
-  const result = await mailmon.postV1MailboxesConnectSessions({
+  const result = await mailmon.mailboxes.createConnectSession({
     provider: "gmail",
     tenantExternalId: "<id>",
     mailboxExternalId: "<id>",

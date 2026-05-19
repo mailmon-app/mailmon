@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { MailmonCore } from "../core.js";
-import { encodeFormQuery } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -28,16 +28,17 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * List mailbox messages
+ * Get a replay
  */
-export function getV1Messages(
+export function replaysGetById(
   client: MailmonCore,
-  request: operations.GetV1MessagesRequest,
+  request: operations.GetV1ReplaysByReplayIdRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.GetV1MessagesResponse,
-    | errors.GetV1MessagesBadRequestError
+    operations.GetV1ReplaysByReplayIdResponse,
+    | errors.GetV1ReplaysByReplayIdBadRequestError
+    | errors.GetV1ReplaysByReplayIdNotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -57,13 +58,14 @@ export function getV1Messages(
 
 async function $do(
   client: MailmonCore,
-  request: operations.GetV1MessagesRequest,
+  request: operations.GetV1ReplaysByReplayIdRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.GetV1MessagesResponse,
-      | errors.GetV1MessagesBadRequestError
+      operations.GetV1ReplaysByReplayIdResponse,
+      | errors.GetV1ReplaysByReplayIdBadRequestError
+      | errors.GetV1ReplaysByReplayIdNotFoundError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -78,7 +80,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.GetV1MessagesRequest$outboundSchema, value),
+    (value) =>
+      z.parse(operations.GetV1ReplaysByReplayIdRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -87,13 +90,13 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/v1/messages")();
-
-  const query = encodeFormQuery({
-    "cursor": payload.cursor,
-    "limit": payload.limit,
-    "mailboxId": payload.mailboxId,
-  });
+  const pathParams = {
+    replayId: encodeSimple("replayId", payload.replayId, {
+      explode: false,
+      charEncoding: "percent",
+    }),
+  };
+  const path = pathToFunc("/v1/replays/{replayId}")(pathParams);
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -106,7 +109,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getV1Messages",
+    operationID: "getV1ReplaysByReplayId",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -124,7 +127,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -151,8 +153,9 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.GetV1MessagesResponse,
-    | errors.GetV1MessagesBadRequestError
+    operations.GetV1ReplaysByReplayIdResponse,
+    | errors.GetV1ReplaysByReplayIdBadRequestError
+    | errors.GetV1ReplaysByReplayIdNotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -162,8 +165,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.GetV1MessagesResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1MessagesBadRequestError$inboundSchema),
+    M.json(200, operations.GetV1ReplaysByReplayIdResponse$inboundSchema),
+    M.jsonErr(400, errors.GetV1ReplaysByReplayIdBadRequestError$inboundSchema),
+    M.jsonErr(404, errors.GetV1ReplaysByReplayIdNotFoundError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

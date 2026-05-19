@@ -8,7 +8,7 @@ dotenv.config();
  * Example usage of the @mailmon.dev/sdk SDK
  *
  * To run this example from the examples directory:
- * npm run build && npx tsx postV1MailboxesConnectSessions.example.ts
+ * npm run build && npx tsx mailboxesCreateConnectSession.example.ts
  */
 
 import { Mailmon } from "@mailmon.dev/sdk";
@@ -18,7 +18,7 @@ const mailmon = new Mailmon({
 });
 
 async function main() {
-  const result = await mailmon.postV1MailboxesConnectSessions({
+  const result = await mailmon.mailboxes.createConnectSession({
     provider: "gmail",
     tenantExternalId: "<id>",
     mailboxExternalId: "<id>",

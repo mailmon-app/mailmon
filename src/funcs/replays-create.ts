@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
 /**
  * Create a mailbox event replay
  */
-export function postV1Replays(
+export function replaysCreate(
   client: MailmonCore,
   request: operations.PostV1ReplaysRequest,
   options?: RequestOptions,
