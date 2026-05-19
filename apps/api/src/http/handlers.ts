@@ -40,7 +40,7 @@ export const extractBearerApiKey = (authorizationHeader: string | undefined) => 
   return token;
 };
 
-export const runProblemEffect = async <A, E extends ProblemDetails, R>(
+export const runProblemEffect = <A, E extends ProblemDetails, R>(
   runtime: ApiServerRuntime,
   effect: Effect.Effect<A, E, R>,
 ): Promise<HandlerResult<A>> => {

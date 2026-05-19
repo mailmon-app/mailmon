@@ -69,18 +69,20 @@ const toCursorLimitParams = (query: CursorLimitQueryParams) => {
   };
 };
 
-const toMailboxListParams = (query: MailboxListQueryParams) => {
+const toMailboxListParams = Effect.fn("api.toMailboxListParams")(function* (
+  query: MailboxListQueryParams,
+) {
   const mailboxId = query.mailboxId ?? query.mailbox_id;
 
   if (mailboxId === undefined) {
-    return Effect.die(new Error("Validated mailbox list query is missing a mailbox id."));
+    return yield* Effect.die(new Error("Validated mailbox list query is missing a mailbox id."));
   }
 
-  return Effect.succeed({
+  return {
     ...toCursorLimitParams(query),
     mailboxId,
-  });
-};
+  };
+});
 
 const toWebhookEndpointSubscriptionRequest = (request: CreateWebhookEndpointSubscriptionBody) => {
   return "mailboxIds" in request

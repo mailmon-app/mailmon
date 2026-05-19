@@ -53,15 +53,53 @@ export const validatedQuery = <T>(context: Context): T => {
   return (context.req as ValidatedQueryRequest<T>).valid("query");
 };
 
-export const pathParam = (context: Context, name: string) => {
+export const pathParam = Effect.fn("api.pathParam")(function* (context: Context, name: string) {
   const value = context.req.param(name);
 
   if (value === undefined) {
-    return Effect.die(new Error(`Route path parameter ${name} is missing.`));
+    return yield* Effect.die(new Error(`Route path parameter ${name} is missing.`));
   }
 
-  return Effect.succeed(value);
-};
+  return value;
+});
+
+const runAuthenticatedRouteEffect = Effect.fn("api.runAuthenticatedRoute")(function* <
+  A extends {},
+  B extends {},
+>(
+  request: AuthenticatedRouteRequest,
+  run: (request: AuthenticatedRouteRequest) => Effect.Effect<A, ProblemDetails, unknown>,
+  options: AuthenticatedRouteOptions<A, B>,
+) {
+  const value = yield* run(request);
+  const responseBody = options.mapResponse?.(value) ?? value;
+  const successStatus = options.successStatus ?? 200;
+
+  return successStatus === 200
+    ? request.context.json(responseBody)
+    : request.context.json(responseBody, successStatus);
+});
+
+const handleAuthenticatedRouteEffect = Effect.fn("api.handleAuthenticatedRoute")(function* <
+  A extends {},
+  B extends {},
+>(
+  context: Context,
+  run: (request: AuthenticatedRouteRequest) => Effect.Effect<A, ProblemDetails, unknown>,
+  options: AuthenticatedRouteOptions<A, B>,
+) {
+  const workspace = yield* authenticateRequestEffect(context.req.header("authorization"));
+
+  return yield* runAuthenticatedRouteEffect(
+    {
+      context,
+      workspace,
+      origin: getRequestOrigin(context.req),
+    },
+    run,
+    options,
+  );
+});
 
 export const createAuthenticatedRouteHandler = <A extends {}, B extends {} = A>(
   runtime: ApiServerRuntime,
@@ -70,26 +108,14 @@ export const createAuthenticatedRouteHandler = <A extends {}, B extends {} = A>(
 ) => {
   return async (context: Context) => {
     return runtime.runPromise(
-      Effect.gen(function* () {
-        const workspace = yield* authenticateRequestEffect(context.req.header("authorization"));
-        return yield* run({
-          context,
-          workspace,
-          origin: getRequestOrigin(context.req),
-        });
-      }).pipe(
+      handleAuthenticatedRouteEffect(context, run, options).pipe(
         toHandlerResult,
         Effect.map((result) => {
           if (result.tag === "failure") {
             return createProblemResponse(result.problem);
           }
 
-          const responseBody = options.mapResponse?.(result.value) ?? result.value;
-          const successStatus = options.successStatus ?? 200;
-
-          return successStatus === 200
-            ? context.json(responseBody)
-            : context.json(responseBody, successStatus);
+          return result.value;
         }),
       ),
     );
