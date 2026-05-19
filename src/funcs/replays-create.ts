@@ -37,7 +37,7 @@ export function replaysCreate(
 ): APIPromise<
   Result<
     operations.PostV1ReplaysResponse,
-    | errors.PostV1ReplaysBadRequestError
+    | errors.BadRequestError
     | errors.ConflictError
     | MailmonError
     | ResponseValidationError
@@ -64,7 +64,7 @@ async function $do(
   [
     Result<
       operations.PostV1ReplaysResponse,
-      | errors.PostV1ReplaysBadRequestError
+      | errors.BadRequestError
       | errors.ConflictError
       | MailmonError
       | ResponseValidationError
@@ -148,7 +148,7 @@ async function $do(
 
   const [result] = await M.match<
     operations.PostV1ReplaysResponse,
-    | errors.PostV1ReplaysBadRequestError
+    | errors.BadRequestError
     | errors.ConflictError
     | MailmonError
     | ResponseValidationError
@@ -160,7 +160,7 @@ async function $do(
     | SDKValidationError
   >(
     M.json(201, operations.PostV1ReplaysResponse$inboundSchema),
-    M.jsonErr(400, errors.PostV1ReplaysBadRequestError$inboundSchema),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
     M.jsonErr(409, errors.ConflictError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),

@@ -37,7 +37,7 @@ export function threadsList(
 ): APIPromise<
   Result<
     operations.GetV1ThreadsResponse,
-    | errors.GetV1ThreadsBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -63,7 +63,7 @@ async function $do(
   [
     Result<
       operations.GetV1ThreadsResponse,
-      | errors.GetV1ThreadsBadRequestError
+      | errors.BadRequestError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -152,7 +152,7 @@ async function $do(
 
   const [result] = await M.match<
     operations.GetV1ThreadsResponse,
-    | errors.GetV1ThreadsBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -163,7 +163,7 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, operations.GetV1ThreadsResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1ThreadsBadRequestError$inboundSchema),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

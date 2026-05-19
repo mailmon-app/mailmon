@@ -37,7 +37,7 @@ export function webhookEndpointsCreate(
 ): APIPromise<
   Result<
     operations.PostV1WebhookEndpointsResponse,
-    | errors.PostV1WebhookEndpointsBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -63,7 +63,7 @@ async function $do(
   [
     Result<
       operations.PostV1WebhookEndpointsResponse,
-      | errors.PostV1WebhookEndpointsBadRequestError
+      | errors.BadRequestError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -147,7 +147,7 @@ async function $do(
 
   const [result] = await M.match<
     operations.PostV1WebhookEndpointsResponse,
-    | errors.PostV1WebhookEndpointsBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -158,7 +158,7 @@ async function $do(
     | SDKValidationError
   >(
     M.json(201, operations.PostV1WebhookEndpointsResponse$inboundSchema),
-    M.jsonErr(400, errors.PostV1WebhookEndpointsBadRequestError$inboundSchema),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

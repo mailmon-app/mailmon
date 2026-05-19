@@ -1,11 +1,11 @@
-# GetV1ThreadsByThreadIdNotFoundError
+# BadRequestError
 
-Thread not found
+Invalid request
 
 ## Example Usage
 
 ```typescript
-import { GetV1ThreadsByThreadIdNotFoundError } from "@mailmon.dev/sdk/models/errors";
+import { BadRequestError } from "@mailmon.dev/sdk/models/errors";
 
 // No examples available for this model
 ```

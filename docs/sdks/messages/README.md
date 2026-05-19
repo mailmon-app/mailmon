@@ -76,10 +76,10 @@ run();
 
 ### Errors
 
-| Error Type                          | Status Code                         | Content Type                        |
-| ----------------------------------- | ----------------------------------- | ----------------------------------- |
-| errors.GetV1MessagesBadRequestError | 400                                 | application/json                    |
-| errors.MailmonDefaultError          | 4XX, 5XX                            | \*/\*                               |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
 
@@ -150,8 +150,8 @@ run();
 
 ### Errors
 
-| Error Type                                     | Status Code                                    | Content Type                                   |
-| ---------------------------------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| errors.GetV1MessagesByMessageIdBadRequestError | 400                                            | application/json                               |
-| errors.GetV1MessagesByMessageIdNotFoundError   | 404                                            | application/json                               |
-| errors.MailmonDefaultError                     | 4XX, 5XX                                       | \*/\*                                          |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.NotFoundError       | 404                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

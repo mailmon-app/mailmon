@@ -37,8 +37,8 @@ export function replaysGetById(
 ): APIPromise<
   Result<
     operations.GetV1ReplaysByReplayIdResponse,
-    | errors.GetV1ReplaysByReplayIdBadRequestError
-    | errors.GetV1ReplaysByReplayIdNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -64,8 +64,8 @@ async function $do(
   [
     Result<
       operations.GetV1ReplaysByReplayIdResponse,
-      | errors.GetV1ReplaysByReplayIdBadRequestError
-      | errors.GetV1ReplaysByReplayIdNotFoundError
+      | errors.BadRequestError
+      | errors.NotFoundError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -154,8 +154,8 @@ async function $do(
 
   const [result] = await M.match<
     operations.GetV1ReplaysByReplayIdResponse,
-    | errors.GetV1ReplaysByReplayIdBadRequestError
-    | errors.GetV1ReplaysByReplayIdNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -166,8 +166,8 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, operations.GetV1ReplaysByReplayIdResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1ReplaysByReplayIdBadRequestError$inboundSchema),
-    M.jsonErr(404, errors.GetV1ReplaysByReplayIdNotFoundError$inboundSchema),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
+    M.jsonErr(404, errors.NotFoundError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

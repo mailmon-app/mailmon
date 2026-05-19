@@ -37,7 +37,7 @@ export function messagesList(
 ): APIPromise<
   Result<
     operations.GetV1MessagesResponse,
-    | errors.GetV1MessagesBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -63,7 +63,7 @@ async function $do(
   [
     Result<
       operations.GetV1MessagesResponse,
-      | errors.GetV1MessagesBadRequestError
+      | errors.BadRequestError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -152,7 +152,7 @@ async function $do(
 
   const [result] = await M.match<
     operations.GetV1MessagesResponse,
-    | errors.GetV1MessagesBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -163,7 +163,7 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, operations.GetV1MessagesResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1MessagesBadRequestError$inboundSchema),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

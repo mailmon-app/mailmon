@@ -82,11 +82,11 @@ run();
 
 ### Errors
 
-| Error Type                          | Status Code                         | Content Type                        |
-| ----------------------------------- | ----------------------------------- | ----------------------------------- |
-| errors.PostV1ReplaysBadRequestError | 400                                 | application/json                    |
-| errors.ConflictError                | 409                                 | application/json                    |
-| errors.MailmonDefaultError          | 4XX, 5XX                            | \*/\*                               |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.ConflictError       | 409                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
 
@@ -157,8 +157,8 @@ run();
 
 ### Errors
 
-| Error Type                                   | Status Code                                  | Content Type                                 |
-| -------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
-| errors.GetV1ReplaysByReplayIdBadRequestError | 400                                          | application/json                             |
-| errors.GetV1ReplaysByReplayIdNotFoundError   | 404                                          | application/json                             |
-| errors.MailmonDefaultError                   | 4XX, 5XX                                     | \*/\*                                        |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.NotFoundError       | 404                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

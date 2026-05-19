@@ -84,10 +84,10 @@ run();
 
 ### Errors
 
-| Error Type                                           | Status Code                                          | Content Type                                         |
-| ---------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------- |
-| errors.PostV1MailboxesConnectSessionsBadRequestError | 400                                                  | application/json                                     |
-| errors.MailmonDefaultError                           | 4XX, 5XX                                             | \*/\*                                                |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
 
@@ -158,11 +158,11 @@ run();
 
 ### Errors
 
-| Error Type                                      | Status Code                                     | Content Type                                    |
-| ----------------------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
-| errors.GetV1MailboxesByMailboxIdBadRequestError | 400                                             | application/json                                |
-| errors.GetV1MailboxesByMailboxIdNotFoundError   | 404                                             | application/json                                |
-| errors.MailmonDefaultError                      | 4XX, 5XX                                        | \*/\*                                           |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.NotFoundError       | 404                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## listSyncRuns
 
@@ -233,10 +233,10 @@ run();
 
 ### Errors
 
-| Error Type                                              | Status Code                                             | Content Type                                            |
-| ------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
-| errors.GetV1MailboxesByMailboxIdSyncRunsBadRequestError | 400                                                     | application/json                                        |
-| errors.MailmonDefaultError                              | 4XX, 5XX                                                | \*/\*                                                   |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getObservability
 
@@ -307,8 +307,8 @@ run();
 
 ### Errors
 
-| Error Type                                                   | Status Code                                                  | Content Type                                                 |
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| errors.GetV1MailboxesByMailboxIdObservabilityBadRequestError | 400                                                          | application/json                                             |
-| errors.GetV1MailboxesByMailboxIdObservabilityNotFoundError   | 404                                                          | application/json                                             |
-| errors.MailmonDefaultError                                   | 4XX, 5XX                                                     | \*/\*                                                        |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.NotFoundError       | 404                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

@@ -37,8 +37,8 @@ export function mailboxesGetById(
 ): APIPromise<
   Result<
     operations.GetV1MailboxesByMailboxIdResponse,
-    | errors.GetV1MailboxesByMailboxIdBadRequestError
-    | errors.GetV1MailboxesByMailboxIdNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -64,8 +64,8 @@ async function $do(
   [
     Result<
       operations.GetV1MailboxesByMailboxIdResponse,
-      | errors.GetV1MailboxesByMailboxIdBadRequestError
-      | errors.GetV1MailboxesByMailboxIdNotFoundError
+      | errors.BadRequestError
+      | errors.NotFoundError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -157,8 +157,8 @@ async function $do(
 
   const [result] = await M.match<
     operations.GetV1MailboxesByMailboxIdResponse,
-    | errors.GetV1MailboxesByMailboxIdBadRequestError
-    | errors.GetV1MailboxesByMailboxIdNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -169,11 +169,8 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, operations.GetV1MailboxesByMailboxIdResponse$inboundSchema),
-    M.jsonErr(
-      400,
-      errors.GetV1MailboxesByMailboxIdBadRequestError$inboundSchema,
-    ),
-    M.jsonErr(404, errors.GetV1MailboxesByMailboxIdNotFoundError$inboundSchema),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
+    M.jsonErr(404, errors.NotFoundError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

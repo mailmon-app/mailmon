@@ -37,7 +37,7 @@ export function mailboxesCreateConnectSession(
 ): APIPromise<
   Result<
     operations.PostV1MailboxesConnectSessionsResponse,
-    | errors.PostV1MailboxesConnectSessionsBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -63,7 +63,7 @@ async function $do(
   [
     Result<
       operations.PostV1MailboxesConnectSessionsResponse,
-      | errors.PostV1MailboxesConnectSessionsBadRequestError
+      | errors.BadRequestError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -150,7 +150,7 @@ async function $do(
 
   const [result] = await M.match<
     operations.PostV1MailboxesConnectSessionsResponse,
-    | errors.PostV1MailboxesConnectSessionsBadRequestError
+    | errors.BadRequestError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -164,10 +164,7 @@ async function $do(
       201,
       operations.PostV1MailboxesConnectSessionsResponse$inboundSchema,
     ),
-    M.jsonErr(
-      400,
-      errors.PostV1MailboxesConnectSessionsBadRequestError$inboundSchema,
-    ),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

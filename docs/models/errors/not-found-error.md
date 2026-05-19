@@ -1,11 +1,11 @@
-# PostV1WebhookEndpointsBadRequestError
+# NotFoundError
 
-Invalid request
+Mailbox or webhook endpoint not found
 
 ## Example Usage
 
 ```typescript
-import { PostV1WebhookEndpointsBadRequestError } from "@mailmon.dev/sdk/models/errors";
+import { NotFoundError } from "@mailmon.dev/sdk/models/errors";
 
 // No examples available for this model
 ```

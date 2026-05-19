@@ -37,8 +37,8 @@ export function mailboxesGetObservability(
 ): APIPromise<
   Result<
     operations.GetV1MailboxesByMailboxIdObservabilityResponse,
-    | errors.GetV1MailboxesByMailboxIdObservabilityBadRequestError
-    | errors.GetV1MailboxesByMailboxIdObservabilityNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -64,8 +64,8 @@ async function $do(
   [
     Result<
       operations.GetV1MailboxesByMailboxIdObservabilityResponse,
-      | errors.GetV1MailboxesByMailboxIdObservabilityBadRequestError
-      | errors.GetV1MailboxesByMailboxIdObservabilityNotFoundError
+      | errors.BadRequestError
+      | errors.NotFoundError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -159,8 +159,8 @@ async function $do(
 
   const [result] = await M.match<
     operations.GetV1MailboxesByMailboxIdObservabilityResponse,
-    | errors.GetV1MailboxesByMailboxIdObservabilityBadRequestError
-    | errors.GetV1MailboxesByMailboxIdObservabilityNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -174,15 +174,8 @@ async function $do(
       200,
       operations.GetV1MailboxesByMailboxIdObservabilityResponse$inboundSchema,
     ),
-    M.jsonErr(
-      400,
-      errors
-        .GetV1MailboxesByMailboxIdObservabilityBadRequestError$inboundSchema,
-    ),
-    M.jsonErr(
-      404,
-      errors.GetV1MailboxesByMailboxIdObservabilityNotFoundError$inboundSchema,
-    ),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
+    M.jsonErr(404, errors.NotFoundError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

@@ -76,10 +76,10 @@ run();
 
 ### Errors
 
-| Error Type                                   | Status Code                                  | Content Type                                 |
-| -------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
-| errors.PostV1WebhookEndpointsBadRequestError | 400                                          | application/json                             |
-| errors.MailmonDefaultError                   | 4XX, 5XX                                     | \*/\*                                        |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## createSubscription
 
@@ -162,8 +162,8 @@ run();
 
 ### Errors
 
-| Error Type                                                            | Status Code                                                           | Content Type                                                          |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsBadRequestError | 400                                                                   | application/json                                                      |
-| errors.PostV1WebhookEndpointsByEndpointIdSubscriptionsNotFoundError   | 404                                                                   | application/json                                                      |
-| errors.MailmonDefaultError                                            | 4XX, 5XX                                                              | \*/\*                                                                 |
+| Error Type                 | Status Code                | Content Type               |
+| -------------------------- | -------------------------- | -------------------------- |
+| errors.BadRequestError     | 400                        | application/json           |
+| errors.NotFoundError       | 404                        | application/json           |
+| errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

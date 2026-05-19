@@ -37,8 +37,8 @@ export function threadsGetById(
 ): APIPromise<
   Result<
     operations.GetV1ThreadsByThreadIdResponse,
-    | errors.GetV1ThreadsByThreadIdBadRequestError
-    | errors.GetV1ThreadsByThreadIdNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -64,8 +64,8 @@ async function $do(
   [
     Result<
       operations.GetV1ThreadsByThreadIdResponse,
-      | errors.GetV1ThreadsByThreadIdBadRequestError
-      | errors.GetV1ThreadsByThreadIdNotFoundError
+      | errors.BadRequestError
+      | errors.NotFoundError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -154,8 +154,8 @@ async function $do(
 
   const [result] = await M.match<
     operations.GetV1ThreadsByThreadIdResponse,
-    | errors.GetV1ThreadsByThreadIdBadRequestError
-    | errors.GetV1ThreadsByThreadIdNotFoundError
+    | errors.BadRequestError
+    | errors.NotFoundError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -166,8 +166,8 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, operations.GetV1ThreadsByThreadIdResponse$inboundSchema),
-    M.jsonErr(400, errors.GetV1ThreadsByThreadIdBadRequestError$inboundSchema),
-    M.jsonErr(404, errors.GetV1ThreadsByThreadIdNotFoundError$inboundSchema),
+    M.jsonErr(400, errors.BadRequestError$inboundSchema),
+    M.jsonErr(404, errors.NotFoundError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
