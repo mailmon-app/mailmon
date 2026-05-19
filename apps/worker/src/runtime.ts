@@ -19,7 +19,7 @@ import {
   createGcpMailboxSyncDispatcherLayer,
   createWorkerHttpMailboxSyncDispatcherLayer,
 } from "@mailmon/queue";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 
 const DEFAULT_WEBHOOK_DELIVERY_TIMEOUT_MS = 5_000;
 
@@ -30,6 +30,25 @@ const requireGcpWorkerValue = (value: string | null, name: string) => {
 
   return value;
 };
+
+type WorkerRuntimeEnv = Pick<
+  WorkerEnv,
+  | "asyncTransportMode"
+  | "databaseUrl"
+  | "gmailApiBaseUrl"
+  | "gmailOauthClientId"
+  | "gmailOauthClientSecret"
+  | "gmailRefreshTokenEncryptionKey"
+  | "gmailRefreshTokenEncryptionKeyId"
+  | "gmailRefreshTokenPreviousEncryptionKeys"
+  | "gmailOauthTokenUrl"
+  | "gmailPubSubTopicName"
+  | "nodeEnv"
+  | "mailboxSyncHeartbeatIntervalMs"
+  | "mailboxSyncLeaseTtlMs"
+  | "syncDispatchPubSubTopicName"
+  | "workerBaseUrl"
+>;
 
 const classifyWebhookDeliveryFailure = (error: unknown) => {
   return classifyWebhookDeliveryTransportFailure(error, {
@@ -146,26 +165,26 @@ export const createInProcessWebhookDeliverySchedulerLayer = (
     ).pipe(Effect.map(({ service }) => service)),
   );
 
-export const createWorkerRuntimeLayer = (
-  env: Pick<
-    WorkerEnv,
-    | "asyncTransportMode"
-    | "databaseUrl"
-    | "gmailApiBaseUrl"
-    | "gmailOauthClientId"
-    | "gmailOauthClientSecret"
-    | "gmailRefreshTokenEncryptionKey"
-    | "gmailRefreshTokenEncryptionKeyId"
-    | "gmailRefreshTokenPreviousEncryptionKeys"
-    | "gmailOauthTokenUrl"
-    | "gmailPubSubTopicName"
-    | "nodeEnv"
-    | "mailboxSyncHeartbeatIntervalMs"
-    | "mailboxSyncLeaseTtlMs"
-    | "syncDispatchPubSubTopicName"
-    | "workerBaseUrl"
-  >,
-) => {
+const createMailboxSyncDispatcherLayer = (env: WorkerRuntimeEnv) => {
+  switch (env.asyncTransportMode) {
+    case "gcp":
+      return createGcpMailboxSyncDispatcherLayer({
+        topicName: requireGcpWorkerValue(
+          env.syncDispatchPubSubTopicName,
+          "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+        ),
+      });
+    case "local":
+    case "legacy_bullmq":
+      return createWorkerHttpMailboxSyncDispatcherLayer({
+        workerBaseUrl: env.workerBaseUrl,
+      });
+  }
+
+  throw new Error("Unsupported MAILMON_ASYNC_TRANSPORT_MODE");
+};
+
+export const createWorkerRuntimeLayer = (env: WorkerRuntimeEnv) => {
   const gmailRefreshTokenCipherLayer = createAesGcmGmailRefreshTokenCipherLayer({
     activeKeyId: env.gmailRefreshTokenEncryptionKeyId,
     allowPlaintextFallback: env.nodeEnv !== "production",
@@ -189,17 +208,7 @@ export const createWorkerRuntimeLayer = (
     oauthTokenUrl: env.gmailOauthTokenUrl,
   }).pipe(Layer.provide(persistenceLayer));
   const webhookDeliverySenderLayer = createWebhookDeliverySenderLayer();
-  const mailboxSyncDispatcherLayer =
-    env.asyncTransportMode === "gcp"
-      ? createGcpMailboxSyncDispatcherLayer({
-          topicName: requireGcpWorkerValue(
-            env.syncDispatchPubSubTopicName,
-            "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-          ),
-        })
-      : createWorkerHttpMailboxSyncDispatcherLayer({
-          workerBaseUrl: env.workerBaseUrl,
-        });
+  const mailboxSyncDispatcherLayer = createMailboxSyncDispatcherLayer(env);
 
   return Layer.mergeAll(
     persistenceLayer,
@@ -212,4 +221,8 @@ export const createWorkerRuntimeLayer = (
     }),
     webhookDeliverySenderLayer,
   );
+};
+
+export const createWorkerRuntime = (env: WorkerRuntimeEnv) => {
+  return ManagedRuntime.make(createWorkerRuntimeLayer(env));
 };
