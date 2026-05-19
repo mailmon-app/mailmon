@@ -1,24 +1,22 @@
-# PostV1ReplaysResponse
-
-Replay created
+# Replay
 
 ## Example Usage
 
 ```typescript
-import { PostV1ReplaysResponse } from "@mailmon.dev/sdk/models/operations";
+import { Replay } from "@mailmon.dev/sdk/models";
 
-let value: PostV1ReplaysResponse = {
+let value: Replay = {
   id: "<id>",
   object: "replay",
-  status: "completed",
+  status: "cancelled",
   mailboxId: "<id>",
   webhookEndpointId: "<id>",
-  startTime: new Date("2026-08-02T00:23:30.164Z"),
-  endTime: new Date("2026-05-27T05:52:05.039Z"),
-  eventsReplayed: null,
-  createdAt: new Date("2024-12-08T02:16:26.118Z"),
-  startedAt: new Date("2024-05-21T10:08:35.952Z"),
-  completedAt: new Date("2025-06-25T21:58:18.324Z"),
+  startTime: new Date("2026-06-05T04:20:02.607Z"),
+  endTime: new Date("2026-03-25T09:59:47.147Z"),
+  eventsReplayed: 923950,
+  createdAt: new Date("2025-06-28T13:35:39.431Z"),
+  startedAt: new Date("2025-03-12T04:51:14.683Z"),
+  completedAt: new Date("2025-09-23T01:08:12.461Z"),
   lastError: "<value>",
 };
 ```
@@ -28,8 +26,8 @@ let value: PostV1ReplaysResponse = {
 | Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
-| `object`                                                                                      | [operations.PostV1ReplaysObject](../../models/operations/post-v1-replays-object.md)           | :heavy_check_mark:                                                                            | N/A                                                                                           |
-| `status`                                                                                      | [operations.PostV1ReplaysStatus](../../models/operations/post-v1-replays-status.md)           | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| `object`                                                                                      | [models.ObjectT](../models/object-t.md)                                                       | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| `status`                                                                                      | [models.ReplayStatus](../models/replay-status.md)                                             | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `mailboxId`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `webhookEndpointId`                                                                           | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `startTime`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | N/A                                                                                           |

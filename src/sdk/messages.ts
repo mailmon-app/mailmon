@@ -5,6 +5,7 @@
 import { messagesGetById } from "../funcs/messages-get-by-id.js";
 import { messagesList } from "../funcs/messages-list.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as models from "../models/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 
@@ -29,7 +30,7 @@ export class Messages extends ClientSDK {
   async getById(
     request: operations.GetV1MessagesByMessageIdRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1MessagesByMessageIdResponse> {
+  ): Promise<models.Message> {
     return unwrapAsync(messagesGetById(
       this,
       request,

@@ -4,11 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import * as types from "../../types/primitives.js";
 import { SDKValidationError } from "../errors/sdk-validation-error.js";
+import * as models from "../index.js";
 
 export type GetV1MailboxesByMailboxIdSyncRunsRequest = {
   cursor?: string | undefined;
@@ -23,39 +23,12 @@ export type GetV1MailboxesByMailboxIdSyncRunsObject = ClosedEnum<
   typeof GetV1MailboxesByMailboxIdSyncRunsObject
 >;
 
-export const GetV1MailboxesByMailboxIdSyncRunsStatus = {
-  Running: "running",
-  Completed: "completed",
-  SkippedDueToActiveLease: "skipped_due_to_active_lease",
-  ReconnectRequired: "reconnect_required",
-  DispatchRetryExhausted: "dispatch_retry_exhausted",
-  FailedAfterLeaseAcquired: "failed_after_lease_acquired",
-  LeaseLost: "lease_lost",
-} as const;
-export type GetV1MailboxesByMailboxIdSyncRunsStatus = OpenEnum<
-  typeof GetV1MailboxesByMailboxIdSyncRunsStatus
->;
-
-export type GetV1MailboxesByMailboxIdSyncRunsData = {
-  syncRunId: string;
-  mailboxId: string;
-  startedAt: Date;
-  completedAt: Date | null;
-  status: GetV1MailboxesByMailboxIdSyncRunsStatus;
-  detail: string | null;
-  eventsEmitted: number | null;
-  leaseOwnerId: string | null;
-  previousCursor: string | null;
-  nextCursor: string | null;
-  cursorAdvanced: boolean | null;
-};
-
 /**
  * Mailbox sync runs
  */
 export type GetV1MailboxesByMailboxIdSyncRunsResponse = {
   object: GetV1MailboxesByMailboxIdSyncRunsObject;
-  data: Array<GetV1MailboxesByMailboxIdSyncRunsData>;
+  data: Array<models.SyncRun>;
   nextCursor: string | null;
 };
 
@@ -95,46 +68,10 @@ export const GetV1MailboxesByMailboxIdSyncRunsObject$inboundSchema:
   );
 
 /** @internal */
-export const GetV1MailboxesByMailboxIdSyncRunsStatus$inboundSchema:
-  z.ZodMiniType<GetV1MailboxesByMailboxIdSyncRunsStatus, unknown> = openEnums
-    .inboundSchema(GetV1MailboxesByMailboxIdSyncRunsStatus);
-
-/** @internal */
-export const GetV1MailboxesByMailboxIdSyncRunsData$inboundSchema: z.ZodMiniType<
-  GetV1MailboxesByMailboxIdSyncRunsData,
-  unknown
-> = z.object({
-  syncRunId: types.string(),
-  mailboxId: types.string(),
-  startedAt: types.date(),
-  completedAt: types.nullable(types.date()),
-  status: GetV1MailboxesByMailboxIdSyncRunsStatus$inboundSchema,
-  detail: types.nullable(types.string()),
-  eventsEmitted: types.nullable(types.number()),
-  leaseOwnerId: types.nullable(types.string()),
-  previousCursor: types.nullable(types.string()),
-  nextCursor: types.nullable(types.string()),
-  cursorAdvanced: types.nullable(types.boolean()),
-});
-
-export function getV1MailboxesByMailboxIdSyncRunsDataFromJSON(
-  jsonString: string,
-): SafeParseResult<GetV1MailboxesByMailboxIdSyncRunsData, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) =>
-      GetV1MailboxesByMailboxIdSyncRunsData$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GetV1MailboxesByMailboxIdSyncRunsData' from JSON`,
-  );
-}
-
-/** @internal */
 export const GetV1MailboxesByMailboxIdSyncRunsResponse$inboundSchema:
   z.ZodMiniType<GetV1MailboxesByMailboxIdSyncRunsResponse, unknown> = z.object({
     object: GetV1MailboxesByMailboxIdSyncRunsObject$inboundSchema,
-    data: z.array(
-      z.lazy(() => GetV1MailboxesByMailboxIdSyncRunsData$inboundSchema),
-    ),
+    data: z.array(models.SyncRun$inboundSchema),
     nextCursor: types.nullable(types.string()),
   });
 

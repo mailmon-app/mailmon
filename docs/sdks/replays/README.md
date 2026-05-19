@@ -78,14 +78,13 @@ run();
 
 ### Response
 
-**Promise\<[operations.PostV1ReplaysResponse](../../models/operations/post-v1-replays-response.md)\>**
+**Promise\<[models.Replay](../../models/replay.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
-| errors.ConflictError       | 409                        | application/json           |
+| errors.ErrorT              | 400, 409                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
@@ -153,12 +152,11 @@ run();
 
 ### Response
 
-**Promise\<[operations.GetV1ReplaysByReplayIdResponse](../../models/operations/get-v1-replays-by-replay-id-response.md)\>**
+**Promise\<[models.Replay](../../models/replay.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
-| errors.NotFoundError       | 404                        | application/json           |
+| errors.ErrorT              | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

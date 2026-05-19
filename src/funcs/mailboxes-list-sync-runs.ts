@@ -37,7 +37,7 @@ export function mailboxesListSyncRuns(
 ): APIPromise<
   Result<
     operations.GetV1MailboxesByMailboxIdSyncRunsResponse,
-    | errors.BadRequestError
+    | errors.ErrorT
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -63,7 +63,7 @@ async function $do(
   [
     Result<
       operations.GetV1MailboxesByMailboxIdSyncRunsResponse,
-      | errors.BadRequestError
+      | errors.ErrorT
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -171,7 +171,7 @@ async function $do(
 
   const [result] = await M.match<
     operations.GetV1MailboxesByMailboxIdSyncRunsResponse,
-    | errors.BadRequestError
+    | errors.ErrorT
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -185,7 +185,7 @@ async function $do(
       200,
       operations.GetV1MailboxesByMailboxIdSyncRunsResponse$inboundSchema,
     ),
-    M.jsonErr(400, errors.BadRequestError$inboundSchema),
+    M.jsonErr(400, errors.ErrorT$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

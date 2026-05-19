@@ -1,11 +1,11 @@
-# GetV1ReplaysByReplayIdStatus
+# ReplayStatus
 
 ## Example Usage
 
 ```typescript
-import { GetV1ReplaysByReplayIdStatus } from "@mailmon.dev/sdk/models/operations";
+import { ReplayStatus } from "@mailmon.dev/sdk/models";
 
-let value: GetV1ReplaysByReplayIdStatus = "running";
+let value: ReplayStatus = "running";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

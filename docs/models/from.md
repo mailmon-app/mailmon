@@ -1,13 +1,13 @@
-# GetV1MessagesFrom
+# From
 
 ## Example Usage
 
 ```typescript
-import { GetV1MessagesFrom } from "@mailmon.dev/sdk/models/operations";
+import { From } from "@mailmon.dev/sdk/models";
 
-let value: GetV1MessagesFrom = {
+let value: From = {
   name: "<value>",
-  email: "Leonora52@hotmail.com",
+  email: "Maria64@yahoo.com",
 };
 ```
 

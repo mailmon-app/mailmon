@@ -1,14 +1,14 @@
-# GetV1MailboxesByMailboxIdObservabilityLastDeliveryError
+# ErrorDetail
 
 ## Example Usage
 
 ```typescript
-import { GetV1MailboxesByMailboxIdObservabilityLastDeliveryError } from "@mailmon.dev/sdk/models/operations";
+import { ErrorDetail } from "@mailmon.dev/sdk/models";
 
-let value: GetV1MailboxesByMailboxIdObservabilityLastDeliveryError = {
+let value: ErrorDetail = {
   code: "<value>",
   message: "<value>",
-  occurredAt: new Date("2024-11-02T22:22:53.852Z"),
+  occurredAt: new Date("2025-11-01T14:27:20.510Z"),
   retryable: true,
 };
 ```

@@ -4,11 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import * as types from "../../types/primitives.js";
 import { SDKValidationError } from "../errors/sdk-validation-error.js";
+import * as models from "../index.js";
 
 export type GetV1MailboxesByMailboxIdObservabilityRequest = {
   mailboxId: string;
@@ -21,37 +21,10 @@ export type GetV1MailboxesByMailboxIdObservabilityObject = ClosedEnum<
   typeof GetV1MailboxesByMailboxIdObservabilityObject
 >;
 
-export const LagStatus = {
-  Active: "active",
-  ReconnectRequired: "reconnect_required",
-  Disabled: "disabled",
-} as const;
-export type LagStatus = OpenEnum<typeof LagStatus>;
-
-export const GetV1MailboxesByMailboxIdObservabilitySyncState = {
-  Initializing: "initializing",
-  Healthy: "healthy",
-  Lagging: "lagging",
-  Failed: "failed",
-} as const;
-export type GetV1MailboxesByMailboxIdObservabilitySyncState = OpenEnum<
-  typeof GetV1MailboxesByMailboxIdObservabilitySyncState
->;
-
-export const GetV1MailboxesByMailboxIdObservabilityWatchState = {
-  Active: "active",
-  Expiring: "expiring",
-  Expired: "expired",
-  Unhealthy: "unhealthy",
-} as const;
-export type GetV1MailboxesByMailboxIdObservabilityWatchState = OpenEnum<
-  typeof GetV1MailboxesByMailboxIdObservabilityWatchState
->;
-
 export type Lag = {
-  status: LagStatus;
-  syncState: GetV1MailboxesByMailboxIdObservabilitySyncState;
-  watchState: GetV1MailboxesByMailboxIdObservabilityWatchState;
+  status: models.MailboxStatus;
+  syncState: models.SyncState;
+  watchState: models.WatchState;
   lastSuccessfulSyncAt: Date | null;
   lagSeconds: number | null;
 };
@@ -74,59 +47,16 @@ export type Lease = {
   latestLeaseLossAt: Date | null;
 };
 
-export const GetV1MailboxesByMailboxIdObservabilityDeliveryState = {
-  Healthy: "healthy",
-  Degraded: "degraded",
-  Failing: "failing",
-} as const;
-export type GetV1MailboxesByMailboxIdObservabilityDeliveryState = OpenEnum<
-  typeof GetV1MailboxesByMailboxIdObservabilityDeliveryState
->;
-
-export type GetV1MailboxesByMailboxIdObservabilityLastDeliveryError = {
-  code: string;
-  message: string;
-  occurredAt: Date;
-  retryable: boolean;
-};
-
 export type WebhookDelivery = {
   webhookEndpointId: string;
   webhookEndpointUrl: string;
-  deliveryState: GetV1MailboxesByMailboxIdObservabilityDeliveryState;
+  deliveryState: models.DeliveryState;
   consecutiveFailures: number;
   pendingDeliveries: number;
   processingDeliveries: number;
   failedDeliveries: number;
   lastDeliveryAt: Date | null;
-  lastDeliveryError:
-    | GetV1MailboxesByMailboxIdObservabilityLastDeliveryError
-    | null;
-};
-
-export const LatestSyncRunStatus = {
-  Running: "running",
-  Completed: "completed",
-  SkippedDueToActiveLease: "skipped_due_to_active_lease",
-  ReconnectRequired: "reconnect_required",
-  DispatchRetryExhausted: "dispatch_retry_exhausted",
-  FailedAfterLeaseAcquired: "failed_after_lease_acquired",
-  LeaseLost: "lease_lost",
-} as const;
-export type LatestSyncRunStatus = OpenEnum<typeof LatestSyncRunStatus>;
-
-export type LatestSyncRun = {
-  syncRunId: string;
-  mailboxId: string;
-  startedAt: Date;
-  completedAt: Date | null;
-  status: LatestSyncRunStatus;
-  detail: string | null;
-  eventsEmitted: number | null;
-  leaseOwnerId: string | null;
-  previousCursor: string | null;
-  nextCursor: string | null;
-  cursorAdvanced: boolean | null;
+  lastDeliveryError: models.ErrorDetail | null;
 };
 
 /**
@@ -140,7 +70,7 @@ export type GetV1MailboxesByMailboxIdObservabilityResponse = {
   cursor: Cursor;
   lease: Lease;
   webhookDeliveries: Array<WebhookDelivery>;
-  latestSyncRun: LatestSyncRun | null;
+  latestSyncRun: models.SyncRun | null;
 };
 
 /** @internal */
@@ -175,24 +105,10 @@ export const GetV1MailboxesByMailboxIdObservabilityObject$inboundSchema:
   );
 
 /** @internal */
-export const LagStatus$inboundSchema: z.ZodMiniType<LagStatus, unknown> =
-  openEnums.inboundSchema(LagStatus);
-
-/** @internal */
-export const GetV1MailboxesByMailboxIdObservabilitySyncState$inboundSchema:
-  z.ZodMiniType<GetV1MailboxesByMailboxIdObservabilitySyncState, unknown> =
-    openEnums.inboundSchema(GetV1MailboxesByMailboxIdObservabilitySyncState);
-
-/** @internal */
-export const GetV1MailboxesByMailboxIdObservabilityWatchState$inboundSchema:
-  z.ZodMiniType<GetV1MailboxesByMailboxIdObservabilityWatchState, unknown> =
-    openEnums.inboundSchema(GetV1MailboxesByMailboxIdObservabilityWatchState);
-
-/** @internal */
 export const Lag$inboundSchema: z.ZodMiniType<Lag, unknown> = z.object({
-  status: LagStatus$inboundSchema,
-  syncState: GetV1MailboxesByMailboxIdObservabilitySyncState$inboundSchema,
-  watchState: GetV1MailboxesByMailboxIdObservabilityWatchState$inboundSchema,
+  status: models.MailboxStatus$inboundSchema,
+  syncState: models.SyncState$inboundSchema,
+  watchState: models.WatchState$inboundSchema,
   lastSuccessfulSyncAt: types.nullable(types.date()),
   lagSeconds: types.nullable(types.number()),
 });
@@ -248,58 +164,19 @@ export function leaseFromJSON(
 }
 
 /** @internal */
-export const GetV1MailboxesByMailboxIdObservabilityDeliveryState$inboundSchema:
-  z.ZodMiniType<GetV1MailboxesByMailboxIdObservabilityDeliveryState, unknown> =
-    openEnums.inboundSchema(
-      GetV1MailboxesByMailboxIdObservabilityDeliveryState,
-    );
-
-/** @internal */
-export const GetV1MailboxesByMailboxIdObservabilityLastDeliveryError$inboundSchema:
-  z.ZodMiniType<
-    GetV1MailboxesByMailboxIdObservabilityLastDeliveryError,
-    unknown
-  > = z.object({
-    code: types.string(),
-    message: types.string(),
-    occurredAt: types.date(),
-    retryable: types.boolean(),
-  });
-
-export function getV1MailboxesByMailboxIdObservabilityLastDeliveryErrorFromJSON(
-  jsonString: string,
-): SafeParseResult<
-  GetV1MailboxesByMailboxIdObservabilityLastDeliveryError,
-  SDKValidationError
-> {
-  return safeParse(
-    jsonString,
-    (x) =>
-      GetV1MailboxesByMailboxIdObservabilityLastDeliveryError$inboundSchema
-        .parse(JSON.parse(x)),
-    `Failed to parse 'GetV1MailboxesByMailboxIdObservabilityLastDeliveryError' from JSON`,
-  );
-}
-
-/** @internal */
 export const WebhookDelivery$inboundSchema: z.ZodMiniType<
   WebhookDelivery,
   unknown
 > = z.object({
   webhookEndpointId: types.string(),
   webhookEndpointUrl: types.string(),
-  deliveryState:
-    GetV1MailboxesByMailboxIdObservabilityDeliveryState$inboundSchema,
+  deliveryState: models.DeliveryState$inboundSchema,
   consecutiveFailures: types.number(),
   pendingDeliveries: types.number(),
   processingDeliveries: types.number(),
   failedDeliveries: types.number(),
   lastDeliveryAt: types.nullable(types.date()),
-  lastDeliveryError: types.nullable(
-    z.lazy(() =>
-      GetV1MailboxesByMailboxIdObservabilityLastDeliveryError$inboundSchema
-    ),
-  ),
+  lastDeliveryError: types.nullable(models.ErrorDetail$inboundSchema),
 });
 
 export function webhookDeliveryFromJSON(
@@ -309,40 +186,6 @@ export function webhookDeliveryFromJSON(
     jsonString,
     (x) => WebhookDelivery$inboundSchema.parse(JSON.parse(x)),
     `Failed to parse 'WebhookDelivery' from JSON`,
-  );
-}
-
-/** @internal */
-export const LatestSyncRunStatus$inboundSchema: z.ZodMiniType<
-  LatestSyncRunStatus,
-  unknown
-> = openEnums.inboundSchema(LatestSyncRunStatus);
-
-/** @internal */
-export const LatestSyncRun$inboundSchema: z.ZodMiniType<
-  LatestSyncRun,
-  unknown
-> = z.object({
-  syncRunId: types.string(),
-  mailboxId: types.string(),
-  startedAt: types.date(),
-  completedAt: types.nullable(types.date()),
-  status: LatestSyncRunStatus$inboundSchema,
-  detail: types.nullable(types.string()),
-  eventsEmitted: types.nullable(types.number()),
-  leaseOwnerId: types.nullable(types.string()),
-  previousCursor: types.nullable(types.string()),
-  nextCursor: types.nullable(types.string()),
-  cursorAdvanced: types.nullable(types.boolean()),
-});
-
-export function latestSyncRunFromJSON(
-  jsonString: string,
-): SafeParseResult<LatestSyncRun, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => LatestSyncRun$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'LatestSyncRun' from JSON`,
   );
 }
 
@@ -357,7 +200,7 @@ export const GetV1MailboxesByMailboxIdObservabilityResponse$inboundSchema:
       cursor: z.lazy(() => Cursor$inboundSchema),
       lease: z.lazy(() => Lease$inboundSchema),
       webhookDeliveries: z.array(z.lazy(() => WebhookDelivery$inboundSchema)),
-      latestSyncRun: types.nullable(z.lazy(() => LatestSyncRun$inboundSchema)),
+      latestSyncRun: types.nullable(models.SyncRun$inboundSchema),
     });
 
 export function getV1MailboxesByMailboxIdObservabilityResponseFromJSON(

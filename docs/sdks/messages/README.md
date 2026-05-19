@@ -78,7 +78,7 @@ run();
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
+| errors.ErrorT              | 400                        | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
@@ -146,12 +146,11 @@ run();
 
 ### Response
 
-**Promise\<[operations.GetV1MessagesByMessageIdResponse](../../models/operations/get-v1-messages-by-message-id-response.md)\>**
+**Promise\<[models.Message](../../models/message.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
-| errors.NotFoundError       | 404                        | application/json           |
+| errors.ErrorT              | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

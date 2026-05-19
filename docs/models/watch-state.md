@@ -1,11 +1,11 @@
-# GetV1MailboxesByMailboxIdWatchState
+# WatchState
 
 ## Example Usage
 
 ```typescript
-import { GetV1MailboxesByMailboxIdWatchState } from "@mailmon.dev/sdk/models/operations";
+import { WatchState } from "@mailmon.dev/sdk/models";
 
-let value: GetV1MailboxesByMailboxIdWatchState = "active";
+let value: WatchState = "expired";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

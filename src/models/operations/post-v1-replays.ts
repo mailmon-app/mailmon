@@ -3,50 +3,12 @@
  */
 
 import * as z from "zod/v4-mini";
-import { safeParse } from "../../lib/schemas.js";
-import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import * as types from "../../types/primitives.js";
-import { SDKValidationError } from "../errors/sdk-validation-error.js";
 
 export type PostV1ReplaysRequest = {
   mailboxId: string;
   webhookEndpointId: string;
   startTime: string;
   endTime: string;
-};
-
-export const PostV1ReplaysObject = {
-  Replay: "replay",
-} as const;
-export type PostV1ReplaysObject = ClosedEnum<typeof PostV1ReplaysObject>;
-
-export const PostV1ReplaysStatus = {
-  Queued: "queued",
-  Running: "running",
-  Completed: "completed",
-  Failed: "failed",
-  Cancelled: "cancelled",
-} as const;
-export type PostV1ReplaysStatus = OpenEnum<typeof PostV1ReplaysStatus>;
-
-/**
- * Replay created
- */
-export type PostV1ReplaysResponse = {
-  id: string;
-  object: PostV1ReplaysObject;
-  status: PostV1ReplaysStatus;
-  mailboxId: string;
-  webhookEndpointId: string;
-  startTime: Date;
-  endTime: Date;
-  eventsReplayed: number | null;
-  createdAt: Date;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  lastError: string | null;
 };
 
 /** @internal */
@@ -73,45 +35,5 @@ export function postV1ReplaysRequestToJSON(
 ): string {
   return JSON.stringify(
     PostV1ReplaysRequest$outboundSchema.parse(postV1ReplaysRequest),
-  );
-}
-
-/** @internal */
-export const PostV1ReplaysObject$inboundSchema: z.ZodMiniEnum<
-  typeof PostV1ReplaysObject
-> = z.enum(PostV1ReplaysObject);
-
-/** @internal */
-export const PostV1ReplaysStatus$inboundSchema: z.ZodMiniType<
-  PostV1ReplaysStatus,
-  unknown
-> = openEnums.inboundSchema(PostV1ReplaysStatus);
-
-/** @internal */
-export const PostV1ReplaysResponse$inboundSchema: z.ZodMiniType<
-  PostV1ReplaysResponse,
-  unknown
-> = z.object({
-  id: types.string(),
-  object: PostV1ReplaysObject$inboundSchema,
-  status: PostV1ReplaysStatus$inboundSchema,
-  mailboxId: types.string(),
-  webhookEndpointId: types.string(),
-  startTime: types.date(),
-  endTime: types.date(),
-  eventsReplayed: types.nullable(types.number()),
-  createdAt: types.date(),
-  startedAt: types.nullable(types.date()),
-  completedAt: types.nullable(types.date()),
-  lastError: types.nullable(types.string()),
-});
-
-export function postV1ReplaysResponseFromJSON(
-  jsonString: string,
-): SafeParseResult<PostV1ReplaysResponse, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => PostV1ReplaysResponse$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'PostV1ReplaysResponse' from JSON`,
   );
 }

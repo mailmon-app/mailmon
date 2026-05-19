@@ -3,51 +3,9 @@
  */
 
 import * as z from "zod/v4-mini";
-import { safeParse } from "../../lib/schemas.js";
-import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import * as types from "../../types/primitives.js";
-import { SDKValidationError } from "../errors/sdk-validation-error.js";
 
 export type GetV1ReplaysByReplayIdRequest = {
   replayId: string;
-};
-
-export const GetV1ReplaysByReplayIdObject = {
-  Replay: "replay",
-} as const;
-export type GetV1ReplaysByReplayIdObject = ClosedEnum<
-  typeof GetV1ReplaysByReplayIdObject
->;
-
-export const GetV1ReplaysByReplayIdStatus = {
-  Queued: "queued",
-  Running: "running",
-  Completed: "completed",
-  Failed: "failed",
-  Cancelled: "cancelled",
-} as const;
-export type GetV1ReplaysByReplayIdStatus = OpenEnum<
-  typeof GetV1ReplaysByReplayIdStatus
->;
-
-/**
- * Replay
- */
-export type GetV1ReplaysByReplayIdResponse = {
-  id: string;
-  object: GetV1ReplaysByReplayIdObject;
-  status: GetV1ReplaysByReplayIdStatus;
-  mailboxId: string;
-  webhookEndpointId: string;
-  startTime: Date;
-  endTime: Date;
-  eventsReplayed: number | null;
-  createdAt: Date;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  lastError: string | null;
 };
 
 /** @internal */
@@ -70,45 +28,5 @@ export function getV1ReplaysByReplayIdRequestToJSON(
     GetV1ReplaysByReplayIdRequest$outboundSchema.parse(
       getV1ReplaysByReplayIdRequest,
     ),
-  );
-}
-
-/** @internal */
-export const GetV1ReplaysByReplayIdObject$inboundSchema: z.ZodMiniEnum<
-  typeof GetV1ReplaysByReplayIdObject
-> = z.enum(GetV1ReplaysByReplayIdObject);
-
-/** @internal */
-export const GetV1ReplaysByReplayIdStatus$inboundSchema: z.ZodMiniType<
-  GetV1ReplaysByReplayIdStatus,
-  unknown
-> = openEnums.inboundSchema(GetV1ReplaysByReplayIdStatus);
-
-/** @internal */
-export const GetV1ReplaysByReplayIdResponse$inboundSchema: z.ZodMiniType<
-  GetV1ReplaysByReplayIdResponse,
-  unknown
-> = z.object({
-  id: types.string(),
-  object: GetV1ReplaysByReplayIdObject$inboundSchema,
-  status: GetV1ReplaysByReplayIdStatus$inboundSchema,
-  mailboxId: types.string(),
-  webhookEndpointId: types.string(),
-  startTime: types.date(),
-  endTime: types.date(),
-  eventsReplayed: types.nullable(types.number()),
-  createdAt: types.date(),
-  startedAt: types.nullable(types.date()),
-  completedAt: types.nullable(types.date()),
-  lastError: types.nullable(types.string()),
-});
-
-export function getV1ReplaysByReplayIdResponseFromJSON(
-  jsonString: string,
-): SafeParseResult<GetV1ReplaysByReplayIdResponse, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => GetV1ReplaysByReplayIdResponse$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GetV1ReplaysByReplayIdResponse' from JSON`,
   );
 }

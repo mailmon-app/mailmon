@@ -56,7 +56,7 @@ export class BadRequestError extends MailmonError {
 }
 
 /**
- * Mailbox or webhook endpoint not found
+ * Thread not found
  */
 export type NotFoundErrorData = {
   type: string;
@@ -69,7 +69,7 @@ export type NotFoundErrorData = {
 };
 
 /**
- * Mailbox or webhook endpoint not found
+ * Thread not found
  */
 export class NotFoundError extends MailmonError {
   type: string;
@@ -101,55 +101,6 @@ export class NotFoundError extends MailmonError {
     this.retryable = err.retryable;
 
     this.name = "NotFoundError";
-  }
-}
-
-/**
- * Overlapping active replay conflict
- */
-export type ConflictErrorData = {
-  type: string;
-  title: string;
-  status: number;
-  code: string;
-  detail: string;
-  resource?: { [k: string]: string } | undefined;
-  retryable: boolean;
-};
-
-/**
- * Overlapping active replay conflict
- */
-export class ConflictError extends MailmonError {
-  type: string;
-  title: string;
-  status: number;
-  code: string;
-  detail: string;
-  resource?: { [k: string]: string } | undefined;
-  retryable: boolean;
-
-  /** The original data that was passed to this error instance. */
-  data$: ConflictErrorData;
-
-  constructor(
-    err: ConflictErrorData,
-    httpMeta: { response: Response; request: Request; body: string },
-  ) {
-    const message = "message" in err && typeof err.message === "string"
-      ? err.message
-      : `API error occurred: ${JSON.stringify(err)}`;
-    super(message, httpMeta);
-    this.data$ = err;
-    this.type = err.type;
-    this.title = err.title;
-    this.status = err.status;
-    this.code = err.code;
-    this.detail = err.detail;
-    if (err.resource != null) this.resource = err.resource;
-    this.retryable = err.retryable;
-
-    this.name = "ConflictError";
   }
 }
 
@@ -198,32 +149,6 @@ export const NotFoundError$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return new NotFoundError(v, {
-      request: v.request$,
-      response: v.response$,
-      body: v.body$,
-    });
-  }),
-);
-
-/** @internal */
-export const ConflictError$inboundSchema: z.ZodMiniType<
-  ConflictError,
-  unknown
-> = z.pipe(
-  z.object({
-    type: types.string(),
-    title: types.string(),
-    status: types.number(),
-    code: types.string(),
-    detail: types.string(),
-    resource: types.optional(z.record(z.string(), types.string())),
-    retryable: types.boolean(),
-    request$: z.custom<Request>(x => x instanceof Request),
-    response$: z.custom<Response>(x => x instanceof Response),
-    body$: z.string(),
-  }),
-  z.transform((v) => {
-    return new ConflictError(v, {
       request: v.request$,
       response: v.response$,
       body: v.body$,

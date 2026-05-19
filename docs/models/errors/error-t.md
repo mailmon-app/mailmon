@@ -1,11 +1,9 @@
-# ConflictError
-
-Overlapping active replay conflict
+# ErrorT
 
 ## Example Usage
 
 ```typescript
-import { ConflictError } from "@mailmon.dev/sdk/models/errors";
+import { ErrorT } from "@mailmon.dev/sdk/models/errors";
 
 // No examples available for this model
 ```

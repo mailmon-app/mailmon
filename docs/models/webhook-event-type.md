@@ -1,11 +1,11 @@
-# EventTypeResponse
+# WebhookEventType
 
 ## Example Usage
 
 ```typescript
-import { EventTypeResponse } from "@mailmon.dev/sdk/models/operations";
+import { WebhookEventType } from "@mailmon.dev/sdk/models";
 
-let value: EventTypeResponse = "thread.updated";
+let value: WebhookEventType = "message.created";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

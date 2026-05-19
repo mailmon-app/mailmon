@@ -4,26 +4,19 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import * as types from "../../types/primitives.js";
 import { SDKValidationError } from "../errors/sdk-validation-error.js";
+import * as models from "../index.js";
 
 export type MailboxId = string;
 
-export const EventTypeRequestEnum2 = {
-  MessageCreated: "message.created",
-  MessageUpdated: "message.updated",
-  ThreadUpdated: "thread.updated",
-} as const;
-export type EventTypeRequestEnum2 = ClosedEnum<typeof EventTypeRequestEnum2>;
-
-export type EventType = EventTypeRequestEnum2;
+export type EventType = models.WebhookEventType;
 
 export type PostV1WebhookEndpointsByEndpointIdSubscriptionsRequestBody = {
   mailboxIds: Array<string>;
-  eventTypes: Array<EventTypeRequestEnum2>;
+  eventTypes: Array<models.WebhookEventType>;
 };
 
 export type PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest = {
@@ -45,19 +38,12 @@ export type ObjectWebhookEndpointSubscription = ClosedEnum<
   typeof ObjectWebhookEndpointSubscription
 >;
 
-export const EventTypeResponse = {
-  MessageCreated: "message.created",
-  MessageUpdated: "message.updated",
-  ThreadUpdated: "thread.updated",
-} as const;
-export type EventTypeResponse = OpenEnum<typeof EventTypeResponse>;
-
 export type PostV1WebhookEndpointsByEndpointIdSubscriptionsData = {
   id: string;
   object: ObjectWebhookEndpointSubscription;
   webhookEndpointId: string;
   mailboxId: string;
-  eventTypes: Array<EventTypeResponse>;
+  eventTypes: Array<models.WebhookEventType>;
   createdAt: Date;
 };
 
@@ -84,18 +70,13 @@ export function mailboxIdToJSON(mailboxId: MailboxId): string {
 }
 
 /** @internal */
-export const EventTypeRequestEnum2$outboundSchema: z.ZodMiniEnum<
-  typeof EventTypeRequestEnum2
-> = z.enum(EventTypeRequestEnum2);
-
-/** @internal */
 export type EventType$Outbound = string;
 
 /** @internal */
 export const EventType$outboundSchema: z.ZodMiniType<
   EventType$Outbound,
   EventType
-> = EventTypeRequestEnum2$outboundSchema;
+> = models.WebhookEventType$outboundSchema;
 
 export function eventTypeToJSON(eventType: EventType): string {
   return JSON.stringify(EventType$outboundSchema.parse(eventType));
@@ -115,7 +96,7 @@ export const PostV1WebhookEndpointsByEndpointIdSubscriptionsRequestBody$outbound
     PostV1WebhookEndpointsByEndpointIdSubscriptionsRequestBody
   > = z.object({
     mailboxIds: z.array(z.string()),
-    eventTypes: z.array(EventTypeRequestEnum2$outboundSchema),
+    eventTypes: z.array(models.WebhookEventType$outboundSchema),
   });
 
 export function postV1WebhookEndpointsByEndpointIdSubscriptionsRequestBodyToJSON(
@@ -168,12 +149,6 @@ export const ObjectWebhookEndpointSubscription$inboundSchema: z.ZodMiniEnum<
 > = z.enum(ObjectWebhookEndpointSubscription);
 
 /** @internal */
-export const EventTypeResponse$inboundSchema: z.ZodMiniType<
-  EventTypeResponse,
-  unknown
-> = openEnums.inboundSchema(EventTypeResponse);
-
-/** @internal */
 export const PostV1WebhookEndpointsByEndpointIdSubscriptionsData$inboundSchema:
   z.ZodMiniType<PostV1WebhookEndpointsByEndpointIdSubscriptionsData, unknown> =
     z.object({
@@ -181,7 +156,7 @@ export const PostV1WebhookEndpointsByEndpointIdSubscriptionsData$inboundSchema:
       object: ObjectWebhookEndpointSubscription$inboundSchema,
       webhookEndpointId: types.string(),
       mailboxId: types.string(),
-      eventTypes: z.array(EventTypeResponse$inboundSchema),
+      eventTypes: z.array(models.WebhookEventType$inboundSchema),
       createdAt: types.date(),
     });
 

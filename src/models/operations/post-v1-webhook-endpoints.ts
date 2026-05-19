@@ -9,6 +9,7 @@ import { ClosedEnum, OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import * as types from "../../types/primitives.js";
 import { SDKValidationError } from "../errors/sdk-validation-error.js";
+import * as models from "../index.js";
 
 export type PostV1WebhookEndpointsRequest = {
   url: string;
@@ -22,21 +23,12 @@ export type PostV1WebhookEndpointsObject = ClosedEnum<
   typeof PostV1WebhookEndpointsObject
 >;
 
-export const PostV1WebhookEndpointsDeliveryState = {
+export const DeliveryState = {
   Healthy: "healthy",
   Degraded: "degraded",
   Failing: "failing",
 } as const;
-export type PostV1WebhookEndpointsDeliveryState = OpenEnum<
-  typeof PostV1WebhookEndpointsDeliveryState
->;
-
-export type PostV1WebhookEndpointsLastDeliveryError = {
-  code: string;
-  message: string;
-  occurredAt: Date;
-  retryable: boolean;
-};
+export type DeliveryState = OpenEnum<typeof DeliveryState>;
 
 /**
  * Webhook endpoint created
@@ -46,9 +38,9 @@ export type PostV1WebhookEndpointsResponse = {
   object: PostV1WebhookEndpointsObject;
   url: string;
   description: string | null;
-  deliveryState: PostV1WebhookEndpointsDeliveryState;
+  deliveryState: DeliveryState;
   lastDeliveryAt: Date | null;
-  lastDeliveryError: PostV1WebhookEndpointsLastDeliveryError | null;
+  lastDeliveryError: models.ErrorDetail | null;
   createdAt: Date;
   secret: string;
 };
@@ -84,35 +76,10 @@ export const PostV1WebhookEndpointsObject$inboundSchema: z.ZodMiniEnum<
 > = z.enum(PostV1WebhookEndpointsObject);
 
 /** @internal */
-export const PostV1WebhookEndpointsDeliveryState$inboundSchema: z.ZodMiniType<
-  PostV1WebhookEndpointsDeliveryState,
+export const DeliveryState$inboundSchema: z.ZodMiniType<
+  DeliveryState,
   unknown
-> = openEnums.inboundSchema(PostV1WebhookEndpointsDeliveryState);
-
-/** @internal */
-export const PostV1WebhookEndpointsLastDeliveryError$inboundSchema:
-  z.ZodMiniType<PostV1WebhookEndpointsLastDeliveryError, unknown> = z.object({
-    code: types.string(),
-    message: types.string(),
-    occurredAt: types.date(),
-    retryable: types.boolean(),
-  });
-
-export function postV1WebhookEndpointsLastDeliveryErrorFromJSON(
-  jsonString: string,
-): SafeParseResult<
-  PostV1WebhookEndpointsLastDeliveryError,
-  SDKValidationError
-> {
-  return safeParse(
-    jsonString,
-    (x) =>
-      PostV1WebhookEndpointsLastDeliveryError$inboundSchema.parse(
-        JSON.parse(x),
-      ),
-    `Failed to parse 'PostV1WebhookEndpointsLastDeliveryError' from JSON`,
-  );
-}
+> = openEnums.inboundSchema(DeliveryState);
 
 /** @internal */
 export const PostV1WebhookEndpointsResponse$inboundSchema: z.ZodMiniType<
@@ -123,11 +90,9 @@ export const PostV1WebhookEndpointsResponse$inboundSchema: z.ZodMiniType<
   object: PostV1WebhookEndpointsObject$inboundSchema,
   url: types.string(),
   description: types.nullable(types.string()),
-  deliveryState: PostV1WebhookEndpointsDeliveryState$inboundSchema,
+  deliveryState: DeliveryState$inboundSchema,
   lastDeliveryAt: types.nullable(types.date()),
-  lastDeliveryError: types.nullable(
-    z.lazy(() => PostV1WebhookEndpointsLastDeliveryError$inboundSchema),
-  ),
+  lastDeliveryError: types.nullable(models.ErrorDetail$inboundSchema),
   createdAt: types.date(),
   secret: types.string(),
 });

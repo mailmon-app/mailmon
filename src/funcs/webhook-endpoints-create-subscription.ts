@@ -37,8 +37,7 @@ export function webhookEndpointsCreateSubscription(
 ): APIPromise<
   Result<
     operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse,
-    | errors.BadRequestError
-    | errors.NotFoundError
+    | errors.ErrorT
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -64,8 +63,7 @@ async function $do(
   [
     Result<
       operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse,
-      | errors.BadRequestError
-      | errors.NotFoundError
+      | errors.ErrorT
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -171,8 +169,7 @@ async function $do(
 
   const [result] = await M.match<
     operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse,
-    | errors.BadRequestError
-    | errors.NotFoundError
+    | errors.ErrorT
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -187,8 +184,7 @@ async function $do(
       operations
         .PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse$inboundSchema,
     ),
-    M.jsonErr(400, errors.BadRequestError$inboundSchema),
-    M.jsonErr(404, errors.NotFoundError$inboundSchema),
+    M.jsonErr([400, 404], errors.ErrorT$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

@@ -18,10 +18,10 @@ let value: GetV1MessagesResponse = {
       subject: "<value>",
       from: {
         name: "<value>",
-        email: "Reyna10@gmail.com",
+        email: "Marta22@hotmail.com",
       },
       snippet: "<value>",
-      receivedAt: new Date("2025-09-17T18:47:33.169Z"),
+      receivedAt: new Date("2026-01-12T13:18:05.978Z"),
       labelIds: [
         "<value 1>",
         "<value 2>",
@@ -37,5 +37,5 @@ let value: GetV1MessagesResponse = {
 | Field                                                                               | Type                                                                                | Required                                                                            | Description                                                                         |
 | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `object`                                                                            | [operations.GetV1MessagesObject](../../models/operations/get-v1-messages-object.md) | :heavy_check_mark:                                                                  | N/A                                                                                 |
-| `data`                                                                              | [operations.GetV1MessagesData](../../models/operations/get-v1-messages-data.md)[]   | :heavy_check_mark:                                                                  | N/A                                                                                 |
+| `data`                                                                              | [models.Message](../../models/message.md)[]                                         | :heavy_check_mark:                                                                  | N/A                                                                                 |
 | `nextCursor`                                                                        | *string*                                                                            | :heavy_check_mark:                                                                  | N/A                                                                                 |

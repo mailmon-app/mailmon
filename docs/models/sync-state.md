@@ -1,11 +1,11 @@
-# GetV1MailboxesByMailboxIdSyncState
+# SyncState
 
 ## Example Usage
 
 ```typescript
-import { GetV1MailboxesByMailboxIdSyncState } from "@mailmon.dev/sdk/models/operations";
+import { SyncState } from "@mailmon.dev/sdk/models";
 
-let value: GetV1MailboxesByMailboxIdSyncState = "initializing";
+let value: SyncState = "healthy";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

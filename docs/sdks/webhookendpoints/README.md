@@ -78,7 +78,7 @@ run();
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
+| errors.ErrorT              | 400                        | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## createSubscription
@@ -164,6 +164,5 @@ run();
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
-| errors.NotFoundError       | 404                        | application/json           |
+| errors.ErrorT              | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

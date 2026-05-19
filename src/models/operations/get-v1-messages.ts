@@ -8,6 +8,7 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import * as types from "../../types/primitives.js";
 import { SDKValidationError } from "../errors/sdk-validation-error.js";
+import * as models from "../index.js";
 
 export type GetV1MessagesRequest = {
   cursor?: string | undefined;
@@ -20,29 +21,12 @@ export const GetV1MessagesObject = {
 } as const;
 export type GetV1MessagesObject = ClosedEnum<typeof GetV1MessagesObject>;
 
-export type GetV1MessagesFrom = {
-  name: string | null;
-  email: string;
-};
-
-export type GetV1MessagesData = {
-  id: string;
-  mailboxId: string;
-  threadId: string;
-  providerMessageId: string;
-  subject: string;
-  from: GetV1MessagesFrom;
-  snippet: string;
-  receivedAt: Date;
-  labelIds: Array<string>;
-};
-
 /**
  * Mailbox messages
  */
 export type GetV1MessagesResponse = {
   object: GetV1MessagesObject;
-  data: Array<GetV1MessagesData>;
+  data: Array<models.Message>;
   nextCursor: string | null;
 };
 
@@ -77,57 +61,12 @@ export const GetV1MessagesObject$inboundSchema: z.ZodMiniEnum<
 > = z.enum(GetV1MessagesObject);
 
 /** @internal */
-export const GetV1MessagesFrom$inboundSchema: z.ZodMiniType<
-  GetV1MessagesFrom,
-  unknown
-> = z.object({
-  name: types.nullable(types.string()),
-  email: types.string(),
-});
-
-export function getV1MessagesFromFromJSON(
-  jsonString: string,
-): SafeParseResult<GetV1MessagesFrom, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => GetV1MessagesFrom$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GetV1MessagesFrom' from JSON`,
-  );
-}
-
-/** @internal */
-export const GetV1MessagesData$inboundSchema: z.ZodMiniType<
-  GetV1MessagesData,
-  unknown
-> = z.object({
-  id: types.string(),
-  mailboxId: types.string(),
-  threadId: types.string(),
-  providerMessageId: types.string(),
-  subject: types.string(),
-  from: z.lazy(() => GetV1MessagesFrom$inboundSchema),
-  snippet: types.string(),
-  receivedAt: types.date(),
-  labelIds: z.array(types.string()),
-});
-
-export function getV1MessagesDataFromJSON(
-  jsonString: string,
-): SafeParseResult<GetV1MessagesData, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => GetV1MessagesData$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GetV1MessagesData' from JSON`,
-  );
-}
-
-/** @internal */
 export const GetV1MessagesResponse$inboundSchema: z.ZodMiniType<
   GetV1MessagesResponse,
   unknown
 > = z.object({
   object: GetV1MessagesObject$inboundSchema,
-  data: z.array(z.lazy(() => GetV1MessagesData$inboundSchema)),
+  data: z.array(models.Message$inboundSchema),
   nextCursor: types.nullable(types.string()),
 });
 

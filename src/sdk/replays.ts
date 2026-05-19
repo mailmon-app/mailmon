@@ -5,6 +5,7 @@
 import { replaysCreate } from "../funcs/replays-create.js";
 import { replaysGetById } from "../funcs/replays-get-by-id.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as models from "../models/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 
@@ -15,7 +16,7 @@ export class Replays extends ClientSDK {
   async create(
     request: operations.PostV1ReplaysRequest,
     options?: RequestOptions,
-  ): Promise<operations.PostV1ReplaysResponse> {
+  ): Promise<models.Replay> {
     return unwrapAsync(replaysCreate(
       this,
       request,
@@ -29,7 +30,7 @@ export class Replays extends ClientSDK {
   async getById(
     request: operations.GetV1ReplaysByReplayIdRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1ReplaysByReplayIdResponse> {
+  ): Promise<models.Replay> {
     return unwrapAsync(replaysGetById(
       this,
       request,

@@ -1,12 +1,11 @@
-# GetV1MailboxesByMailboxIdSyncRunsStatus
+# SyncRunStatus
 
 ## Example Usage
 
 ```typescript
-import { GetV1MailboxesByMailboxIdSyncRunsStatus } from "@mailmon.dev/sdk/models/operations";
+import { SyncRunStatus } from "@mailmon.dev/sdk/models";
 
-let value: GetV1MailboxesByMailboxIdSyncRunsStatus =
-  "failed_after_lease_acquired";
+let value: SyncRunStatus = "running";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

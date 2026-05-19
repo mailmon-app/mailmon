@@ -1,6 +1,6 @@
 # NotFoundError
 
-Mailbox or webhook endpoint not found
+Thread not found
 
 ## Example Usage
 

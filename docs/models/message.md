@@ -1,11 +1,11 @@
-# GetV1MessagesData
+# Message
 
 ## Example Usage
 
 ```typescript
-import { GetV1MessagesData } from "@mailmon.dev/sdk/models/operations";
+import { Message } from "@mailmon.dev/sdk/models";
 
-let value: GetV1MessagesData = {
+let value: Message = {
   id: "<id>",
   mailboxId: "<id>",
   threadId: "<id>",
@@ -13,10 +13,10 @@ let value: GetV1MessagesData = {
   subject: "<value>",
   from: {
     name: "<value>",
-    email: "Reyna10@gmail.com",
+    email: "Marta22@hotmail.com",
   },
   snippet: "<value>",
-  receivedAt: new Date("2026-06-07T22:31:51.500Z"),
+  receivedAt: new Date("2025-10-26T06:58:59.824Z"),
   labelIds: [
     "<value 1>",
   ],
@@ -32,7 +32,7 @@ let value: GetV1MessagesData = {
 | `threadId`                                                                                    | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `providerMessageId`                                                                           | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `subject`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
-| `from`                                                                                        | [operations.GetV1MessagesFrom](../../models/operations/get-v1-messages-from.md)               | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| `from`                                                                                        | [models.From](../models/from.md)                                                              | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `snippet`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `receivedAt`                                                                                  | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `labelIds`                                                                                    | *string*[]                                                                                    | :heavy_check_mark:                                                                            | N/A                                                                                           |

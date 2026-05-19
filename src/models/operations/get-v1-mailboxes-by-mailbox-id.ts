@@ -4,11 +4,11 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import * as openEnums from "../../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../../types/enums.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import * as types from "../../types/primitives.js";
 import { SDKValidationError } from "../errors/sdk-validation-error.js";
+import * as models from "../index.js";
 
 export type GetV1MailboxesByMailboxIdRequest = {
   mailboxId: string;
@@ -28,42 +28,6 @@ export type GetV1MailboxesByMailboxIdProvider = ClosedEnum<
   typeof GetV1MailboxesByMailboxIdProvider
 >;
 
-export const GetV1MailboxesByMailboxIdStatus = {
-  Active: "active",
-  ReconnectRequired: "reconnect_required",
-  Disabled: "disabled",
-} as const;
-export type GetV1MailboxesByMailboxIdStatus = OpenEnum<
-  typeof GetV1MailboxesByMailboxIdStatus
->;
-
-export const GetV1MailboxesByMailboxIdSyncState = {
-  Initializing: "initializing",
-  Healthy: "healthy",
-  Lagging: "lagging",
-  Failed: "failed",
-} as const;
-export type GetV1MailboxesByMailboxIdSyncState = OpenEnum<
-  typeof GetV1MailboxesByMailboxIdSyncState
->;
-
-export const GetV1MailboxesByMailboxIdWatchState = {
-  Active: "active",
-  Expiring: "expiring",
-  Expired: "expired",
-  Unhealthy: "unhealthy",
-} as const;
-export type GetV1MailboxesByMailboxIdWatchState = OpenEnum<
-  typeof GetV1MailboxesByMailboxIdWatchState
->;
-
-export type LastError = {
-  code: string;
-  message: string;
-  occurredAt: Date;
-  retryable: boolean;
-};
-
 /**
  * Mailbox
  */
@@ -72,12 +36,12 @@ export type GetV1MailboxesByMailboxIdResponse = {
   object: GetV1MailboxesByMailboxIdObject;
   provider: GetV1MailboxesByMailboxIdProvider;
   emailAddress: string;
-  status: GetV1MailboxesByMailboxIdStatus;
-  syncState: GetV1MailboxesByMailboxIdSyncState;
-  watchState: GetV1MailboxesByMailboxIdWatchState;
+  status: models.MailboxStatus;
+  syncState: models.SyncState;
+  watchState: models.WatchState;
   initializedAt: Date | null;
   lastSuccessfulSyncAt: Date | null;
-  lastError: LastError | null;
+  lastError: models.ErrorDetail | null;
 };
 
 /** @internal */
@@ -114,43 +78,6 @@ export const GetV1MailboxesByMailboxIdProvider$inboundSchema: z.ZodMiniEnum<
 > = z.enum(GetV1MailboxesByMailboxIdProvider);
 
 /** @internal */
-export const GetV1MailboxesByMailboxIdStatus$inboundSchema: z.ZodMiniType<
-  GetV1MailboxesByMailboxIdStatus,
-  unknown
-> = openEnums.inboundSchema(GetV1MailboxesByMailboxIdStatus);
-
-/** @internal */
-export const GetV1MailboxesByMailboxIdSyncState$inboundSchema: z.ZodMiniType<
-  GetV1MailboxesByMailboxIdSyncState,
-  unknown
-> = openEnums.inboundSchema(GetV1MailboxesByMailboxIdSyncState);
-
-/** @internal */
-export const GetV1MailboxesByMailboxIdWatchState$inboundSchema: z.ZodMiniType<
-  GetV1MailboxesByMailboxIdWatchState,
-  unknown
-> = openEnums.inboundSchema(GetV1MailboxesByMailboxIdWatchState);
-
-/** @internal */
-export const LastError$inboundSchema: z.ZodMiniType<LastError, unknown> = z
-  .object({
-    code: types.string(),
-    message: types.string(),
-    occurredAt: types.date(),
-    retryable: types.boolean(),
-  });
-
-export function lastErrorFromJSON(
-  jsonString: string,
-): SafeParseResult<LastError, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => LastError$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'LastError' from JSON`,
-  );
-}
-
-/** @internal */
 export const GetV1MailboxesByMailboxIdResponse$inboundSchema: z.ZodMiniType<
   GetV1MailboxesByMailboxIdResponse,
   unknown
@@ -159,12 +86,12 @@ export const GetV1MailboxesByMailboxIdResponse$inboundSchema: z.ZodMiniType<
   object: GetV1MailboxesByMailboxIdObject$inboundSchema,
   provider: GetV1MailboxesByMailboxIdProvider$inboundSchema,
   emailAddress: types.string(),
-  status: GetV1MailboxesByMailboxIdStatus$inboundSchema,
-  syncState: GetV1MailboxesByMailboxIdSyncState$inboundSchema,
-  watchState: GetV1MailboxesByMailboxIdWatchState$inboundSchema,
+  status: models.MailboxStatus$inboundSchema,
+  syncState: models.SyncState$inboundSchema,
+  watchState: models.WatchState$inboundSchema,
   initializedAt: types.nullable(types.date()),
   lastSuccessfulSyncAt: types.nullable(types.date()),
-  lastError: types.nullable(z.lazy(() => LastError$inboundSchema)),
+  lastError: types.nullable(models.ErrorDetail$inboundSchema),
 });
 
 export function getV1MailboxesByMailboxIdResponseFromJSON(

@@ -3,9 +3,9 @@
 
 ## Supported Types
 
-### `operations.EventTypeRequestEnum2`
+### `models.WebhookEventType`
 
 ```typescript
-const value: operations.EventTypeRequestEnum2 = "message.created";
+const value: models.WebhookEventType = "thread.updated";
 ```
 
