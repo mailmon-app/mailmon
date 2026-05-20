@@ -28,10 +28,19 @@ const asObject = (value: unknown): JsonObject => {
   return value;
 };
 
-const schemaAt = (document: JsonObject, path: ReadonlyArray<string>) => {
+const schemaAt = (document: JsonObject, path: ReadonlyArray<string | number>) => {
   let value: unknown = document;
 
   for (const segment of path) {
+    if (typeof segment === "number") {
+      if (!Array.isArray(value)) {
+        throw new Error("Expected a JSON array.");
+      }
+
+      value = value[segment];
+      continue;
+    }
+
     value = asObject(value)[segment];
   }
 
@@ -50,7 +59,7 @@ describe("public API contract", () => {
   it("keeps the checked-in OpenAPI document on the v1 camelCase JSON shape", () => {
     const document = asObject(JSON.parse(readRepoText("apps/docs/api-reference/openapi.json")));
 
-    const connectSessionRequest = schemaAt(document, [
+    const connectSessionRequestRef = schemaAt(document, [
       "paths",
       "/v1/mailboxes/connect-sessions",
       "post",
@@ -58,6 +67,15 @@ describe("public API contract", () => {
       "content",
       "application/json",
       "schema",
+    ]);
+    expect(connectSessionRequestRef).toEqual({
+      $ref: "#/components/schemas/CreateConnectSessionRequest",
+    });
+
+    const connectSessionRequest = schemaAt(document, [
+      "components",
+      "schemas",
+      "CreateConnectSessionRequest",
     ]);
 
     expect(connectSessionRequest).toMatchObject({
@@ -74,12 +92,15 @@ describe("public API contract", () => {
     expect(replayOperation.responses).toHaveProperty("201");
     expect(replayOperation.responses).not.toHaveProperty("202");
 
-    const replayRequest = schemaAt(replayOperation, [
+    const replayRequestRef = schemaAt(replayOperation, [
       "requestBody",
       "content",
       "application/json",
       "schema",
     ]);
+    expect(replayRequestRef).toEqual({ $ref: "#/components/schemas/CreateReplayRequest" });
+
+    const replayRequest = schemaAt(document, ["components", "schemas", "CreateReplayRequest"]);
 
     expect(replayRequest).toMatchObject({
       required: ["mailboxId", "webhookEndpointId", "startTime", "endTime"],
@@ -94,14 +115,9 @@ describe("public API contract", () => {
     expect(replayRequest.properties).not.toHaveProperty("webhook_endpoint_id");
 
     const messageSchema = schemaAt(document, [
-      "paths",
-      "/v1/messages",
-      "get",
-      "responses",
-      "200",
-      "content",
-      "application/json",
-      "schema",
+      "components",
+      "schemas",
+      "MessageList",
       "properties",
       "data",
       "items",
@@ -185,7 +201,8 @@ describe("OpenAPI normalization policy", () => {
       "schema",
     ]);
 
-    expect(requestSchema).toEqual({
+    expect(requestSchema).toEqual({ $ref: "#/components/schemas/CreateConnectSessionRequest" });
+    expect(schemaAt(document, ["components", "schemas", "CreateConnectSessionRequest"])).toEqual({
       type: "object",
       required: ["tenantExternalId"],
       properties: {
@@ -258,7 +275,7 @@ describe("OpenAPI normalization policy", () => {
         name: "mailboxId",
         in: "query",
         required: true,
-        schema: { type: "string", allOf: [{ minLength: 1 }] },
+        schema: { type: "string", minLength: 1 },
       },
       { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
     ]);
@@ -310,13 +327,290 @@ describe("OpenAPI normalization policy", () => {
       "schema",
     ]);
 
-    expect(responseSchema).not.toHaveProperty("$defs");
-    expect(schemaAt(responseSchema, ["properties", "data"])).toEqual({
+    expect(responseSchema).toEqual({ $ref: "#/components/schemas/MessageList" });
+    expect(schemaAt(document, ["components", "schemas", "MessageList"])).not.toHaveProperty(
+      "$defs",
+    );
+    expect(
+      schemaAt(document, ["components", "schemas", "MessageList", "properties", "data"]),
+    ).toEqual({
       $ref: "#/components/schemas/Message",
     });
     expect(schemaAt(document, ["components", "schemas", "Message"])).toEqual({
       type: "object",
     });
     expect(schemaAt(document, ["components", "schemas", "Label"])).toEqual({ type: "string" });
+  });
+
+  it("adds semantic operation metadata for SDK generation", () => {
+    const document = normalizeOpenApiDocument({
+      paths: {
+        "/v1/messages": {
+          get: {
+            operationId: "getV1Messages",
+          },
+        },
+      },
+    });
+
+    expect(document.tags).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "messages" }),
+        expect.objectContaining({ name: "mailboxes" }),
+      ]),
+    );
+    expect(document["x-speakeasy-retries"]).toMatchObject({
+      strategy: "backoff",
+      statusCodes: ["5XX", "429"],
+      retryConnectionErrors: true,
+    });
+    expect(schemaAt(document, ["paths", "/v1/messages", "get"])).toMatchObject({
+      operationId: "messages_list",
+      tags: ["messages"],
+      "x-speakeasy-group": "messages",
+      "x-speakeasy-name-override": "list",
+      "x-speakeasy-pagination": {
+        type: "cursor",
+        outputs: {
+          results: "$.data",
+          nextCursor: "$.nextCursor",
+        },
+      },
+    });
+  });
+
+  it("promotes operation request and response schemas into named components", () => {
+    const document = normalizeOpenApiDocument({
+      paths: {
+        "/v1/replays": {
+          post: {
+            requestBody: {
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      mailboxId: { type: "string", allOf: [{ minLength: 1 }] },
+                    },
+                  },
+                },
+              },
+            },
+            responses: {
+              "201": {
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        status: {
+                          type: "string",
+                          enum: ["queued", "running"],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              "409": {
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        code: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(
+      schemaAt(document, [
+        "paths",
+        "/v1/replays",
+        "post",
+        "requestBody",
+        "content",
+        "application/json",
+        "schema",
+      ]),
+    ).toEqual({ $ref: "#/components/schemas/CreateReplayRequest" });
+    expect(
+      schemaAt(document, [
+        "paths",
+        "/v1/replays",
+        "post",
+        "responses",
+        "201",
+        "content",
+        "application/json",
+        "schema",
+      ]),
+    ).toEqual({ $ref: "#/components/schemas/Replay" });
+    expect(
+      schemaAt(document, [
+        "paths",
+        "/v1/replays",
+        "post",
+        "responses",
+        "409",
+        "content",
+        "application/json",
+        "schema",
+      ]),
+    ).toEqual({ $ref: "#/components/schemas/ProblemDetails" });
+    expect(
+      schemaAt(document, [
+        "components",
+        "schemas",
+        "CreateReplayRequest",
+        "properties",
+        "mailboxId",
+      ]),
+    ).toEqual({ type: "string", minLength: 1 });
+    expect(schemaAt(document, ["components", "schemas", "Replay", "properties", "status"])).toEqual(
+      {
+        type: "string",
+        enum: ["queued", "running"],
+        "x-speakeasy-unknown-values": "allow",
+      },
+    );
+  });
+
+  it("promotes repeated nested schemas into reusable components", () => {
+    const errorDetail = {
+      type: "object",
+      properties: {
+        code: { type: "string" },
+        message: { type: "string" },
+        occurredAt: { type: "string", format: "date-time" },
+        retryable: { type: "boolean" },
+      },
+      required: ["code", "message", "occurredAt", "retryable"],
+      additionalProperties: false,
+    };
+    const deliveryState = {
+      type: "string",
+      enum: ["healthy", "degraded", "failing"],
+    };
+    const syncRun = {
+      type: "object",
+      properties: {
+        syncRunId: { type: "string" },
+        status: {
+          type: "string",
+          enum: ["running", "completed"],
+        },
+      },
+      required: ["syncRunId", "status"],
+      additionalProperties: false,
+    };
+    const document = normalizeOpenApiDocument({
+      components: {
+        schemas: {
+          WebhookEndpoint: {
+            type: "object",
+            properties: {
+              lastDeliveryError: { anyOf: [errorDetail, { type: "null" }] },
+              deliveryState,
+            },
+          },
+          Mailbox: {
+            type: "object",
+            properties: {
+              lastError: { anyOf: [errorDetail, { type: "null" }] },
+            },
+          },
+          SyncRunList: {
+            type: "object",
+            properties: {
+              data: {
+                type: "array",
+                items: syncRun,
+              },
+            },
+          },
+          MailboxObservability: {
+            type: "object",
+            properties: {
+              webhookDeliveries: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    lastDeliveryError: { anyOf: [errorDetail, { type: "null" }] },
+                    deliveryState,
+                  },
+                },
+              },
+              latestSyncRun: { anyOf: [syncRun, { type: "null" }] },
+            },
+          },
+        },
+      },
+    });
+
+    expect(
+      schemaAt(document, [
+        "components",
+        "schemas",
+        "WebhookEndpoint",
+        "properties",
+        "lastDeliveryError",
+        "anyOf",
+        0,
+      ]),
+    ).toEqual({ $ref: "#/components/schemas/ErrorDetail" });
+    expect(
+      schemaAt(document, [
+        "components",
+        "schemas",
+        "Mailbox",
+        "properties",
+        "lastError",
+        "anyOf",
+        0,
+      ]),
+    ).toEqual({
+      $ref: "#/components/schemas/ErrorDetail",
+    });
+    expect(
+      schemaAt(document, [
+        "components",
+        "schemas",
+        "WebhookEndpoint",
+        "properties",
+        "deliveryState",
+      ]),
+    ).toEqual({
+      $ref: "#/components/schemas/DeliveryState",
+    });
+    expect(
+      schemaAt(document, ["components", "schemas", "SyncRunList", "properties", "data", "items"]),
+    ).toEqual({
+      $ref: "#/components/schemas/SyncRun",
+    });
+    expect(
+      schemaAt(document, [
+        "components",
+        "schemas",
+        "MailboxObservability",
+        "properties",
+        "latestSyncRun",
+        "anyOf",
+        0,
+      ]),
+    ).toEqual({ $ref: "#/components/schemas/SyncRun" });
+    expect(
+      schemaAt(document, ["components", "schemas", "SyncRun", "properties", "status"]),
+    ).toEqual({
+      $ref: "#/components/schemas/SyncRunStatus",
+    });
   });
 });
