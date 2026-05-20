@@ -8,7 +8,6 @@
     "access": "public"
   },
   "repository": {
-    "directory": "sdks/typescript-new",
     "type": "git",
     "url": "https://github.com/mailmon-app/mailmon"
   },
