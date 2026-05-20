@@ -10,6 +10,13 @@ load/results/*.json
 .env.*
 !.env.schema
 .terraform/
+cloud-sql-proxy
+fern-docs.txt
+experiment/
+infra/.state.json
+*.tfstate
+*.tfstate.backup
+.terraform.tfstate.lock.info
 
 # misllaneous
 .agents
