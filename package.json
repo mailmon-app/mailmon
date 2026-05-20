@@ -1,7 +1,17 @@
 {
   "name": "@mailmon.dev/sdk",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "author": "Speakeasy",
+  "description": "TypeScript SDK for the Mailmon API.",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "url": "https://github.com/mailmon-app/mailmon",
+    "directory": "sdks/typescript-new",
+    "type": "git"
+  },
   "type": "module",
   "main": "./esm/index.js",
   "exports": {
@@ -46,12 +56,14 @@
   "scripts": {
     "lint": "oxlint --max-warnings=0 --deny-warnings src/**/*.ts src/**/*.tsx",
     "build": "tsgo",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:webhooks": "npm run build && node --test tests/webhooks.test.mjs"
   },
   "peerDependencies": {
     
   },
   "devDependencies": {
+    "@types/node": "^25.7.0",
     "@typescript/native-preview": "7.0.0-dev.20260302.1",
     "oxlint": "^1.60.0",
     "typescript": "~5.8.3"
