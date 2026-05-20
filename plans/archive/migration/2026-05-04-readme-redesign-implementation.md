@@ -479,7 +479,7 @@ Checklist:
 **Step 3: Final commit message**
 
 ```bash
-git add README.md docs/plans/2026-05-04-readme-redesign.md
+git add README.md plans/archive/migration/2026-05-04-readme-redesign.md
 git commit -m "refactor: redesign README in Ghostty style
 
 - Centered hero header with navigation
@@ -507,7 +507,7 @@ Expected: Shows README.md and design doc changes.
 
 ## Execution Approach
 
-Plan complete and saved to `docs/plans/2026-05-04-readme-redesign.md`.
+Plan complete and saved to `plans/archive/migration/2026-05-04-readme-redesign.md`.
 
 **Two execution options:**
 

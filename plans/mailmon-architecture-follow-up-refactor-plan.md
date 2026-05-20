@@ -1,7 +1,7 @@
 # Plan: Mailmon Architecture Follow-up Refactors
 
 > Previous refactor plan: `plans/mailmon-architecture-deepening-refactor-plan.md`
-> Implementation log: `logs/arch-refactor.md`
+> Implementation log: `docs/history/implementation-logs/arch-refactor.md`
 > Domain language: `UBIQUITOUS_LANGUAGE.md`
 > Current date: 2026-05-13
 

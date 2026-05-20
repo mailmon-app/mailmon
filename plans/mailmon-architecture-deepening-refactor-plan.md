@@ -2,7 +2,7 @@
 
 > Source PRD: `docs/PRD.md`
 > Active product plan: `plans/mailmon-gmail-sync-infrastructure.md`
-> Completed migration record: `docs/plans/2026-05-11-effect-v4-migration-plan.md`
+> Completed migration record: `plans/archive/migration/2026-05-11-effect-v4-migration-plan.md`
 > Domain language: `UBIQUITOUS_LANGUAGE.md`
 > Effect references consulted: `effect-solutions` and `.repos/effect`
 
@@ -404,7 +404,7 @@ Rationale:
 - `apps/api/src/http/validation.ts`
 - `apps/api/src/server.ts`
 - `apps/worker/src/processor.test.ts`
-- `docs/plans/2026-05-11-effect-v4-migration-plan.md`
+- `plans/archive/migration/2026-05-11-effect-v4-migration-plan.md`
 - `plans/mailmon-architecture-deepening-refactor-plan.md`
 
 ### Problem
@@ -1242,7 +1242,7 @@ npx fallow health
 - `apps/api/src/generate-openapi.ts`
 - `apps/api/src/public-contract.test.ts`
 - `apps/docs/api-reference/openapi.json`
-- `docs/plans/2026-04-29-hono-openapi-effect-schema-migration.md`
+- `plans/archive/migration/2026-04-29-hono-openapi-effect-schema-migration.md`
 
 ### Problem
 

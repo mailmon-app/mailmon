@@ -29,7 +29,7 @@ external_references:
     why: Cross-check for current launch and verification claims.
   - path: /home/satty/projects/mailmon-dev/docs/staging-validation-guide.md
     why: Manual live validation scope for Cloud Tasks and Gmail push/watch production paths.
-  - path: /home/satty/projects/mailmon-dev/plans/clouldflare-findings.md
+  - path: /home/satty/projects/mailmon-dev/plans/archive/cloudflare/cloudflare-findings.md
     why: Independent plan noting chaos/load baselining as migration prerequisites.
 ---
 

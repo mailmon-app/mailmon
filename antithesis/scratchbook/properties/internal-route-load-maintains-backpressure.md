@@ -33,7 +33,7 @@ Native Antithesis assertions are missing. This may be better as local load testi
 
 #### What p95/p99 latency, DB pool, and error-rate budgets should define pass/fail?
 
-- Examined: `docs/testing-requirements.md`, `docs/launch-readiness.md`, and `plans/clouldflare-findings.md`.
+- Examined: `docs/testing-requirements.md`, `docs/launch-readiness.md`, and `plans/archive/cloudflare/cloudflare-findings.md`.
 - Found: all three identify load/performance or migration baseline needs.
 - Not found: numeric pass/fail thresholds or expected beta traffic shape.
 - Conclusion: tagged `(needs human input)` in the catalog.

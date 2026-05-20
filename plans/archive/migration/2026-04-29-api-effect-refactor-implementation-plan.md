@@ -388,8 +388,8 @@ git commit -m "refactor(api): simplify runtime mode dispatch layer selection"
 
 **Files:**
 
-- Modify: `docs/plans/2026-04-29-api-effect-refactor-design.md`
-- Create: `docs/plans/2026-04-29-api-effect-refactor-change-log.md`
+- Modify: `plans/archive/migration/2026-04-29-api-effect-refactor-design.md`
+- Create: `plans/archive/migration/2026-04-29-api-effect-refactor-change-log.md`
 
 **Step 1: Write the failing test**
 
@@ -430,7 +430,7 @@ Expected: PASS (docs do not affect code behavior).
 **Step 5: Commit**
 
 ```bash
-git add docs/plans/2026-04-29-api-effect-refactor-design.md docs/plans/2026-04-29-api-effect-refactor-change-log.md
+git add plans/archive/migration/2026-04-29-api-effect-refactor-design.md plans/archive/migration/2026-04-29-api-effect-refactor-change-log.md
 git commit -m "docs(api): record effect-aligned refactor behavior changes"
 ```
 

@@ -31,7 +31,7 @@ external_references:
     why: Manual live validation scope for Cloud Tasks and Gmail push/watch production paths.
   - path: /home/satty/projects/mailmon-dev/plans/antithesis-pbt-implementation-plan.md
     why: Historical implementation plan used to identify what is now complete versus stale.
-  - path: /home/satty/projects/mailmon-dev/plans/clouldflare-findings.md
+  - path: /home/satty/projects/mailmon-dev/plans/archive/cloudflare/cloudflare-findings.md
     why: Independent plan noting chaos/load baselining as migration prerequisites.
 ---
 

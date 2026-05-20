@@ -125,4 +125,4 @@ Document in the implementation PR/commit notes:
 - Added `apps/api/src/http/handlers.ts` for shared bearer auth, Effect execution, and Problem Envelope response mapping.
 - Kept Hono route declarations in `apps/api/src/server.ts`; routes now follow the auth, parse, execute, respond pipeline.
 - Kept runtime behavior stable while extracting API async transport mode selection into a small helper.
-- Documented user-visible validation tightenings in `docs/plans/2026-04-29-api-effect-refactor-change-log.md`.
+- Documented user-visible validation tightenings in `plans/archive/migration/2026-04-29-api-effect-refactor-change-log.md`.

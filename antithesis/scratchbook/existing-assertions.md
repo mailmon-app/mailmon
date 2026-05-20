@@ -35,7 +35,7 @@ Result:
 
 - No Antithesis SDK imports or assertion calls in `apps/` or `packages/`.
 - No `ANTITHESIS_OUTPUT_DIR` or `ANTITHESIS_STOP_FAULTS` usage in SUT code.
-- Mentions are limited to docs/plans/scratchbook guidance warning not to claim native Antithesis support.
+- Mentions are limited to archived plan and scratchbook guidance warning not to claim native Antithesis support.
 
 ## Local Hegel PBT
 
