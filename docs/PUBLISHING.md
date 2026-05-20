@@ -32,12 +32,12 @@ After the change lands on `main`, `.github/workflows/release.yml` runs Changeset
 Merge the `Version Packages` PR when the release is ready. The release workflow then runs `pnpm release`, which:
 
 1. Builds shared library packages.
-2. Regenerates the Speakeasy SDK through `pnpm sdk:generate:release`.
+2. Builds the checked-in Speakeasy SDK.
 3. Builds the CLI.
 4. Publishes packages with `changeset publish`.
 5. Creates package tags such as `@mailmon.dev/sdk@0.2.8`.
 
-The SDK release generator reads the version chosen by Changesets from `sdks/typescript-new/package.json` and passes it to Speakeasy with `--set-version` and `--skip-versioning`. This prevents the generated SDK from reverting to the version stored in generator config or applying an automatic Speakeasy bump during publish.
+Regenerate the SDK before merging release changes. The checked-in SDK source is what the release workflow builds and publishes.
 
 ## SDK Generation Workflow
 
@@ -76,7 +76,7 @@ For each package (`@mailmon.dev/sdk` and `@mailmon.dev/cli`), an organization ad
 
 - `.speakeasy/workflow.yaml`: Root Speakeasy monorepo workflow mapping `mailmon-api` to `sdks/typescript-new`.
 - `sdks/typescript-new/.speakeasy/gen.yaml`: TypeScript SDK generation and package metadata.
-- `scripts/generate-sdk-for-release.mjs`: Release-only regeneration script that preserves Changesets versioning and changelog output.
+- `scripts/generate-sdk-for-release.mjs`: Local/CI regeneration script that preserves Changesets versioning and changelog output when Speakeasy credentials are available.
 - `sdks/typescript-new/package.json`: Publishable `@mailmon.dev/sdk` package.
 - `sdks/typescript/package.json`: Legacy Fern SDK package, marked private and renamed so it is not published.
 - `.changeset/config.json`: Configures public package publishing.

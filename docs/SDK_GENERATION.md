@@ -28,7 +28,7 @@ Trigger Speakeasy generation in GitHub instead of generating locally:
 pnpm sdk:generate:github
 ```
 
-For release builds, use the dedicated script. It regenerates the SDK and passes the current `sdks/typescript-new/package.json` version to Speakeasy while skipping automatic Speakeasy version bumps, so Changesets remains the source of truth for package versions:
+Before publishing a release, use the dedicated script when Speakeasy credentials are available. It regenerates the SDK and passes the current `sdks/typescript-new/package.json` version to Speakeasy while skipping automatic Speakeasy version bumps, so Changesets remains the source of truth for package versions:
 
 ```bash
 pnpm sdk:generate:release

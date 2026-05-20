@@ -11,7 +11,7 @@
     "sdk:generate:release": "node scripts/generate-sdk-for-release.mjs",
     "sdk:generate:github": "pnpm openapi:generate && speakeasy run -y --output console --target mailmon-typescript --github",
     "build:libs": "turbo run build --filter=@mailmon/core --filter=@mailmon/config --filter=@mailmon/gmail --filter=@mailmon/db --filter=@mailmon/queue",
-    "build-packages": "pnpm build:libs && pnpm sdk:generate:release && pnpm --filter @mailmon.dev/cli build",
+    "build-packages": "pnpm build:libs && pnpm --filter @mailmon.dev/sdk build && pnpm --filter @mailmon.dev/cli build",
     "release": "pnpm build-packages && changeset publish",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
