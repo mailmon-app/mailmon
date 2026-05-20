@@ -8,9 +8,9 @@
     "access": "public"
   },
   "repository": {
+    "url": "https://github.com/mailmon-app/mailmon",
     "directory": "sdks/typescript-new",
-    "type": "git",
-    "url": "https://github.com/mailmon-app/mailmon"
+    "type": "git"
   },
   "type": "module",
   "main": "./esm/index.js",
