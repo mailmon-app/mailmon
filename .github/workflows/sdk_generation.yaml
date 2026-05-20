@@ -20,7 +20,7 @@ on:
       - .github/workflows/sdk_generation.yaml
       - .speakeasy/**
       - apps/docs/api-reference/openapi.json
-      - sdks/typescript-new/.speakeasy/**
+      - sdks/typescript/.speakeasy/**
 
 permissions:
   checks: write

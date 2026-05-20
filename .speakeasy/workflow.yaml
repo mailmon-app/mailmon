@@ -5,15 +5,15 @@ sources:
     inputs:
       - location: apps/docs/api-reference/openapi.json
     overlays:
-      - location: sdks/typescript-new/.speakeasy/speakeasy-modifications-overlay.yaml
-    output: sdks/typescript-new/.speakeasy/out.openapi.yaml
+      - location: sdks/typescript/.speakeasy/speakeasy-modifications-overlay.yaml
+    output: sdks/typescript/.speakeasy/out.openapi.yaml
     registry:
       location: registry.speakeasyapi.dev/mailmon/sdk/mailmon-api
 targets:
   mailmon-typescript:
     target: typescript
     source: mailmon-api
-    output: sdks/typescript-new
+    output: sdks/typescript
     codeSamples:
       registry:
         location: registry.speakeasyapi.dev/mailmon/sdk/mailmon-api-typescript-code-samples

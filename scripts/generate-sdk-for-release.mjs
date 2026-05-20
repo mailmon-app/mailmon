@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const sdkRoot = join(repoRoot, "sdks", "typescript-new");
+const sdkRoot = join(repoRoot, "sdks", "typescript");
 const packageJsonPath = join(sdkRoot, "package.json");
 const changelogPath = join(sdkRoot, "CHANGELOG.md");
 
