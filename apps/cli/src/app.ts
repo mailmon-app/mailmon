@@ -238,10 +238,7 @@ const noopWebhookDeliverySchedulerLayer = Layer.succeed(WebhookDeliveryScheduler
 export const getListenMessage = (options: { readonly forwardTo: Option.Option<string> }) =>
   Effect.gen(function* () {
     const config = yield* MailmonCliConfig;
-    const transportDescription =
-      config.asyncTransportMode === "legacy_bullmq"
-        ? "legacy BullMQ async transport"
-        : `${config.asyncTransportMode} async transport`;
+    const transportDescription = `${config.asyncTransportMode} async transport`;
 
     return Option.match(options.forwardTo, {
       onNone: () => `listening for local events using ${transportDescription}`,

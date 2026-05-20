@@ -36,25 +36,18 @@ type ApiRuntimeEnv = Pick<
 >;
 
 const createMailboxSyncDispatcherLayer = (env: ApiRuntimeEnv) => {
-  switch (env.asyncTransportMode) {
-    case "gcp":
-      return createGcpMailboxSyncDispatcherLayer({
-        topicName: requireGcpApiValue(
-          env.syncDispatchPubSubTopicName,
-          "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-        ),
-      });
-    case "local":
-      return createWorkerHttpMailboxSyncDispatcherLayer({
-        workerBaseUrl: env.workerBaseUrl,
-      });
-    case "legacy_bullmq":
-      throw new Error(
-        "apps/api does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq; use local or gcp",
-      );
+  if (env.asyncTransportMode === "gcp") {
+    return createGcpMailboxSyncDispatcherLayer({
+      topicName: requireGcpApiValue(
+        env.syncDispatchPubSubTopicName,
+        "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+      ),
+    });
   }
 
-  throw new Error("Unsupported MAILMON_ASYNC_TRANSPORT_MODE");
+  return createWorkerHttpMailboxSyncDispatcherLayer({
+    workerBaseUrl: env.workerBaseUrl,
+  });
 };
 
 export const createApiRuntimeLayer = (env: ApiRuntimeEnv) => {

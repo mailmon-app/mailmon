@@ -19,7 +19,6 @@ export {
   type MailboxSyncJobData,
 } from "@mailmon/core";
 
-export const SYNC_MAILBOX_QUEUE = "mailmon.sync-mailbox";
 export const DEFAULT_LOCAL_WORKER_BASE_URL = "http://127.0.0.1:3001";
 export const DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID = "mailmon-webhook-deliveries";
 
@@ -28,19 +27,6 @@ const MAILBOX_SYNC_TASK_PATH = "/internal/sync";
 const CONTROL_JOB_TASK_PATH = "/internal/control-jobs";
 const encodeJsonString = (value: unknown) => {
   return encodeInternalJsonPayload(value);
-};
-
-export const createRedisConnectionOptions = (redisUrl: string) => {
-  const url = new URL(redisUrl);
-  const database = url.pathname === "" ? undefined : Number(url.pathname.slice(1));
-
-  return {
-    db: Number.isNaN(database) ? undefined : database,
-    host: url.hostname,
-    maxRetriesPerRequest: null,
-    password: url.password === "" ? undefined : url.password,
-    port: Number(url.port || "6379"),
-  };
 };
 
 export interface LocalAsyncTransportSnapshot {

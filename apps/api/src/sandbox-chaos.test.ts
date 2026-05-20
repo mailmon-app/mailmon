@@ -601,7 +601,6 @@ const createWorkerEnv = (
   mailboxSyncLeaseTtlMs: chaosLeaseTtlMs,
   nodeEnv: "test",
   port,
-  redisUrl: null,
   stagingPubSubRetrySmokeMailboxIds: [],
   workerBaseUrl,
 });
@@ -688,7 +687,6 @@ const startWorkerChildProcess = async (
       mailboxSyncLeaseTtlMs: Number.parseInt(requireEnv("MAILMON_SYNC_LEASE_TTL_MS"), 10),
       nodeEnv: "test",
       port: Number.parseInt(requireEnv("PORT"), 10),
-      redisUrl: null,
       stagingPubSubRetrySmokeMailboxIds: [],
       workerBaseUrl: requireEnv("MAILMON_WORKER_BASE_URL"),
     });

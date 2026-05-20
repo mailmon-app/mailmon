@@ -33,7 +33,6 @@ const workerEnvFixture: WorkerEnv = {
   mailboxSyncLeaseTtlMs: 90_000,
   nodeEnv: "test",
   port: 0,
-  redisUrl: null,
   stagingPubSubRetrySmokeMailboxIds: [],
   workerBaseUrl: "http://127.0.0.1:3001",
 };

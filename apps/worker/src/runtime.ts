@@ -166,22 +166,18 @@ export const createInProcessWebhookDeliverySchedulerLayer = (
   );
 
 const createMailboxSyncDispatcherLayer = (env: WorkerRuntimeEnv) => {
-  switch (env.asyncTransportMode) {
-    case "gcp":
-      return createGcpMailboxSyncDispatcherLayer({
-        topicName: requireGcpWorkerValue(
-          env.syncDispatchPubSubTopicName,
-          "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
-        ),
-      });
-    case "local":
-    case "legacy_bullmq":
-      return createWorkerHttpMailboxSyncDispatcherLayer({
-        workerBaseUrl: env.workerBaseUrl,
-      });
+  if (env.asyncTransportMode === "gcp") {
+    return createGcpMailboxSyncDispatcherLayer({
+      topicName: requireGcpWorkerValue(
+        env.syncDispatchPubSubTopicName,
+        "MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME",
+      ),
+    });
   }
 
-  throw new Error("Unsupported MAILMON_ASYNC_TRANSPORT_MODE");
+  return createWorkerHttpMailboxSyncDispatcherLayer({
+    workerBaseUrl: env.workerBaseUrl,
+  });
 };
 
 export const createWorkerRuntimeLayer = (env: WorkerRuntimeEnv) => {

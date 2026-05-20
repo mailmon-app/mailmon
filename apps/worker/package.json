@@ -22,7 +22,6 @@
     "@mailmon/gmail": "workspace:*",
     "@mailmon/queue": "workspace:*",
     "@varlock/google-secret-manager-plugin": "catalog:",
-    "bullmq": "^5.76.7",
     "effect": "catalog:",
     "google-auth-library": "catalog:",
     "hono": "^4.12.18",

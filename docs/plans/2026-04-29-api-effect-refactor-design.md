@@ -53,7 +53,7 @@ Planned internal modules:
 
 - Keep `apps/api/src/runtime.ts` behavior intact.
 - Optionally simplify async transport mode branching into a mode-to-layer helper for readability.
-- Preserve fail-fast behavior for `legacy_bullmq` in API runtime.
+- Keep async transport mode selection constrained to the supported local and GCP modes.
 
 ## Request Flow Pattern
 

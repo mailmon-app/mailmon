@@ -348,17 +348,8 @@ git commit -m "refactor(api): normalize write-route validation and oauth callbac
 
 Add runtime tests for:
 
-- `legacy_bullmq` mode throws fail-fast error
 - `gcp` mode requires `MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME`
 - `local` mode uses worker HTTP dispatcher config
-
-```ts
-it("throws for legacy_bullmq mode", () => {
-  expect(() => createApiRuntimeLayer({ ...env, asyncTransportMode: "legacy_bullmq" })).toThrow(
-    /does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq/,
-  );
-});
-```
 
 **Step 2: Run test to verify it fails**
 
@@ -371,14 +362,11 @@ Refactor mode selection into small internal helpers (no contract change):
 
 ```ts
 const createMailboxSyncDispatcherLayer = (env: RuntimeEnv) => {
-  switch (env.asyncTransportMode) {
-    case "gcp":
-      return createGcpMailboxSyncDispatcherLayer({ topicName: requireGcpApiValue(...) });
-    case "local":
-      return createWorkerHttpMailboxSyncDispatcherLayer({ workerBaseUrl: env.workerBaseUrl });
-    case "legacy_bullmq":
-      throw new Error("apps/api does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq; use local or gcp");
+  if (env.asyncTransportMode === "gcp") {
+    return createGcpMailboxSyncDispatcherLayer({ topicName: requireGcpApiValue(...) });
   }
+
+  return createWorkerHttpMailboxSyncDispatcherLayer({ workerBaseUrl: env.workerBaseUrl });
 };
 ```
 

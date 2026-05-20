@@ -76,7 +76,6 @@ describe("WorkerConfig", () => {
         mailboxSyncLeaseTtlMs: 90_000,
         nodeEnv: "test",
         port: 3001,
-        redisUrl: null,
         stagingPubSubRetrySmokeMailboxIds: [],
         workerBaseUrl: "http://127.0.0.1:3001",
       });
@@ -130,27 +129,23 @@ describe("WorkerConfig", () => {
     ),
   );
 
-  it.effect("supports legacy bullmq mode when redis is configured", () =>
-    Effect.gen(function* () {
-      const config = yield* WorkerConfig.asEffect();
-
-      expect(config.asyncTransportMode).toBe("legacy_bullmq");
-      expect(config.redisUrl).toBe("redis://localhost:6379");
-      expect(config.host).toBe("127.0.0.1");
-      expect(config.gmailOauthClientId).toBeNull();
-    }).pipe(
-      Effect.provide(WorkerConfig.layer),
-      Effect.provide(
-        testConfigLayer({
-          DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
-          MAILMON_ASYNC_TRANSPORT_MODE: "legacy_bullmq",
-          MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
-          NODE_ENV: "test",
-          REDIS_URL: "redis://localhost:6379",
-        }),
+  it("rejects unknown async transport modes", async () => {
+    await expect(
+      Effect.runPromise(
+        WorkerConfig.asEffect().pipe(
+          Effect.provide(WorkerConfig.layer),
+          Effect.provide(
+            testConfigLayer({
+              DATABASE_URL: "postgres://mailmon:mailmon@localhost:5432/mailmon",
+              MAILMON_ASYNC_TRANSPORT_MODE: "redis",
+              MAILMON_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY: TEST_GMAIL_REFRESH_TOKEN_ENCRYPTION_KEY,
+              NODE_ENV: "test",
+            }),
+          ),
+        ),
       ),
-    ),
-  );
+    ).rejects.toThrow();
+  });
 
   it("requires a worker base url when gcp mode is selected for the api", async () => {
     await expect(

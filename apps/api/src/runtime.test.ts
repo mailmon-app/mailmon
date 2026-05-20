@@ -19,15 +19,6 @@ const baseEnv = {
 };
 
 describe("createApiRuntimeLayer", () => {
-  it("throws for legacy_bullmq mode", () => {
-    expect(() =>
-      createApiRuntimeLayer({
-        ...baseEnv,
-        asyncTransportMode: "legacy_bullmq",
-      }),
-    ).toThrow(/does not support MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq/);
-  });
-
   it("requires the sync dispatch Pub/Sub topic in gcp mode", () => {
     expect(() =>
       createApiRuntimeLayer({

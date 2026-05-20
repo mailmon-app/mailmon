@@ -33,7 +33,7 @@ class WorkerProcessorUnknownError extends Data.TaggedError("WorkerProcessorUnkno
   readonly error: unknown;
 }> {}
 
-type WorkerTransportMode = "gcp" | "legacy_bullmq" | "local";
+type WorkerTransportMode = "gcp" | "local";
 
 type MailboxSyncOperationalLogEvent =
   | {

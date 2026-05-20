@@ -23,7 +23,7 @@ import { startWorkerHttpRuntime } from "./server.js";
 
 export interface WorkerRuntimeHandle {
   readonly close: () => Promise<void>;
-  readonly kind: "http" | "legacy_bullmq";
+  readonly kind: "http";
 }
 
 const requireGcpWorkerValue = (value: string | null, name: string) => {
@@ -149,52 +149,6 @@ const createWorkerProcessorRuntime = (
   };
 };
 
-const startLegacyBullmqWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHandle> => {
-  if (env.redisUrl === null) {
-    throw new Error("REDIS_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq");
-  }
-
-  const effectRuntime = createWorkerProcessorRuntime(env);
-  const recoveredWebhookDeliveries = await effectRuntime.recoverWebhookDeliveries();
-
-  if (recoveredWebhookDeliveries.length > 0) {
-    console.log(
-      `recovered ${recoveredWebhookDeliveries.length} durable webhook deliveries for retry scheduling`,
-    );
-  }
-  const [{ Worker }, { createRedisConnectionOptions, SYNC_MAILBOX_QUEUE }] = await Promise.all([
-    import("bullmq"),
-    import("@mailmon/queue"),
-  ]);
-
-  const connection = createRedisConnectionOptions(env.redisUrl);
-  const worker = new Worker(
-    SYNC_MAILBOX_QUEUE,
-    async (job) => {
-      await effectRuntime.processSyncJob(job.data);
-    },
-    {
-      connection,
-    },
-  );
-
-  worker.on("completed", (job) => {
-    console.log(`completed legacy bullmq job ${job.id}`);
-  });
-
-  worker.on("failed", (job, error) => {
-    console.error(`legacy bullmq job ${job?.id ?? "unknown"} failed`, error);
-  });
-
-  return {
-    close: async () => {
-      await worker.close();
-      await effectRuntime.runtime.dispose();
-    },
-    kind: "legacy_bullmq",
-  };
-};
-
 const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHandle> => {
   const effectRuntime = createWorkerProcessorRuntime(env);
   const httpRuntime = await startWorkerHttpRuntime({
@@ -254,10 +208,6 @@ const startHttpWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHand
 };
 
 export const startWorkerRuntime = async (env: WorkerEnv): Promise<WorkerRuntimeHandle> => {
-  if (env.asyncTransportMode === "legacy_bullmq") {
-    return startLegacyBullmqWorkerRuntime(env);
-  }
-
   return startHttpWorkerRuntime(env);
 };
 

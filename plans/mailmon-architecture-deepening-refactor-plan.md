@@ -213,7 +213,7 @@ Product and architecture invariants:
 - Preserve `MAILMON_ASYNC_TRANSPORT_MODE` behavior:
   - `local` uses local HTTP adapters.
   - `gcp` uses Pub/Sub for mailbox sync dispatch and Cloud Tasks for Webhook Delivery.
-  - `legacy_bullmq` remains fallback scaffolding only.
+  - only the supported local and GCP modes are retained.
 - Do not change public resource shapes without defining shared contracts in `@mailmon/core`
   first.
 - Do not advance Cursor before durable Canonical Mailbox State writes.

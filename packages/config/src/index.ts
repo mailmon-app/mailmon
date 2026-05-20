@@ -1,7 +1,7 @@
-import { Config, Context, Effect, Layer, Option } from "effect";
+import { Config, ConfigProvider, Context, Effect, Layer, Option } from "effect";
 
 export type NodeEnv = "development" | "test" | "production";
-export type AsyncTransportMode = "local" | "gcp" | "legacy_bullmq";
+export type AsyncTransportMode = "local" | "gcp";
 export const DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID = "mailmon-webhook-deliveries";
 
 const loadNodeEnv = Config.literals(["development", "test", "production"], "NODE_ENV").pipe(
@@ -45,11 +45,26 @@ const loadSyncDispatchPubSubTopicName = Config.option(
   Config.nonEmptyString("MAILMON_SYNC_DISPATCH_PUBSUB_TOPIC_NAME"),
 );
 const loadMailboxWorkerBaseUrl = Config.option(Config.nonEmptyString("MAILMON_WORKER_BASE_URL"));
-const loadRedisUrl = Config.option(Config.nonEmptyString("REDIS_URL"));
-const loadAsyncTransportMode = Config.literals(
-  ["local", "gcp", "legacy_bullmq"],
-  "MAILMON_ASYNC_TRANSPORT_MODE",
-).pipe(Config.orElse(() => Config.succeed("local" as const)));
+const loadAsyncTransportMode: Config.Config<AsyncTransportMode> = Config.mapOrFail(
+  Config.option(Config.nonEmptyString("MAILMON_ASYNC_TRANSPORT_MODE")),
+  (mode) => {
+    if (Option.isNone(mode)) {
+      return Effect.succeed("local" as const);
+    }
+
+    if (mode.value === "local" || mode.value === "gcp") {
+      return Effect.succeed(mode.value as AsyncTransportMode);
+    }
+
+    return Effect.fail(
+      new Config.ConfigError(
+        new ConfigProvider.SourceError({
+          message: "MAILMON_ASYNC_TRANSPORT_MODE must be `local` or `gcp` when set",
+        }),
+      ),
+    );
+  },
+);
 const loadGcpWebhookDeliveryQueueId = Config.nonEmptyString(
   "MAILMON_GCP_WEBHOOK_DELIVERY_QUEUE_ID",
 ).pipe(Config.orElse(() => Config.succeed(DEFAULT_GCP_WEBHOOK_DELIVERY_QUEUE_ID)));
@@ -180,7 +195,6 @@ export interface WorkerEnv extends CommonEnv {
   readonly mailboxSyncHeartbeatIntervalMs: number;
   readonly mailboxSyncLeaseTtlMs: number;
   readonly port: number;
-  readonly redisUrl: string | null;
   readonly stagingPubSubRetrySmokeMailboxIds: ReadonlyArray<string>;
   readonly workerBaseUrl: string;
 }
@@ -273,7 +287,6 @@ const workerConfig = Config.all({
   mailboxSyncLeaseTtlMs: loadMailboxSyncLeaseTtlMs,
   nodeEnv: loadNodeEnv,
   port: loadPort(3001),
-  redisUrl: loadRedisUrl,
   stagingPubSubRetrySmokeMailboxIds: loadStagingPubSubRetrySmokeMailboxIds,
   workerBaseUrl: loadMailboxWorkerBaseUrl,
 }).pipe(
@@ -334,7 +347,6 @@ const workerConfig = Config.all({
       mailboxSyncLeaseTtlMs: config.mailboxSyncLeaseTtlMs,
       nodeEnv: config.nodeEnv,
       port: config.port,
-      redisUrl: normalizeOptional(config.redisUrl),
       stagingPubSubRetrySmokeMailboxIds,
       syncDispatchPubSubTopicName:
         config.asyncTransportMode === "gcp"
@@ -435,7 +447,6 @@ export class WorkerConfig extends Context.Service<WorkerConfig, WorkerEnv>()(
     mailboxSyncLeaseTtlMs: 90_000,
     nodeEnv: "test",
     port: 3001,
-    redisUrl: null,
     stagingPubSubRetrySmokeMailboxIds: [],
     workerBaseUrl: "http://127.0.0.1:3001",
   } satisfies WorkerEnv);

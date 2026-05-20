@@ -26,18 +26,30 @@ const workerEnvFixture: WorkerEnv = {
   mailboxSyncLeaseTtlMs: 90_000,
   nodeEnv: "test",
   port: 0,
-  redisUrl: null,
   stagingPubSubRetrySmokeMailboxIds: [],
   workerBaseUrl: "http://127.0.0.1:3001",
 };
 
 describe("startWorkerRuntime", () => {
-  it("requires redis when legacy bullmq mode is selected", async () => {
-    await expect(
-      startWorkerRuntime({
-        ...workerEnvFixture,
-        asyncTransportMode: "legacy_bullmq",
-      }),
-    ).rejects.toThrow("REDIS_URL is required when MAILMON_ASYNC_TRANSPORT_MODE=legacy_bullmq");
+  it("starts the http runtime in local mode", async () => {
+    const runtime = await startWorkerRuntime(workerEnvFixture);
+
+    await expect(runtime.close()).resolves.toBeUndefined();
+  });
+
+  it("starts the http runtime in gcp mode", async () => {
+    const runtime = await startWorkerRuntime({
+      ...workerEnvFixture,
+      asyncTransportMode: "gcp",
+      gcpProjectId: "mailmon-dev",
+      gcpRegion: "us-central1",
+      gcpSchedulerServiceAccountEmail: "scheduler@mailmon-dev.iam.gserviceaccount.com",
+      gcpTasksAudience: "https://worker.example.com",
+      gcpTasksServiceAccountEmail: "tasks@mailmon-dev.iam.gserviceaccount.com",
+      gmailPubSubTopicName: "projects/mailmon-dev/topics/gmail-push",
+      syncDispatchPubSubTopicName: "projects/mailmon-dev/topics/mailbox-sync-dispatch",
+    });
+
+    await expect(runtime.close()).resolves.toBeUndefined();
   });
 });

@@ -771,7 +771,6 @@ const startSandboxE2eHarness = async (
       mailboxSyncLeaseTtlMs: 90_000,
       nodeEnv: "test",
       port: workerPort,
-      redisUrl: null,
       stagingPubSubRetrySmokeMailboxIds: [],
       workerBaseUrl,
     };
