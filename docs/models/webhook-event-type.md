@@ -1,11 +1,11 @@
-# WebhookEndpointSubscriptionListEventType
+# WebhookEventType
 
 ## Example Usage
 
 ```typescript
-import { WebhookEndpointSubscriptionListEventType } from "@mailmon.dev/sdk/models";
+import { WebhookEventType } from "@mailmon.dev/sdk/models";
 
-let value: WebhookEndpointSubscriptionListEventType = "message.updated";
+let value: WebhookEventType = "message.created";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

@@ -1,14 +1,14 @@
-# MailboxObservabilityLastDeliveryError
+# ErrorDetail
 
 ## Example Usage
 
 ```typescript
-import { MailboxObservabilityLastDeliveryError } from "@mailmon.dev/sdk/models";
+import { ErrorDetail } from "@mailmon.dev/sdk/models";
 
-let value: MailboxObservabilityLastDeliveryError = {
+let value: ErrorDetail = {
   code: "<value>",
   message: "<value>",
-  occurredAt: new Date("2024-06-13T10:01:30.919Z"),
+  occurredAt: new Date("2025-11-01T14:27:20.510Z"),
   retryable: true,
 };
 ```

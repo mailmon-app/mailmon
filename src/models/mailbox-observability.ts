@@ -4,11 +4,22 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../lib/schemas.js";
-import * as openEnums from "../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../types/enums.js";
+import { ClosedEnum } from "../types/enums.js";
 import { Result as SafeParseResult } from "../types/fp.js";
 import * as types from "../types/primitives.js";
+import {
+  DeliveryState,
+  DeliveryState$inboundSchema,
+} from "./delivery-state.js";
+import { ErrorDetail, ErrorDetail$inboundSchema } from "./error-detail.js";
 import { SDKValidationError } from "./errors/sdk-validation-error.js";
+import {
+  MailboxStatus,
+  MailboxStatus$inboundSchema,
+} from "./mailbox-status.js";
+import { SyncRun, SyncRun$inboundSchema } from "./sync-run.js";
+import { SyncState, SyncState$inboundSchema } from "./sync-state.js";
+import { WatchState, WatchState$inboundSchema } from "./watch-state.js";
 
 export const MailboxObservabilityObject = {
   MailboxObservability: "mailbox_observability",
@@ -17,37 +28,10 @@ export type MailboxObservabilityObject = ClosedEnum<
   typeof MailboxObservabilityObject
 >;
 
-export const LagStatus = {
-  Active: "active",
-  ReconnectRequired: "reconnect_required",
-  Disabled: "disabled",
-} as const;
-export type LagStatus = OpenEnum<typeof LagStatus>;
-
-export const MailboxObservabilitySyncState = {
-  Initializing: "initializing",
-  Healthy: "healthy",
-  Lagging: "lagging",
-  Failed: "failed",
-} as const;
-export type MailboxObservabilitySyncState = OpenEnum<
-  typeof MailboxObservabilitySyncState
->;
-
-export const MailboxObservabilityWatchState = {
-  Active: "active",
-  Expiring: "expiring",
-  Expired: "expired",
-  Unhealthy: "unhealthy",
-} as const;
-export type MailboxObservabilityWatchState = OpenEnum<
-  typeof MailboxObservabilityWatchState
->;
-
 export type Lag = {
-  status: LagStatus;
-  syncState: MailboxObservabilitySyncState;
-  watchState: MailboxObservabilityWatchState;
+  status: MailboxStatus;
+  syncState: SyncState;
+  watchState: WatchState;
   lastSuccessfulSyncAt: Date | null;
   lagSeconds: number | null;
 };
@@ -70,57 +54,16 @@ export type Lease = {
   latestLeaseLossAt: Date | null;
 };
 
-export const MailboxObservabilityDeliveryState = {
-  Healthy: "healthy",
-  Degraded: "degraded",
-  Failing: "failing",
-} as const;
-export type MailboxObservabilityDeliveryState = OpenEnum<
-  typeof MailboxObservabilityDeliveryState
->;
-
-export type MailboxObservabilityLastDeliveryError = {
-  code: string;
-  message: string;
-  occurredAt: Date;
-  retryable: boolean;
-};
-
 export type WebhookDelivery = {
   webhookEndpointId: string;
   webhookEndpointUrl: string;
-  deliveryState: MailboxObservabilityDeliveryState;
+  deliveryState: DeliveryState;
   consecutiveFailures: number;
   pendingDeliveries: number;
   processingDeliveries: number;
   failedDeliveries: number;
   lastDeliveryAt: Date | null;
-  lastDeliveryError: MailboxObservabilityLastDeliveryError | null;
-};
-
-export const LatestSyncRunStatus = {
-  Running: "running",
-  Completed: "completed",
-  SkippedDueToActiveLease: "skipped_due_to_active_lease",
-  ReconnectRequired: "reconnect_required",
-  DispatchRetryExhausted: "dispatch_retry_exhausted",
-  FailedAfterLeaseAcquired: "failed_after_lease_acquired",
-  LeaseLost: "lease_lost",
-} as const;
-export type LatestSyncRunStatus = OpenEnum<typeof LatestSyncRunStatus>;
-
-export type LatestSyncRun = {
-  syncRunId: string;
-  mailboxId: string;
-  startedAt: Date;
-  completedAt: Date | null;
-  status: LatestSyncRunStatus;
-  detail: string | null;
-  eventsEmitted: number | null;
-  leaseOwnerId: string | null;
-  previousCursor: string | null;
-  nextCursor: string | null;
-  cursorAdvanced: boolean | null;
+  lastDeliveryError: ErrorDetail | null;
 };
 
 export type MailboxObservability = {
@@ -131,7 +74,7 @@ export type MailboxObservability = {
   cursor: Cursor;
   lease: Lease;
   webhookDeliveries: Array<WebhookDelivery>;
-  latestSyncRun: LatestSyncRun | null;
+  latestSyncRun: SyncRun | null;
 };
 
 /** @internal */
@@ -140,26 +83,10 @@ export const MailboxObservabilityObject$inboundSchema: z.ZodMiniEnum<
 > = z.enum(MailboxObservabilityObject);
 
 /** @internal */
-export const LagStatus$inboundSchema: z.ZodMiniType<LagStatus, unknown> =
-  openEnums.inboundSchema(LagStatus);
-
-/** @internal */
-export const MailboxObservabilitySyncState$inboundSchema: z.ZodMiniType<
-  MailboxObservabilitySyncState,
-  unknown
-> = openEnums.inboundSchema(MailboxObservabilitySyncState);
-
-/** @internal */
-export const MailboxObservabilityWatchState$inboundSchema: z.ZodMiniType<
-  MailboxObservabilityWatchState,
-  unknown
-> = openEnums.inboundSchema(MailboxObservabilityWatchState);
-
-/** @internal */
 export const Lag$inboundSchema: z.ZodMiniType<Lag, unknown> = z.object({
-  status: LagStatus$inboundSchema,
-  syncState: MailboxObservabilitySyncState$inboundSchema,
-  watchState: MailboxObservabilityWatchState$inboundSchema,
+  status: MailboxStatus$inboundSchema,
+  syncState: SyncState$inboundSchema,
+  watchState: WatchState$inboundSchema,
   lastSuccessfulSyncAt: types.nullable(types.date()),
   lagSeconds: types.nullable(types.number()),
 });
@@ -215,49 +142,19 @@ export function leaseFromJSON(
 }
 
 /** @internal */
-export const MailboxObservabilityDeliveryState$inboundSchema: z.ZodMiniType<
-  MailboxObservabilityDeliveryState,
-  unknown
-> = openEnums.inboundSchema(MailboxObservabilityDeliveryState);
-
-/** @internal */
-export const MailboxObservabilityLastDeliveryError$inboundSchema: z.ZodMiniType<
-  MailboxObservabilityLastDeliveryError,
-  unknown
-> = z.object({
-  code: types.string(),
-  message: types.string(),
-  occurredAt: types.date(),
-  retryable: types.boolean(),
-});
-
-export function mailboxObservabilityLastDeliveryErrorFromJSON(
-  jsonString: string,
-): SafeParseResult<MailboxObservabilityLastDeliveryError, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) =>
-      MailboxObservabilityLastDeliveryError$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'MailboxObservabilityLastDeliveryError' from JSON`,
-  );
-}
-
-/** @internal */
 export const WebhookDelivery$inboundSchema: z.ZodMiniType<
   WebhookDelivery,
   unknown
 > = z.object({
   webhookEndpointId: types.string(),
   webhookEndpointUrl: types.string(),
-  deliveryState: MailboxObservabilityDeliveryState$inboundSchema,
+  deliveryState: DeliveryState$inboundSchema,
   consecutiveFailures: types.number(),
   pendingDeliveries: types.number(),
   processingDeliveries: types.number(),
   failedDeliveries: types.number(),
   lastDeliveryAt: types.nullable(types.date()),
-  lastDeliveryError: types.nullable(
-    z.lazy(() => MailboxObservabilityLastDeliveryError$inboundSchema),
-  ),
+  lastDeliveryError: types.nullable(ErrorDetail$inboundSchema),
 });
 
 export function webhookDeliveryFromJSON(
@@ -267,40 +164,6 @@ export function webhookDeliveryFromJSON(
     jsonString,
     (x) => WebhookDelivery$inboundSchema.parse(JSON.parse(x)),
     `Failed to parse 'WebhookDelivery' from JSON`,
-  );
-}
-
-/** @internal */
-export const LatestSyncRunStatus$inboundSchema: z.ZodMiniType<
-  LatestSyncRunStatus,
-  unknown
-> = openEnums.inboundSchema(LatestSyncRunStatus);
-
-/** @internal */
-export const LatestSyncRun$inboundSchema: z.ZodMiniType<
-  LatestSyncRun,
-  unknown
-> = z.object({
-  syncRunId: types.string(),
-  mailboxId: types.string(),
-  startedAt: types.date(),
-  completedAt: types.nullable(types.date()),
-  status: LatestSyncRunStatus$inboundSchema,
-  detail: types.nullable(types.string()),
-  eventsEmitted: types.nullable(types.number()),
-  leaseOwnerId: types.nullable(types.string()),
-  previousCursor: types.nullable(types.string()),
-  nextCursor: types.nullable(types.string()),
-  cursorAdvanced: types.nullable(types.boolean()),
-});
-
-export function latestSyncRunFromJSON(
-  jsonString: string,
-): SafeParseResult<LatestSyncRun, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => LatestSyncRun$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'LatestSyncRun' from JSON`,
   );
 }
 
@@ -316,7 +179,7 @@ export const MailboxObservability$inboundSchema: z.ZodMiniType<
   cursor: z.lazy(() => Cursor$inboundSchema),
   lease: z.lazy(() => Lease$inboundSchema),
   webhookDeliveries: z.array(z.lazy(() => WebhookDelivery$inboundSchema)),
-  latestSyncRun: types.nullable(z.lazy(() => LatestSyncRun$inboundSchema)),
+  latestSyncRun: types.nullable(SyncRun$inboundSchema),
 });
 
 export function mailboxObservabilityFromJSON(

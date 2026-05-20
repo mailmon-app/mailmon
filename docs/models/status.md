@@ -1,11 +1,11 @@
-# ReplayStatus
+# Status
 
 ## Example Usage
 
 ```typescript
-import { ReplayStatus } from "@mailmon.dev/sdk/models";
+import { Status } from "@mailmon.dev/sdk/models";
 
-let value: ReplayStatus = "running";
+let value: Status = "failed";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

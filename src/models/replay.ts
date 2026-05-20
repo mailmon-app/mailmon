@@ -15,19 +15,19 @@ export const ReplayObject = {
 } as const;
 export type ReplayObject = ClosedEnum<typeof ReplayObject>;
 
-export const ReplayStatus = {
+export const Status = {
   Queued: "queued",
   Running: "running",
   Completed: "completed",
   Failed: "failed",
   Cancelled: "cancelled",
 } as const;
-export type ReplayStatus = OpenEnum<typeof ReplayStatus>;
+export type Status = OpenEnum<typeof Status>;
 
 export type Replay = {
   id: string;
   object: ReplayObject;
-  status: ReplayStatus;
+  status: Status;
   mailboxId: string;
   webhookEndpointId: string;
   startTime: Date;
@@ -44,14 +44,14 @@ export const ReplayObject$inboundSchema: z.ZodMiniEnum<typeof ReplayObject> = z
   .enum(ReplayObject);
 
 /** @internal */
-export const ReplayStatus$inboundSchema: z.ZodMiniType<ReplayStatus, unknown> =
-  openEnums.inboundSchema(ReplayStatus);
+export const Status$inboundSchema: z.ZodMiniType<Status, unknown> = openEnums
+  .inboundSchema(Status);
 
 /** @internal */
 export const Replay$inboundSchema: z.ZodMiniType<Replay, unknown> = z.object({
   id: types.string(),
   object: ReplayObject$inboundSchema,
-  status: ReplayStatus$inboundSchema,
+  status: Status$inboundSchema,
   mailboxId: types.string(),
   webhookEndpointId: types.string(),
   startTime: types.date(),

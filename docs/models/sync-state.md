@@ -1,11 +1,11 @@
-# MailboxSyncState
+# SyncState
 
 ## Example Usage
 
 ```typescript
-import { MailboxSyncState } from "@mailmon.dev/sdk/models";
+import { SyncState } from "@mailmon.dev/sdk/models";
 
-let value: MailboxSyncState = "failed";
+let value: SyncState = "healthy";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

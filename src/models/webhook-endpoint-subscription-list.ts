@@ -4,11 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../lib/schemas.js";
-import * as openEnums from "../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../types/enums.js";
+import { ClosedEnum } from "../types/enums.js";
 import { Result as SafeParseResult } from "../types/fp.js";
 import * as types from "../types/primitives.js";
 import { SDKValidationError } from "./errors/sdk-validation-error.js";
+import {
+  WebhookEventType,
+  WebhookEventType$inboundSchema,
+} from "./webhook-event-type.js";
 
 export const WebhookEndpointSubscriptionListObjectList = {
   List: "list",
@@ -24,21 +27,12 @@ export type ObjectWebhookEndpointSubscription = ClosedEnum<
   typeof ObjectWebhookEndpointSubscription
 >;
 
-export const WebhookEndpointSubscriptionListEventType = {
-  MessageCreated: "message.created",
-  MessageUpdated: "message.updated",
-  ThreadUpdated: "thread.updated",
-} as const;
-export type WebhookEndpointSubscriptionListEventType = OpenEnum<
-  typeof WebhookEndpointSubscriptionListEventType
->;
-
 export type WebhookEndpointSubscriptionListData = {
   id: string;
   object: ObjectWebhookEndpointSubscription;
   webhookEndpointId: string;
   mailboxId: string;
-  eventTypes: Array<WebhookEndpointSubscriptionListEventType>;
+  eventTypes: Array<WebhookEventType>;
   createdAt: Date;
 };
 
@@ -60,11 +54,6 @@ export const ObjectWebhookEndpointSubscription$inboundSchema: z.ZodMiniEnum<
 > = z.enum(ObjectWebhookEndpointSubscription);
 
 /** @internal */
-export const WebhookEndpointSubscriptionListEventType$inboundSchema:
-  z.ZodMiniType<WebhookEndpointSubscriptionListEventType, unknown> = openEnums
-    .inboundSchema(WebhookEndpointSubscriptionListEventType);
-
-/** @internal */
 export const WebhookEndpointSubscriptionListData$inboundSchema: z.ZodMiniType<
   WebhookEndpointSubscriptionListData,
   unknown
@@ -73,7 +62,7 @@ export const WebhookEndpointSubscriptionListData$inboundSchema: z.ZodMiniType<
   object: ObjectWebhookEndpointSubscription$inboundSchema,
   webhookEndpointId: types.string(),
   mailboxId: types.string(),
-  eventTypes: z.array(WebhookEndpointSubscriptionListEventType$inboundSchema),
+  eventTypes: z.array(WebhookEventType$inboundSchema),
   createdAt: types.date(),
 });
 

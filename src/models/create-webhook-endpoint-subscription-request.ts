@@ -3,27 +3,15 @@
  */
 
 import * as z from "zod/v4-mini";
-import * as openEnums from "../types/enums.js";
-import { OpenEnum } from "../types/enums.js";
-
-export const CreateWebhookEndpointSubscriptionRequestEventType = {
-  MessageCreated: "message.created",
-  MessageUpdated: "message.updated",
-  ThreadUpdated: "thread.updated",
-} as const;
-export type CreateWebhookEndpointSubscriptionRequestEventType = OpenEnum<
-  typeof CreateWebhookEndpointSubscriptionRequestEventType
->;
+import {
+  WebhookEventType,
+  WebhookEventType$outboundSchema,
+} from "./webhook-event-type.js";
 
 export type CreateWebhookEndpointSubscriptionRequest = {
   mailboxIds: Array<string>;
-  eventTypes: Array<CreateWebhookEndpointSubscriptionRequestEventType>;
+  eventTypes: Array<WebhookEventType>;
 };
-
-/** @internal */
-export const CreateWebhookEndpointSubscriptionRequestEventType$outboundSchema:
-  z.ZodMiniType<string, CreateWebhookEndpointSubscriptionRequestEventType> =
-    openEnums.outboundSchema(CreateWebhookEndpointSubscriptionRequestEventType);
 
 /** @internal */
 export type CreateWebhookEndpointSubscriptionRequest$Outbound = {
@@ -38,9 +26,7 @@ export const CreateWebhookEndpointSubscriptionRequest$outboundSchema:
     CreateWebhookEndpointSubscriptionRequest
   > = z.object({
     mailboxIds: z.array(z.string()),
-    eventTypes: z.array(
-      CreateWebhookEndpointSubscriptionRequestEventType$outboundSchema,
-    ),
+    eventTypes: z.array(WebhookEventType$outboundSchema),
   });
 
 export function createWebhookEndpointSubscriptionRequestToJSON(

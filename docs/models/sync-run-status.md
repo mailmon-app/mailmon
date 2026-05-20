@@ -1,11 +1,11 @@
-# LatestSyncRunStatus
+# SyncRunStatus
 
 ## Example Usage
 
 ```typescript
-import { LatestSyncRunStatus } from "@mailmon.dev/sdk/models";
+import { SyncRunStatus } from "@mailmon.dev/sdk/models";
 
-let value: LatestSyncRunStatus = "reconnect_required";
+let value: SyncRunStatus = "running";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

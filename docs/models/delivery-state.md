@@ -1,11 +1,11 @@
-# WebhookEndpointDeliveryState
+# DeliveryState
 
 ## Example Usage
 
 ```typescript
-import { WebhookEndpointDeliveryState } from "@mailmon.dev/sdk/models";
+import { DeliveryState } from "@mailmon.dev/sdk/models";
 
-let value: WebhookEndpointDeliveryState = "failing";
+let value: DeliveryState = "failing";
 
 // Open enum: unrecognized values are captured as Unrecognized<string>
 ```

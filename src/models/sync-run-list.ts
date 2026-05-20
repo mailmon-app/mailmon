@@ -4,45 +4,20 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../lib/schemas.js";
-import * as openEnums from "../types/enums.js";
-import { ClosedEnum, OpenEnum } from "../types/enums.js";
+import { ClosedEnum } from "../types/enums.js";
 import { Result as SafeParseResult } from "../types/fp.js";
 import * as types from "../types/primitives.js";
 import { SDKValidationError } from "./errors/sdk-validation-error.js";
+import { SyncRun, SyncRun$inboundSchema } from "./sync-run.js";
 
 export const SyncRunListObject = {
   List: "list",
 } as const;
 export type SyncRunListObject = ClosedEnum<typeof SyncRunListObject>;
 
-export const SyncRunListStatus = {
-  Running: "running",
-  Completed: "completed",
-  SkippedDueToActiveLease: "skipped_due_to_active_lease",
-  ReconnectRequired: "reconnect_required",
-  DispatchRetryExhausted: "dispatch_retry_exhausted",
-  FailedAfterLeaseAcquired: "failed_after_lease_acquired",
-  LeaseLost: "lease_lost",
-} as const;
-export type SyncRunListStatus = OpenEnum<typeof SyncRunListStatus>;
-
-export type SyncRunListData = {
-  syncRunId: string;
-  mailboxId: string;
-  startedAt: Date;
-  completedAt: Date | null;
-  status: SyncRunListStatus;
-  detail: string | null;
-  eventsEmitted: number | null;
-  leaseOwnerId: string | null;
-  previousCursor: string | null;
-  nextCursor: string | null;
-  cursorAdvanced: boolean | null;
-};
-
 export type SyncRunList = {
   object: SyncRunListObject;
-  data: Array<SyncRunListData>;
+  data: Array<SyncRun>;
   nextCursor: string | null;
 };
 
@@ -52,44 +27,10 @@ export const SyncRunListObject$inboundSchema: z.ZodMiniEnum<
 > = z.enum(SyncRunListObject);
 
 /** @internal */
-export const SyncRunListStatus$inboundSchema: z.ZodMiniType<
-  SyncRunListStatus,
-  unknown
-> = openEnums.inboundSchema(SyncRunListStatus);
-
-/** @internal */
-export const SyncRunListData$inboundSchema: z.ZodMiniType<
-  SyncRunListData,
-  unknown
-> = z.object({
-  syncRunId: types.string(),
-  mailboxId: types.string(),
-  startedAt: types.date(),
-  completedAt: types.nullable(types.date()),
-  status: SyncRunListStatus$inboundSchema,
-  detail: types.nullable(types.string()),
-  eventsEmitted: types.nullable(types.number()),
-  leaseOwnerId: types.nullable(types.string()),
-  previousCursor: types.nullable(types.string()),
-  nextCursor: types.nullable(types.string()),
-  cursorAdvanced: types.nullable(types.boolean()),
-});
-
-export function syncRunListDataFromJSON(
-  jsonString: string,
-): SafeParseResult<SyncRunListData, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => SyncRunListData$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'SyncRunListData' from JSON`,
-  );
-}
-
-/** @internal */
 export const SyncRunList$inboundSchema: z.ZodMiniType<SyncRunList, unknown> = z
   .object({
     object: SyncRunListObject$inboundSchema,
-    data: z.array(z.lazy(() => SyncRunListData$inboundSchema)),
+    data: z.array(SyncRun$inboundSchema),
     nextCursor: types.nullable(types.string()),
   });
 
