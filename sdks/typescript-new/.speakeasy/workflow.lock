@@ -1,0 +1,39 @@
+speakeasyVersion: 1.763.2
+sources:
+    Mailmon API:
+        sourceNamespace: mailmon-api
+        sourceRevisionDigest: sha256:b40777306c512991279cbca3226ca050a420aec27ffb69b90487a6c8a0fa781f
+        sourceBlobDigest: sha256:e104d36615477292fa2761c01dc00a2c1fe6a795b1e454a5907219a458f0d3df
+        tags:
+            - latest
+            - 1.0.0
+targets:
+    mailmon:
+        source: Mailmon API
+        sourceNamespace: mailmon-api
+        sourceRevisionDigest: sha256:b40777306c512991279cbca3226ca050a420aec27ffb69b90487a6c8a0fa781f
+        sourceBlobDigest: sha256:e104d36615477292fa2761c01dc00a2c1fe6a795b1e454a5907219a458f0d3df
+        codeSamplesNamespace: mailmon-api-typescript-code-samples
+        codeSamplesRevisionDigest: sha256:4797b2f584189e462dc1cba29cfbed6aecb8273e1e3e873e38c30b1f05ebe4a2
+workflow:
+    workflowVersion: 1.0.0
+    speakeasyVersion: latest
+    sources:
+        Mailmon API:
+            inputs:
+                - location: ../../apps/docs/api-reference/openapi.json
+            overlays:
+                - location: .speakeasy/speakeasy-modifications-overlay.yaml
+            output: .speakeasy/out.openapi.yaml
+            registry:
+                location: registry.speakeasyapi.dev/mailmon/sdk/mailmon-api
+    targets:
+        mailmon:
+            target: typescript
+            source: Mailmon API
+            codeSamples:
+                registry:
+                    location: registry.speakeasyapi.dev/mailmon/sdk/mailmon-api-typescript-code-samples
+                labelOverride:
+                    fixedValue: Typescript (SDK)
+                blocking: false

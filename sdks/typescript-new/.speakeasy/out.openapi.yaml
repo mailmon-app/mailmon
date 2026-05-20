@@ -1,0 +1,1343 @@
+openapi: "3.1.0"
+info:
+  title: "Mailmon API"
+  description: "Development documentation"
+  version: "1.0.0"
+servers:
+  - url: "https://api.mailmon.dev"
+    description: "Production"
+  - url: "http://localhost:3000"
+    description: "Local development"
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: "http"
+      scheme: "bearer"
+  schemas:
+    CreateConnectSessionRequest:
+      type: "object"
+      properties:
+        provider:
+          type: "string"
+          enum:
+            - "gmail"
+        tenantExternalId:
+          type: "string"
+          minLength: 1
+        mailboxExternalId:
+          type: "string"
+          minLength: 1
+        redirectUrl:
+          type: "string"
+          minLength: 1
+      required:
+        - "provider"
+        - "tenantExternalId"
+        - "mailboxExternalId"
+        - "redirectUrl"
+      additionalProperties: false
+    ConnectSession:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+        object:
+          type: "string"
+          enum:
+            - "connect_session"
+        connectUrl:
+          type: "string"
+          minLength: 1
+        expiresAt:
+          type: "string"
+          format: "date-time"
+      required:
+        - "id"
+        - "object"
+        - "connectUrl"
+        - "expiresAt"
+      additionalProperties: false
+    ProblemDetails:
+      type: "object"
+      properties:
+        type:
+          type: "string"
+          minLength: 1
+        title:
+          type: "string"
+          minLength: 1
+        status:
+          type: "integer"
+        code:
+          type: "string"
+          minLength: 1
+        detail:
+          type: "string"
+          minLength: 1
+        resource:
+          type: "object"
+          additionalProperties:
+            type: "string"
+        retryable:
+          type: "boolean"
+      required:
+        - "type"
+        - "title"
+        - "status"
+        - "code"
+        - "detail"
+        - "retryable"
+      additionalProperties: false
+    CreateWebhookEndpointRequest:
+      type: "object"
+      properties:
+        url:
+          type: "string"
+          minLength: 1
+        description:
+          anyOf:
+            - type: "string"
+              minLength: 1
+            - type: "null"
+      required:
+        - "url"
+      additionalProperties: false
+    WebhookEndpoint:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+        object:
+          type: "string"
+          enum:
+            - "webhook_endpoint"
+        url:
+          type: "string"
+          minLength: 1
+        description:
+          anyOf:
+            - type: "string"
+              minLength: 1
+            - type: "null"
+        deliveryState:
+          $ref: "#/components/schemas/DeliveryState"
+        lastDeliveryAt:
+          anyOf:
+            - type: "string"
+              format: "date-time"
+            - type: "null"
+        lastDeliveryError:
+          anyOf:
+            - $ref: "#/components/schemas/ErrorDetail"
+            - type: "null"
+        createdAt:
+          type: "string"
+          format: "date-time"
+        secret:
+          type: "string"
+          minLength: 1
+      required:
+        - "id"
+        - "object"
+        - "url"
+        - "description"
+        - "deliveryState"
+        - "lastDeliveryAt"
+        - "lastDeliveryError"
+        - "createdAt"
+        - "secret"
+      additionalProperties: false
+    CreateWebhookEndpointSubscriptionRequest:
+      type: "object"
+      properties:
+        mailboxIds:
+          type: "array"
+          minItems: 1
+          items:
+            type: "string"
+            minLength: 1
+        eventTypes:
+          type: "array"
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WebhookEventType"
+      required:
+        - "mailboxIds"
+        - "eventTypes"
+      additionalProperties: false
+    WebhookEndpointSubscriptionList:
+      type: "object"
+      properties:
+        object:
+          type: "string"
+          enum:
+            - "list"
+        data:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              id:
+                type: "string"
+                minLength: 1
+              object:
+                type: "string"
+                enum:
+                  - "webhook_endpoint_subscription"
+              webhookEndpointId:
+                type: "string"
+                minLength: 1
+              mailboxId:
+                type: "string"
+                minLength: 1
+              eventTypes:
+                type: "array"
+                items:
+                  $ref: "#/components/schemas/WebhookEventType"
+              createdAt:
+                type: "string"
+                format: "date-time"
+            required:
+              - "id"
+              - "object"
+              - "webhookEndpointId"
+              - "mailboxId"
+              - "eventTypes"
+              - "createdAt"
+            additionalProperties: false
+        nextCursor:
+          anyOf:
+            - type: "string"
+            - type: "null"
+      required:
+        - "object"
+        - "data"
+        - "nextCursor"
+      additionalProperties: false
+    Mailbox:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+        object:
+          type: "string"
+          enum:
+            - "mailbox"
+        provider:
+          type: "string"
+          enum:
+            - "gmail"
+        emailAddress:
+          type: "string"
+          minLength: 1
+        status:
+          $ref: "#/components/schemas/MailboxStatus"
+        syncState:
+          $ref: "#/components/schemas/SyncState"
+        watchState:
+          $ref: "#/components/schemas/WatchState"
+        initializedAt:
+          anyOf:
+            - type: "string"
+              format: "date-time"
+            - type: "null"
+        lastSuccessfulSyncAt:
+          anyOf:
+            - type: "string"
+              format: "date-time"
+            - type: "null"
+        lastError:
+          anyOf:
+            - $ref: "#/components/schemas/ErrorDetail"
+            - type: "null"
+      required:
+        - "id"
+        - "object"
+        - "provider"
+        - "emailAddress"
+        - "status"
+        - "syncState"
+        - "watchState"
+        - "initializedAt"
+        - "lastSuccessfulSyncAt"
+        - "lastError"
+      additionalProperties: false
+    SyncRunList:
+      type: "object"
+      properties:
+        object:
+          type: "string"
+          enum:
+            - "list"
+        data:
+          type: "array"
+          items:
+            $ref: "#/components/schemas/SyncRun"
+        nextCursor:
+          anyOf:
+            - type: "string"
+            - type: "null"
+      required:
+        - "object"
+        - "data"
+        - "nextCursor"
+      additionalProperties: false
+    MailboxObservability:
+      type: "object"
+      properties:
+        object:
+          type: "string"
+          enum:
+            - "mailbox_observability"
+        mailboxId:
+          type: "string"
+          minLength: 1
+        generatedAt:
+          type: "string"
+          format: "date-time"
+        lag:
+          type: "object"
+          properties:
+            status:
+              $ref: "#/components/schemas/MailboxStatus"
+            syncState:
+              $ref: "#/components/schemas/SyncState"
+            watchState:
+              $ref: "#/components/schemas/WatchState"
+            lastSuccessfulSyncAt:
+              anyOf:
+                - type: "string"
+                  format: "date-time"
+                - type: "null"
+            lagSeconds:
+              anyOf:
+                - type: "integer"
+                - type: "null"
+          required:
+            - "status"
+            - "syncState"
+            - "watchState"
+            - "lastSuccessfulSyncAt"
+            - "lagSeconds"
+          additionalProperties: false
+        cursor:
+          type: "object"
+          properties:
+            currentCursor:
+              anyOf:
+                - type: "string"
+                - type: "null"
+            previousCursor:
+              anyOf:
+                - type: "string"
+                - type: "null"
+            nextCursor:
+              anyOf:
+                - type: "string"
+                - type: "null"
+            advanced:
+              anyOf:
+                - type: "boolean"
+                - type: "null"
+            advancedAt:
+              anyOf:
+                - type: "string"
+                  format: "date-time"
+                - type: "null"
+          required:
+            - "currentCursor"
+            - "previousCursor"
+            - "nextCursor"
+            - "advanced"
+            - "advancedAt"
+          additionalProperties: false
+        lease:
+          type: "object"
+          properties:
+            activeLeaseOwner:
+              anyOf:
+                - type: "string"
+                - type: "null"
+            activeLeaseHeartbeatAt:
+              anyOf:
+                - type: "string"
+                  format: "date-time"
+                - type: "null"
+            activeLeaseExpiresAt:
+              anyOf:
+                - type: "string"
+                  format: "date-time"
+                - type: "null"
+            contentionCount24h:
+              type: "integer"
+            latestContentionAt:
+              anyOf:
+                - type: "string"
+                  format: "date-time"
+                - type: "null"
+            leaseLossCount24h:
+              type: "integer"
+            latestLeaseLossAt:
+              anyOf:
+                - type: "string"
+                  format: "date-time"
+                - type: "null"
+          required:
+            - "activeLeaseOwner"
+            - "activeLeaseHeartbeatAt"
+            - "activeLeaseExpiresAt"
+            - "contentionCount24h"
+            - "latestContentionAt"
+            - "leaseLossCount24h"
+            - "latestLeaseLossAt"
+          additionalProperties: false
+        webhookDeliveries:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              webhookEndpointId:
+                type: "string"
+                minLength: 1
+              webhookEndpointUrl:
+                type: "string"
+                minLength: 1
+              deliveryState:
+                $ref: "#/components/schemas/DeliveryState"
+              consecutiveFailures:
+                type: "integer"
+              pendingDeliveries:
+                type: "integer"
+              processingDeliveries:
+                type: "integer"
+              failedDeliveries:
+                type: "integer"
+              lastDeliveryAt:
+                anyOf:
+                  - type: "string"
+                    format: "date-time"
+                  - type: "null"
+              lastDeliveryError:
+                anyOf:
+                  - $ref: "#/components/schemas/ErrorDetail"
+                  - type: "null"
+            required:
+              - "webhookEndpointId"
+              - "webhookEndpointUrl"
+              - "deliveryState"
+              - "consecutiveFailures"
+              - "pendingDeliveries"
+              - "processingDeliveries"
+              - "failedDeliveries"
+              - "lastDeliveryAt"
+              - "lastDeliveryError"
+            additionalProperties: false
+        latestSyncRun:
+          anyOf:
+            - $ref: "#/components/schemas/SyncRun"
+            - type: "null"
+      required:
+        - "object"
+        - "mailboxId"
+        - "generatedAt"
+        - "lag"
+        - "cursor"
+        - "lease"
+        - "webhookDeliveries"
+        - "latestSyncRun"
+      additionalProperties: false
+    CreateReplayRequest:
+      type: "object"
+      properties:
+        mailboxId:
+          type: "string"
+          minLength: 1
+        webhookEndpointId:
+          type: "string"
+          minLength: 1
+        startTime:
+          type: "string"
+          minLength: 1
+        endTime:
+          type: "string"
+          minLength: 1
+      required:
+        - "mailboxId"
+        - "webhookEndpointId"
+        - "startTime"
+        - "endTime"
+      additionalProperties: false
+    Replay:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+        object:
+          type: "string"
+          enum:
+            - "replay"
+        status:
+          type: "string"
+          enum:
+            - "queued"
+            - "running"
+            - "completed"
+            - "failed"
+            - "cancelled"
+          x-speakeasy-unknown-values: "allow"
+        mailboxId:
+          type: "string"
+          minLength: 1
+        webhookEndpointId:
+          type: "string"
+          minLength: 1
+        startTime:
+          type: "string"
+          format: "date-time"
+        endTime:
+          type: "string"
+          format: "date-time"
+        eventsReplayed:
+          anyOf:
+            - type: "integer"
+            - type: "null"
+        createdAt:
+          type: "string"
+          format: "date-time"
+        startedAt:
+          anyOf:
+            - type: "string"
+              format: "date-time"
+            - type: "null"
+        completedAt:
+          anyOf:
+            - type: "string"
+              format: "date-time"
+            - type: "null"
+        lastError:
+          anyOf:
+            - type: "string"
+            - type: "null"
+      required:
+        - "id"
+        - "object"
+        - "status"
+        - "mailboxId"
+        - "webhookEndpointId"
+        - "startTime"
+        - "endTime"
+        - "eventsReplayed"
+        - "createdAt"
+        - "startedAt"
+        - "completedAt"
+        - "lastError"
+      additionalProperties: false
+    MessageList:
+      type: "object"
+      properties:
+        object:
+          type: "string"
+          enum:
+            - "list"
+        data:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              id:
+                type: "string"
+                minLength: 1
+              mailboxId:
+                type: "string"
+                minLength: 1
+              threadId:
+                type: "string"
+                minLength: 1
+              providerMessageId:
+                type: "string"
+                minLength: 1
+              subject:
+                type: "string"
+              from:
+                type: "object"
+                properties:
+                  name:
+                    anyOf:
+                      - type: "string"
+                      - type: "null"
+                  email:
+                    type: "string"
+                    minLength: 1
+                required:
+                  - "name"
+                  - "email"
+                additionalProperties: false
+              snippet:
+                type: "string"
+              receivedAt:
+                type: "string"
+                format: "date-time"
+              labelIds:
+                type: "array"
+                items:
+                  type: "string"
+                  minLength: 1
+            required:
+              - "id"
+              - "mailboxId"
+              - "threadId"
+              - "providerMessageId"
+              - "subject"
+              - "from"
+              - "snippet"
+              - "receivedAt"
+              - "labelIds"
+            additionalProperties: false
+        nextCursor:
+          anyOf:
+            - type: "string"
+            - type: "null"
+      required:
+        - "object"
+        - "data"
+        - "nextCursor"
+      additionalProperties: false
+    Message:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+        mailboxId:
+          type: "string"
+          minLength: 1
+        threadId:
+          type: "string"
+          minLength: 1
+        providerMessageId:
+          type: "string"
+          minLength: 1
+        subject:
+          type: "string"
+        from:
+          type: "object"
+          properties:
+            name:
+              anyOf:
+                - type: "string"
+                - type: "null"
+            email:
+              type: "string"
+              minLength: 1
+          required:
+            - "name"
+            - "email"
+          additionalProperties: false
+        snippet:
+          type: "string"
+        receivedAt:
+          type: "string"
+          format: "date-time"
+        labelIds:
+          type: "array"
+          items:
+            type: "string"
+            minLength: 1
+      required:
+        - "id"
+        - "mailboxId"
+        - "threadId"
+        - "providerMessageId"
+        - "subject"
+        - "from"
+        - "snippet"
+        - "receivedAt"
+        - "labelIds"
+      additionalProperties: false
+    ThreadList:
+      type: "object"
+      properties:
+        object:
+          type: "string"
+          enum:
+            - "list"
+        data:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              id:
+                type: "string"
+                minLength: 1
+              object:
+                type: "string"
+                enum:
+                  - "thread"
+              mailboxId:
+                type: "string"
+                minLength: 1
+              providerThreadId:
+                type: "string"
+                minLength: 1
+              subject:
+                type: "string"
+              lastMessageAt:
+                type: "string"
+                format: "date-time"
+            required:
+              - "id"
+              - "object"
+              - "mailboxId"
+              - "providerThreadId"
+              - "subject"
+              - "lastMessageAt"
+            additionalProperties: false
+        nextCursor:
+          anyOf:
+            - type: "string"
+            - type: "null"
+      required:
+        - "object"
+        - "data"
+        - "nextCursor"
+      additionalProperties: false
+    Thread:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          minLength: 1
+        object:
+          type: "string"
+          enum:
+            - "thread"
+        mailboxId:
+          type: "string"
+          minLength: 1
+        providerThreadId:
+          type: "string"
+          minLength: 1
+        subject:
+          type: "string"
+        lastMessageAt:
+          type: "string"
+          format: "date-time"
+        messages:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              id:
+                type: "string"
+                minLength: 1
+              subject:
+                type: "string"
+              receivedAt:
+                type: "string"
+                format: "date-time"
+            required:
+              - "id"
+              - "subject"
+              - "receivedAt"
+            additionalProperties: false
+      required:
+        - "id"
+        - "object"
+        - "mailboxId"
+        - "providerThreadId"
+        - "subject"
+        - "lastMessageAt"
+        - "messages"
+      additionalProperties: false
+    ErrorDetail:
+      type: "object"
+      properties:
+        code:
+          type: "string"
+          minLength: 1
+        message:
+          type: "string"
+          minLength: 1
+        occurredAt:
+          type: "string"
+          format: "date-time"
+        retryable:
+          type: "boolean"
+      required:
+        - "code"
+        - "message"
+        - "occurredAt"
+        - "retryable"
+      additionalProperties: false
+    DeliveryState:
+      type: "string"
+      enum:
+        - "healthy"
+        - "degraded"
+        - "failing"
+      x-speakeasy-unknown-values: "allow"
+    WebhookEventType:
+      type: "string"
+      enum:
+        - "message.created"
+        - "message.updated"
+        - "thread.updated"
+      x-speakeasy-unknown-values: "allow"
+    MailboxStatus:
+      type: "string"
+      enum:
+        - "active"
+        - "reconnect_required"
+        - "disabled"
+      x-speakeasy-unknown-values: "allow"
+    SyncState:
+      type: "string"
+      enum:
+        - "initializing"
+        - "healthy"
+        - "lagging"
+        - "failed"
+      x-speakeasy-unknown-values: "allow"
+    WatchState:
+      type: "string"
+      enum:
+        - "active"
+        - "expiring"
+        - "expired"
+        - "unhealthy"
+      x-speakeasy-unknown-values: "allow"
+    SyncRun:
+      type: "object"
+      properties:
+        syncRunId:
+          type: "string"
+          minLength: 1
+        mailboxId:
+          type: "string"
+          minLength: 1
+        startedAt:
+          type: "string"
+          format: "date-time"
+        completedAt:
+          anyOf:
+            - type: "string"
+              format: "date-time"
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/SyncRunStatus"
+        detail:
+          anyOf:
+            - type: "string"
+            - type: "null"
+        eventsEmitted:
+          anyOf:
+            - type: "integer"
+            - type: "null"
+        leaseOwnerId:
+          anyOf:
+            - type: "string"
+            - type: "null"
+        previousCursor:
+          anyOf:
+            - type: "string"
+            - type: "null"
+        nextCursor:
+          anyOf:
+            - type: "string"
+            - type: "null"
+        cursorAdvanced:
+          anyOf:
+            - type: "boolean"
+            - type: "null"
+      required:
+        - "syncRunId"
+        - "mailboxId"
+        - "startedAt"
+        - "completedAt"
+        - "status"
+        - "detail"
+        - "eventsEmitted"
+        - "leaseOwnerId"
+        - "previousCursor"
+        - "nextCursor"
+        - "cursorAdvanced"
+      additionalProperties: false
+    SyncRunStatus:
+      type: "string"
+      enum:
+        - "running"
+        - "completed"
+        - "skipped_due_to_active_lease"
+        - "reconnect_required"
+        - "dispatch_retry_exhausted"
+        - "failed_after_lease_acquired"
+        - "lease_lost"
+      x-speakeasy-unknown-values: "allow"
+tags:
+  - name: "mailboxes"
+    description: "Mailbox connection, inspection, and sync observability operations."
+  - name: "webhook-endpoints"
+    description: "Webhook endpoint and mailbox subscription operations."
+  - name: "replays"
+    description: "Mailbox event replay operations."
+  - name: "messages"
+    description: "Mailbox message read operations."
+  - name: "threads"
+    description: "Mailbox thread read operations."
+paths:
+  /v1/mailboxes/connect-sessions:
+    post:
+      operationId: "mailboxes_create_connect_session"
+      summary: "Create a mailbox connect session"
+      responses:
+        "201":
+          description: "Connect session created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectSession"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectSessionRequest"
+      tags:
+        - "mailboxes"
+      x-speakeasy-group: "mailboxes"
+      x-speakeasy-name-override: "createConnectSession"
+  /v1/webhook-endpoints:
+    post:
+      operationId: "webhook_endpoints_create"
+      summary: "Create a webhook endpoint"
+      responses:
+        "201":
+          description: "Webhook endpoint created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpoint"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookEndpointRequest"
+      tags:
+        - "webhook-endpoints"
+      x-speakeasy-group: "webhookEndpoints"
+      x-speakeasy-name-override: "create"
+  /v1/webhook-endpoints/{endpointId}/subscriptions:
+    post:
+      operationId: "webhook_endpoints_create_subscription"
+      summary: "Create mailbox-scoped webhook subscriptions"
+      responses:
+        "201":
+          description: "Webhook subscriptions created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookEndpointSubscriptionList"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "404":
+          description: "Mailbox or webhook endpoint not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookEndpointSubscriptionRequest"
+      parameters:
+        - schema:
+            type: "string"
+          in: "path"
+          name: "endpointId"
+          required: true
+      tags:
+        - "webhook-endpoints"
+      x-speakeasy-group: "webhookEndpoints"
+      x-speakeasy-name-override: "createSubscription"
+  /v1/mailboxes/{mailboxId}:
+    get:
+      operationId: "mailboxes_get"
+      summary: "Get a mailbox"
+      parameters:
+        - in: "path"
+          name: "mailboxId"
+          required: true
+          schema:
+            type: "string"
+            minLength: 1
+      responses:
+        "200":
+          description: "Mailbox"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mailbox"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "404":
+          description: "Mailbox not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      tags:
+        - "mailboxes"
+      x-speakeasy-group: "mailboxes"
+      x-speakeasy-name-override: "getById"
+  /v1/mailboxes/{mailboxId}/sync-runs:
+    get:
+      operationId: "mailboxes_list_sync_runs"
+      summary: "List mailbox sync runs"
+      responses:
+        "200":
+          description: "Mailbox sync runs"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncRunList"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      parameters:
+        - in: "query"
+          name: "cursor"
+          schema:
+            type: "string"
+        - in: "query"
+          name: "limit"
+          schema:
+            type: "integer"
+            minimum: 1
+            maximum: 100
+        - schema:
+            type: "string"
+          in: "path"
+          name: "mailboxId"
+          required: true
+      tags:
+        - "mailboxes"
+      x-speakeasy-group: "mailboxes"
+      x-speakeasy-name-override: "listSyncRuns"
+      x-speakeasy-pagination:
+        type: "cursor"
+        inputs:
+          - name: "cursor"
+            in: "parameters"
+            type: "cursor"
+        outputs:
+          results: "$.data"
+          nextCursor: "$.nextCursor"
+  /v1/mailboxes/{mailboxId}/observability:
+    get:
+      operationId: "mailboxes_get_observability"
+      summary: "Get mailbox observability"
+      parameters:
+        - in: "path"
+          name: "mailboxId"
+          required: true
+          schema:
+            type: "string"
+            minLength: 1
+      responses:
+        "200":
+          description: "Mailbox observability"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MailboxObservability"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "404":
+          description: "Mailbox not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      tags:
+        - "mailboxes"
+      x-speakeasy-group: "mailboxes"
+      x-speakeasy-name-override: "getObservability"
+  /v1/replays:
+    post:
+      operationId: "replays_create"
+      summary: "Create a mailbox event replay"
+      responses:
+        "201":
+          description: "Replay created"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Replay"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "409":
+          description: "Overlapping active replay conflict"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReplayRequest"
+      tags:
+        - "replays"
+      x-speakeasy-group: "replays"
+      x-speakeasy-name-override: "create"
+  /v1/replays/{replayId}:
+    get:
+      operationId: "replays_get"
+      summary: "Get a replay"
+      parameters:
+        - in: "path"
+          name: "replayId"
+          required: true
+          schema:
+            type: "string"
+            minLength: 1
+      responses:
+        "200":
+          description: "Replay"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Replay"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "404":
+          description: "Replay not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      tags:
+        - "replays"
+      x-speakeasy-group: "replays"
+      x-speakeasy-name-override: "getById"
+  /v1/messages:
+    get:
+      operationId: "messages_list"
+      summary: "List mailbox messages"
+      responses:
+        "200":
+          description: "Mailbox messages"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageList"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      parameters:
+        - in: "query"
+          name: "cursor"
+          schema:
+            type: "string"
+        - in: "query"
+          name: "limit"
+          schema:
+            type: "integer"
+            minimum: 1
+            maximum: 100
+        - in: "query"
+          name: "mailboxId"
+          schema:
+            type: "string"
+            minLength: 1
+          required: true
+      tags:
+        - "messages"
+      x-speakeasy-group: "messages"
+      x-speakeasy-name-override: "list"
+      x-speakeasy-pagination:
+        type: "cursor"
+        inputs:
+          - name: "cursor"
+            in: "parameters"
+            type: "cursor"
+        outputs:
+          results: "$.data"
+          nextCursor: "$.nextCursor"
+  /v1/messages/{messageId}:
+    get:
+      operationId: "messages_get"
+      summary: "Get a message"
+      parameters:
+        - in: "path"
+          name: "messageId"
+          required: true
+          schema:
+            type: "string"
+            minLength: 1
+      responses:
+        "200":
+          description: "Message"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "404":
+          description: "Message not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      tags:
+        - "messages"
+      x-speakeasy-group: "messages"
+      x-speakeasy-name-override: "getById"
+  /v1/threads:
+    get:
+      operationId: "threads_list"
+      summary: "List mailbox threads"
+      responses:
+        "200":
+          description: "Mailbox threads"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadList"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      parameters:
+        - in: "query"
+          name: "cursor"
+          schema:
+            type: "string"
+        - in: "query"
+          name: "limit"
+          schema:
+            type: "integer"
+            minimum: 1
+            maximum: 100
+        - in: "query"
+          name: "mailboxId"
+          schema:
+            type: "string"
+            minLength: 1
+          required: true
+      tags:
+        - "threads"
+      x-speakeasy-group: "threads"
+      x-speakeasy-name-override: "list"
+      x-speakeasy-pagination:
+        type: "cursor"
+        inputs:
+          - name: "cursor"
+            in: "parameters"
+            type: "cursor"
+        outputs:
+          results: "$.data"
+          nextCursor: "$.nextCursor"
+  /v1/threads/{threadId}:
+    get:
+      operationId: "threads_get"
+      summary: "Get a thread"
+      parameters:
+        - in: "path"
+          name: "threadId"
+          required: true
+          schema:
+            type: "string"
+            minLength: 1
+      responses:
+        "200":
+          description: "Thread"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thread"
+        "400":
+          description: "Invalid request"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+        "404":
+          description: "Thread not found"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+      tags:
+        - "threads"
+      x-speakeasy-group: "threads"
+      x-speakeasy-name-override: "getById"
+x-speakeasy-retries:
+  strategy: "backoff"
+  backoff:
+    initialInterval: 500
+    maxInterval: 60000
+    maxElapsedTime: 3600000
+    exponent: 1.5
+  statusCodes:
+    - "5XX"
+    - "429"
+    - 408
+    - 429
+    - 5XX
+  retryConnectionErrors: true

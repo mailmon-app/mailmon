@@ -1,0 +1,144 @@
+overlay: 1.0.0
+x-speakeasy-jsonpath: rfc9535
+info:
+  title: Speakeasy Modifications
+  version: 0.0.2
+  x-speakeasy-metadata:
+    after: ""
+    before: ""
+    type: speakeasy-modifications
+actions:
+  - target: $["paths"]["/v1/threads/{threadId}"]["get"]
+    update:
+      x-speakeasy-group: threads
+      x-speakeasy-name-override: getById
+    x-speakeasy-metadata:
+      after: sdk.threads.getById()
+      before: sdk.<no_group>.getV1ThreadsByThreadId()
+      created_at: 1779227052327
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/mailboxes/{mailboxId}"]["get"]
+    update:
+      x-speakeasy-group: mailboxes
+      x-speakeasy-name-override: getById
+    x-speakeasy-metadata:
+      after: sdk.mailboxes.getById()
+      before: sdk.<no_group>.getV1MailboxesByMailboxId()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/messages/{messageId}"]["get"]
+    update:
+      x-speakeasy-group: messages
+      x-speakeasy-name-override: getById
+    x-speakeasy-metadata:
+      after: sdk.messages.getById()
+      before: sdk.<no_group>.getV1MessagesByMessageId()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/mailboxes/connect-sessions"]["post"]
+    update:
+      x-speakeasy-group: mailboxes
+      x-speakeasy-name-override: createConnectSession
+    x-speakeasy-metadata:
+      after: sdk.mailboxes.createConnectSession()
+      before: sdk.<no_group>.postV1MailboxesConnectSessions()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/replays"]["post"]
+    update:
+      x-speakeasy-group: replays
+      x-speakeasy-name-override: create
+    x-speakeasy-metadata:
+      after: sdk.replays.create()
+      before: sdk.<no_group>.postV1Replays()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/messages"]["get"]
+    update:
+      x-speakeasy-group: messages
+      x-speakeasy-name-override: list
+    x-speakeasy-metadata:
+      after: sdk.messages.list()
+      before: sdk.<no_group>.getV1Messages()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/mailboxes/{mailboxId}/observability"]["get"]
+    update:
+      x-speakeasy-group: mailboxes
+      x-speakeasy-name-override: getObservability
+    x-speakeasy-metadata:
+      after: sdk.mailboxes.getObservability()
+      before: sdk.<no_group>.getV1MailboxesByMailboxIdObservability()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/replays/{replayId}"]["get"]
+    update:
+      x-speakeasy-group: replays
+      x-speakeasy-name-override: getById
+    x-speakeasy-metadata:
+      after: sdk.replays.getById()
+      before: sdk.<no_group>.getV1ReplaysByReplayId()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/threads"]["get"]
+    update:
+      x-speakeasy-group: threads
+      x-speakeasy-name-override: list
+    x-speakeasy-metadata:
+      after: sdk.threads.list()
+      before: sdk.<no_group>.getV1Threads()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/webhook-endpoints"]["post"]
+    update:
+      x-speakeasy-group: webhookEndpoints
+      x-speakeasy-name-override: create
+    x-speakeasy-metadata:
+      after: sdk.webhookEndpoints.create()
+      before: sdk.<no_group>.postV1WebhookEndpoints()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/webhook-endpoints/{endpointId}/subscriptions"]["post"]
+    update:
+      x-speakeasy-group: webhookEndpoints
+      x-speakeasy-name-override: createSubscription
+    x-speakeasy-metadata:
+      after: sdk.webhookEndpoints.createSubscription()
+      before: sdk.<no_group>.postV1WebhookEndpointsByEndpointIdSubscriptions()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $["paths"]["/v1/mailboxes/{mailboxId}/sync-runs"]["get"]
+    update:
+      x-speakeasy-group: mailboxes
+      x-speakeasy-name-override: listSyncRuns
+    x-speakeasy-metadata:
+      after: sdk.mailboxes.listSyncRuns()
+      before: sdk.<no_group>.getV1MailboxesByMailboxIdSyncRuns()
+      created_at: 1779227052328
+      reviewed_at: 1779227067222
+      type: method-name
+  - target: $
+    update:
+      x-speakeasy-retries:
+        strategy: backoff
+        backoff:
+          initialInterval: 500
+          maxInterval: 60000
+          maxElapsedTime: 3600000
+          exponent: 1.5
+        statusCodes:
+          - 408
+          - 429
+          - 5XX
+        retryConnectionErrors: true
