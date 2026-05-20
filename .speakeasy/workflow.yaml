@@ -1,0 +1,22 @@
+workflowVersion: 1.0.0
+speakeasyVersion: latest
+sources:
+  mailmon-api:
+    inputs:
+      - location: apps/docs/api-reference/openapi.json
+    overlays:
+      - location: sdks/typescript-new/.speakeasy/speakeasy-modifications-overlay.yaml
+    output: sdks/typescript-new/.speakeasy/out.openapi.yaml
+    registry:
+      location: registry.speakeasyapi.dev/mailmon/sdk/mailmon-api
+targets:
+  mailmon-typescript:
+    target: typescript
+    source: mailmon-api
+    output: sdks/typescript-new
+    codeSamples:
+      registry:
+        location: registry.speakeasyapi.dev/mailmon/sdk/mailmon-api-typescript-code-samples
+      labelOverride:
+        fixedValue: Typescript (SDK)
+      blocking: false

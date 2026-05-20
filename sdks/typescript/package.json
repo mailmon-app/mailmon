@@ -1,6 +1,7 @@
 {
-  "name": "@mailmon.dev/sdk",
+  "name": "@mailmon.dev/sdk-fern-legacy",
   "version": "0.0.4",
+  "private": true,
   "description": "TypeScript SDK for the Mailmon API.",
   "license": "Apache-2.0",
   "repository": {
@@ -15,6 +16,6 @@
     "access": "public"
   },
   "scripts": {
-    "build": "echo 'already compiled by fern'"
+    "build": "echo 'legacy SDK package; not published'"
   }
 }

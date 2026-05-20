@@ -4,7 +4,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const changelogPath = join(repoRoot, "sdks", "typescript", "CHANGELOG.md");
+const sdkRoot = join(repoRoot, "sdks", "typescript-new");
+const packageJsonPath = join(sdkRoot, "package.json");
+const changelogPath = join(sdkRoot, "CHANGELOG.md");
+
+const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
 
 const run = (command, args) =>
   new Promise((resolve, reject) => {
@@ -40,9 +44,21 @@ try {
   }
 }
 
+const packageJson = await readJson(packageJsonPath);
+const version = packageJson.version;
+
 await run("pnpm", ["openapi:generate"]);
-await run("fern", ["generate", "--group", "ts-sdk", "--local", "--force"]);
-await run("node", ["scripts/apply-sdk-customizations.mjs"]);
+await run("speakeasy", [
+  "run",
+  "-y",
+  "--output",
+  "console",
+  "--target",
+  "mailmon-typescript",
+  "--set-version",
+  version,
+  "--skip-versioning",
+]);
 
 if (changelog !== undefined) {
   await mkdir(dirname(changelogPath), { recursive: true });
