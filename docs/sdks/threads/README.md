@@ -2,6 +2,8 @@
 
 ## Overview
 
+Mailbox thread read operations.
+
 ### Available Operations
 
 * [list](#list) - List mailbox threads
@@ -13,7 +15,7 @@ List mailbox threads
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getV1Threads" method="get" path="/v1/threads" -->
+<!-- UsageSnippet language="typescript" operationID="threads_list" method="get" path="/v1/threads" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -26,7 +28,9 @@ async function run() {
     mailboxId: "<id>",
   });
 
-  console.log(result);
+  for await (const page of result) {
+    console.log(page);
+  }
 }
 
 run();
@@ -52,7 +56,9 @@ async function run() {
   });
   if (res.ok) {
     const { value: result } = res;
-    console.log(result);
+    for await (const page of result) {
+    console.log(page);
+  }
   } else {
     console.log("threadsList failed:", res.error);
   }
@@ -65,20 +71,20 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetV1ThreadsRequest](../../models/operations/get-v1-threads-request.md)                                                                                            | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [operations.ThreadsListRequest](../../models/operations/threads-list-request.md)                                                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.GetV1ThreadsResponse](../../models/operations/get-v1-threads-response.md)\>**
+**Promise\<[operations.ThreadsListResponse](../../models/operations/threads-list-response.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
+| errors.ProblemDetailsError | 400                        | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
@@ -87,7 +93,7 @@ Get a thread
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getV1ThreadsByThreadId" method="get" path="/v1/threads/{threadId}" -->
+<!-- UsageSnippet language="typescript" operationID="threads_get" method="get" path="/v1/threads/{threadId}" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -139,19 +145,18 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetV1ThreadsByThreadIdRequest](../../models/operations/get-v1-threads-by-thread-id-request.md)                                                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [operations.ThreadsGetRequest](../../models/operations/threads-get-request.md)                                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.GetV1ThreadsByThreadIdResponse](../../models/operations/get-v1-threads-by-thread-id-response.md)\>**
+**Promise\<[models.Thread](../../models/thread.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.BadRequestError     | 400                        | application/json           |
-| errors.NotFoundError       | 404                        | application/json           |
+| errors.ProblemDetailsError | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

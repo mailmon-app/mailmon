@@ -5,18 +5,20 @@
 import { threadsGetById } from "../funcs/threads-get-by-id.js";
 import { threadsList } from "../funcs/threads-list.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as models from "../models/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Threads extends ClientSDK {
   /**
    * List mailbox threads
    */
   async list(
-    request: operations.GetV1ThreadsRequest,
+    request: operations.ThreadsListRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1ThreadsResponse> {
-    return unwrapAsync(threadsList(
+  ): Promise<PageIterator<operations.ThreadsListResponse, { cursor: string }>> {
+    return unwrapResultIterator(threadsList(
       this,
       request,
       options,
@@ -27,9 +29,9 @@ export class Threads extends ClientSDK {
    * Get a thread
    */
   async getById(
-    request: operations.GetV1ThreadsByThreadIdRequest,
+    request: operations.ThreadsGetRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1ThreadsByThreadIdResponse> {
+  ): Promise<models.Thread> {
     return unwrapAsync(threadsGetById(
       this,
       request,

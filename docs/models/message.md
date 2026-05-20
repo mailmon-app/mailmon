@@ -13,10 +13,10 @@ let value: Message = {
   subject: "<value>",
   from: {
     name: "<value>",
-    email: "Marta22@hotmail.com",
+    email: "Aubree.Collins@gmail.com",
   },
   snippet: "<value>",
-  receivedAt: new Date("2025-10-26T06:58:59.824Z"),
+  receivedAt: new Date("2025-02-09T15:44:30.205Z"),
   labelIds: [
     "<value 1>",
   ],
@@ -32,7 +32,7 @@ let value: Message = {
 | `threadId`                                                                                    | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `providerMessageId`                                                                           | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `subject`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
-| `from`                                                                                        | [models.From](../models/from.md)                                                              | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| `from`                                                                                        | [models.MessageFrom](../models/message-from.md)                                               | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `snippet`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `receivedAt`                                                                                  | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | N/A                                                                                           |
 | `labelIds`                                                                                    | *string*[]                                                                                    | :heavy_check_mark:                                                                            | N/A                                                                                           |

@@ -2,6 +2,8 @@
 
 ## Overview
 
+Mailbox event replay operations.
+
 ### Available Operations
 
 * [create](#create) - Create a mailbox event replay
@@ -13,7 +15,7 @@ Create a mailbox event replay
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="postV1Replays" method="post" path="/v1/replays" -->
+<!-- UsageSnippet language="typescript" operationID="replays_create" method="post" path="/v1/replays" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -71,7 +73,7 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.PostV1ReplaysRequest](../../models/operations/post-v1-replays-request.md)                                                                                          | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [models.CreateReplayRequest](../../models/create-replay-request.md)                                                                                                            | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
@@ -84,7 +86,7 @@ run();
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400, 409                   | application/json           |
+| errors.ProblemDetailsError | 400, 409                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
@@ -93,7 +95,7 @@ Get a replay
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getV1ReplaysByReplayId" method="get" path="/v1/replays/{replayId}" -->
+<!-- UsageSnippet language="typescript" operationID="replays_get" method="get" path="/v1/replays/{replayId}" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -145,7 +147,7 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetV1ReplaysByReplayIdRequest](../../models/operations/get-v1-replays-by-replay-id-request.md)                                                                     | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [operations.ReplaysGetRequest](../../models/operations/replays-get-request.md)                                                                                                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
@@ -158,5 +160,5 @@ run();
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400, 404                   | application/json           |
+| errors.ProblemDetailsError | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

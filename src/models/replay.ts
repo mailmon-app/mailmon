@@ -4,20 +4,29 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../lib/schemas.js";
-import { ClosedEnum } from "../types/enums.js";
+import * as openEnums from "../types/enums.js";
+import { ClosedEnum, OpenEnum } from "../types/enums.js";
 import { Result as SafeParseResult } from "../types/fp.js";
 import * as types from "../types/primitives.js";
 import { SDKValidationError } from "./errors/sdk-validation-error.js";
-import { ReplayStatus, ReplayStatus$inboundSchema } from "./replay-status.js";
 
-export const ObjectT = {
+export const ReplayObject = {
   Replay: "replay",
 } as const;
-export type ObjectT = ClosedEnum<typeof ObjectT>;
+export type ReplayObject = ClosedEnum<typeof ReplayObject>;
+
+export const ReplayStatus = {
+  Queued: "queued",
+  Running: "running",
+  Completed: "completed",
+  Failed: "failed",
+  Cancelled: "cancelled",
+} as const;
+export type ReplayStatus = OpenEnum<typeof ReplayStatus>;
 
 export type Replay = {
   id: string;
-  object: ObjectT;
+  object: ReplayObject;
   status: ReplayStatus;
   mailboxId: string;
   webhookEndpointId: string;
@@ -31,14 +40,17 @@ export type Replay = {
 };
 
 /** @internal */
-export const ObjectT$inboundSchema: z.ZodMiniEnum<typeof ObjectT> = z.enum(
-  ObjectT,
-);
+export const ReplayObject$inboundSchema: z.ZodMiniEnum<typeof ReplayObject> = z
+  .enum(ReplayObject);
+
+/** @internal */
+export const ReplayStatus$inboundSchema: z.ZodMiniType<ReplayStatus, unknown> =
+  openEnums.inboundSchema(ReplayStatus);
 
 /** @internal */
 export const Replay$inboundSchema: z.ZodMiniType<Replay, unknown> = z.object({
   id: types.string(),
-  object: ObjectT$inboundSchema,
+  object: ReplayObject$inboundSchema,
   status: ReplayStatus$inboundSchema,
   mailboxId: types.string(),
   webhookEndpointId: types.string(),

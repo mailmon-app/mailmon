@@ -14,7 +14,7 @@ export class Replays extends ClientSDK {
    * Create a mailbox event replay
    */
   async create(
-    request: operations.PostV1ReplaysRequest,
+    request: models.CreateReplayRequest,
     options?: RequestOptions,
   ): Promise<models.Replay> {
     return unwrapAsync(replaysCreate(
@@ -28,7 +28,7 @@ export class Replays extends ClientSDK {
    * Get a replay
    */
   async getById(
-    request: operations.GetV1ReplaysByReplayIdRequest,
+    request: operations.ReplaysGetRequest,
     options?: RequestOptions,
   ): Promise<models.Replay> {
     return unwrapAsync(replaysGetById(

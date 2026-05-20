@@ -8,7 +8,7 @@ import { Result as SafeParseResult } from "../types/fp.js";
 import * as types from "../types/primitives.js";
 import { SDKValidationError } from "./errors/sdk-validation-error.js";
 
-export type From = {
+export type MessageFrom = {
   name: string | null;
   email: string;
 };
@@ -19,25 +19,26 @@ export type Message = {
   threadId: string;
   providerMessageId: string;
   subject: string;
-  from: From;
+  from: MessageFrom;
   snippet: string;
   receivedAt: Date;
   labelIds: Array<string>;
 };
 
 /** @internal */
-export const From$inboundSchema: z.ZodMiniType<From, unknown> = z.object({
-  name: types.nullable(types.string()),
-  email: types.string(),
-});
+export const MessageFrom$inboundSchema: z.ZodMiniType<MessageFrom, unknown> = z
+  .object({
+    name: types.nullable(types.string()),
+    email: types.string(),
+  });
 
-export function fromFromJSON(
+export function messageFromFromJSON(
   jsonString: string,
-): SafeParseResult<From, SDKValidationError> {
+): SafeParseResult<MessageFrom, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => From$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'From' from JSON`,
+    (x) => MessageFrom$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'MessageFrom' from JSON`,
   );
 }
 
@@ -48,7 +49,7 @@ export const Message$inboundSchema: z.ZodMiniType<Message, unknown> = z.object({
   threadId: types.string(),
   providerMessageId: types.string(),
   subject: types.string(),
-  from: z.lazy(() => From$inboundSchema),
+  from: z.lazy(() => MessageFrom$inboundSchema),
   snippet: types.string(),
   receivedAt: types.date(),
   labelIds: z.array(types.string()),

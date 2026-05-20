@@ -13,7 +13,7 @@ Create a webhook endpoint
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="postV1WebhookEndpoints" method="post" path="/v1/webhook-endpoints" -->
+<!-- UsageSnippet language="typescript" operationID="webhook_endpoints_create" method="post" path="/v1/webhook-endpoints" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -23,7 +23,7 @@ const mailmon = new Mailmon({
 
 async function run() {
   const result = await mailmon.webhookEndpoints.create({
-    url: "https://ashamed-cemetery.info",
+    url: "https://well-off-mentor.biz",
   });
 
   console.log(result);
@@ -48,7 +48,7 @@ const mailmon = new MailmonCore({
 
 async function run() {
   const res = await webhookEndpointsCreate(mailmon, {
-    url: "https://ashamed-cemetery.info",
+    url: "https://well-off-mentor.biz",
   });
   if (res.ok) {
     const { value: result } = res;
@@ -65,20 +65,20 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.PostV1WebhookEndpointsRequest](../../models/operations/post-v1-webhook-endpoints-request.md)                                                                       | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [models.CreateWebhookEndpointRequest](../../models/create-webhook-endpoint-request.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.PostV1WebhookEndpointsResponse](../../models/operations/post-v1-webhook-endpoints-response.md)\>**
+**Promise\<[models.WebhookEndpoint](../../models/webhook-endpoint.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400                        | application/json           |
+| errors.ProblemDetailsError | 400                        | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## createSubscription
@@ -87,7 +87,7 @@ Create mailbox-scoped webhook subscriptions
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="postV1WebhookEndpointsByEndpointIdSubscriptions" method="post" path="/v1/webhook-endpoints/{endpointId}/subscriptions" -->
+<!-- UsageSnippet language="typescript" operationID="webhook_endpoints_create_subscription" method="post" path="/v1/webhook-endpoints/{endpointId}/subscriptions" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -100,7 +100,7 @@ async function run() {
     endpointId: "<id>",
     body: {
       mailboxIds: [
-        "<value>",
+        "<value 1>",
       ],
       eventTypes: [],
     },
@@ -131,7 +131,7 @@ async function run() {
     endpointId: "<id>",
     body: {
       mailboxIds: [
-        "<value>",
+        "<value 1>",
       ],
       eventTypes: [],
     },
@@ -151,18 +151,18 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest](../../models/operations/post-v1-webhook-endpoints-by-endpoint-id-subscriptions-request.md)                 | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [operations.WebhookEndpointsCreateSubscriptionRequest](../../models/operations/webhook-endpoints-create-subscription-request.md)                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse](../../models/operations/post-v1-webhook-endpoints-by-endpoint-id-subscriptions-response.md)\>**
+**Promise\<[models.WebhookEndpointSubscriptionList](../../models/webhook-endpoint-subscription-list.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400, 404                   | application/json           |
+| errors.ProblemDetailsError | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |

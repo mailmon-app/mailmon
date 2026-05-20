@@ -24,7 +24,6 @@ import { MailmonError } from "../models/errors/mailmon-error.js";
 import { ResponseValidationError } from "../models/errors/response-validation-error.js";
 import { SDKValidationError } from "../models/errors/sdk-validation-error.js";
 import * as models from "../models/index.js";
-import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
@@ -33,12 +32,12 @@ import { Result } from "../types/fp.js";
  */
 export function replaysCreate(
   client: MailmonCore,
-  request: operations.PostV1ReplaysRequest,
+  request: models.CreateReplayRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
     models.Replay,
-    | errors.ErrorT
+    | errors.ProblemDetailsError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -58,13 +57,13 @@ export function replaysCreate(
 
 async function $do(
   client: MailmonCore,
-  request: operations.PostV1ReplaysRequest,
+  request: models.CreateReplayRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
       models.Replay,
-      | errors.ErrorT
+      | errors.ProblemDetailsError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -79,7 +78,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(operations.PostV1ReplaysRequest$outboundSchema, value),
+    (value) => z.parse(models.CreateReplayRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -102,7 +101,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "postV1Replays",
+    operationID: "replays_create",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -121,7 +120,7 @@ async function $do(
         retryConnectionErrors: true,
       }
       || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["408", "429", "5XX"],
+    retryCodes: options?.retryCodes || ["5XX", "429", "408", "429", "5XX"],
   };
 
   const requestRes = client._createRequest(context, {
@@ -157,7 +156,7 @@ async function $do(
 
   const [result] = await M.match<
     models.Replay,
-    | errors.ErrorT
+    | errors.ProblemDetailsError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -168,7 +167,7 @@ async function $do(
     | SDKValidationError
   >(
     M.json(201, models.Replay$inboundSchema),
-    M.jsonErr([400, 409], errors.ErrorT$inboundSchema),
+    M.jsonErr([400, 409], errors.ProblemDetailsError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

@@ -7,17 +7,19 @@ import { mailboxesGetById } from "../funcs/mailboxes-get-by-id.js";
 import { mailboxesGetObservability } from "../funcs/mailboxes-get-observability.js";
 import { mailboxesListSyncRuns } from "../funcs/mailboxes-list-sync-runs.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as models from "../models/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Mailboxes extends ClientSDK {
   /**
    * Create a mailbox connect session
    */
   async createConnectSession(
-    request: operations.PostV1MailboxesConnectSessionsRequest,
+    request: models.CreateConnectSessionRequest,
     options?: RequestOptions,
-  ): Promise<operations.PostV1MailboxesConnectSessionsResponse> {
+  ): Promise<models.ConnectSession> {
     return unwrapAsync(mailboxesCreateConnectSession(
       this,
       request,
@@ -29,9 +31,9 @@ export class Mailboxes extends ClientSDK {
    * Get a mailbox
    */
   async getById(
-    request: operations.GetV1MailboxesByMailboxIdRequest,
+    request: operations.MailboxesGetRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1MailboxesByMailboxIdResponse> {
+  ): Promise<models.Mailbox> {
     return unwrapAsync(mailboxesGetById(
       this,
       request,
@@ -43,10 +45,12 @@ export class Mailboxes extends ClientSDK {
    * List mailbox sync runs
    */
   async listSyncRuns(
-    request: operations.GetV1MailboxesByMailboxIdSyncRunsRequest,
+    request: operations.MailboxesListSyncRunsRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1MailboxesByMailboxIdSyncRunsResponse> {
-    return unwrapAsync(mailboxesListSyncRuns(
+  ): Promise<
+    PageIterator<operations.MailboxesListSyncRunsResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(mailboxesListSyncRuns(
       this,
       request,
       options,
@@ -57,9 +61,9 @@ export class Mailboxes extends ClientSDK {
    * Get mailbox observability
    */
   async getObservability(
-    request: operations.GetV1MailboxesByMailboxIdObservabilityRequest,
+    request: operations.MailboxesGetObservabilityRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1MailboxesByMailboxIdObservabilityResponse> {
+  ): Promise<models.MailboxObservability> {
     return unwrapAsync(mailboxesGetObservability(
       this,
       request,

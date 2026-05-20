@@ -22,7 +22,7 @@ async function main() {
     provider: "gmail",
     tenantExternalId: "<id>",
     mailboxExternalId: "<id>",
-    redirectUrl: "https://firm-pharmacopoeia.com",
+    redirectUrl: "https://courteous-valley.name",
   });
 
   console.log(result);

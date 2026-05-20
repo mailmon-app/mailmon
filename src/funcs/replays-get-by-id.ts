@@ -33,12 +33,12 @@ import { Result } from "../types/fp.js";
  */
 export function replaysGetById(
   client: MailmonCore,
-  request: operations.GetV1ReplaysByReplayIdRequest,
+  request: operations.ReplaysGetRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
     models.Replay,
-    | errors.ErrorT
+    | errors.ProblemDetailsError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -58,13 +58,13 @@ export function replaysGetById(
 
 async function $do(
   client: MailmonCore,
-  request: operations.GetV1ReplaysByReplayIdRequest,
+  request: operations.ReplaysGetRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
       models.Replay,
-      | errors.ErrorT
+      | errors.ProblemDetailsError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -79,8 +79,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(operations.GetV1ReplaysByReplayIdRequest$outboundSchema, value),
+    (value) => z.parse(operations.ReplaysGetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,7 +107,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getV1ReplaysByReplayId",
+    operationID: "replays_get",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -127,7 +126,7 @@ async function $do(
         retryConnectionErrors: true,
       }
       || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["408", "429", "5XX"],
+    retryCodes: options?.retryCodes || ["5XX", "429", "408", "429", "5XX"],
   };
 
   const requestRes = client._createRequest(context, {
@@ -163,7 +162,7 @@ async function $do(
 
   const [result] = await M.match<
     models.Replay,
-    | errors.ErrorT
+    | errors.ProblemDetailsError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -174,7 +173,7 @@ async function $do(
     | SDKValidationError
   >(
     M.json(200, models.Replay$inboundSchema),
-    M.jsonErr([400, 404], errors.ErrorT$inboundSchema),
+    M.jsonErr([400, 404], errors.ProblemDetailsError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

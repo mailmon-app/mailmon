@@ -23,6 +23,7 @@ import * as errors from "../models/errors/index.js";
 import { MailmonError } from "../models/errors/mailmon-error.js";
 import { ResponseValidationError } from "../models/errors/response-validation-error.js";
 import { SDKValidationError } from "../models/errors/sdk-validation-error.js";
+import * as models from "../models/index.js";
 import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
@@ -32,12 +33,12 @@ import { Result } from "../types/fp.js";
  */
 export function mailboxesGetById(
   client: MailmonCore,
-  request: operations.GetV1MailboxesByMailboxIdRequest,
+  request: operations.MailboxesGetRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.GetV1MailboxesByMailboxIdResponse,
-    | errors.ErrorT
+    models.Mailbox,
+    | errors.ProblemDetailsError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -57,13 +58,13 @@ export function mailboxesGetById(
 
 async function $do(
   client: MailmonCore,
-  request: operations.GetV1MailboxesByMailboxIdRequest,
+  request: operations.MailboxesGetRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.GetV1MailboxesByMailboxIdResponse,
-      | errors.ErrorT
+      models.Mailbox,
+      | errors.ProblemDetailsError
       | MailmonError
       | ResponseValidationError
       | ConnectionError
@@ -78,11 +79,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        operations.GetV1MailboxesByMailboxIdRequest$outboundSchema,
-        value,
-      ),
+    (value) => z.parse(operations.MailboxesGetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -110,7 +107,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getV1MailboxesByMailboxId",
+    operationID: "mailboxes_get",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -129,7 +126,7 @@ async function $do(
         retryConnectionErrors: true,
       }
       || { strategy: "none" },
-    retryCodes: options?.retryCodes || ["408", "429", "5XX"],
+    retryCodes: options?.retryCodes || ["5XX", "429", "408", "429", "5XX"],
   };
 
   const requestRes = client._createRequest(context, {
@@ -164,8 +161,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.GetV1MailboxesByMailboxIdResponse,
-    | errors.ErrorT
+    models.Mailbox,
+    | errors.ProblemDetailsError
     | MailmonError
     | ResponseValidationError
     | ConnectionError
@@ -175,8 +172,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.GetV1MailboxesByMailboxIdResponse$inboundSchema),
-    M.jsonErr([400, 404], errors.ErrorT$inboundSchema),
+    M.json(200, models.Mailbox$inboundSchema),
+    M.jsonErr([400, 404], errors.ProblemDetailsError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

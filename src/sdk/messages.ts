@@ -8,16 +8,19 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as models from "../models/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
+import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
 export class Messages extends ClientSDK {
   /**
    * List mailbox messages
    */
   async list(
-    request: operations.GetV1MessagesRequest,
+    request: operations.MessagesListRequest,
     options?: RequestOptions,
-  ): Promise<operations.GetV1MessagesResponse> {
-    return unwrapAsync(messagesList(
+  ): Promise<
+    PageIterator<operations.MessagesListResponse, { cursor: string }>
+  > {
+    return unwrapResultIterator(messagesList(
       this,
       request,
       options,
@@ -28,7 +31,7 @@ export class Messages extends ClientSDK {
    * Get a message
    */
   async getById(
-    request: operations.GetV1MessagesByMessageIdRequest,
+    request: operations.MessagesGetRequest,
     options?: RequestOptions,
   ): Promise<models.Message> {
     return unwrapAsync(messagesGetById(

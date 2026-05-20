@@ -5,6 +5,7 @@
 import { webhookEndpointsCreateSubscription } from "../funcs/webhook-endpoints-create-subscription.js";
 import { webhookEndpointsCreate } from "../funcs/webhook-endpoints-create.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import * as models from "../models/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 
@@ -13,9 +14,9 @@ export class WebhookEndpoints extends ClientSDK {
    * Create a webhook endpoint
    */
   async create(
-    request: operations.PostV1WebhookEndpointsRequest,
+    request: models.CreateWebhookEndpointRequest,
     options?: RequestOptions,
-  ): Promise<operations.PostV1WebhookEndpointsResponse> {
+  ): Promise<models.WebhookEndpoint> {
     return unwrapAsync(webhookEndpointsCreate(
       this,
       request,
@@ -27,11 +28,9 @@ export class WebhookEndpoints extends ClientSDK {
    * Create mailbox-scoped webhook subscriptions
    */
   async createSubscription(
-    request: operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsRequest,
+    request: operations.WebhookEndpointsCreateSubscriptionRequest,
     options?: RequestOptions,
-  ): Promise<
-    operations.PostV1WebhookEndpointsByEndpointIdSubscriptionsResponse
-  > {
+  ): Promise<models.WebhookEndpointSubscriptionList> {
     return unwrapAsync(webhookEndpointsCreateSubscription(
       this,
       request,

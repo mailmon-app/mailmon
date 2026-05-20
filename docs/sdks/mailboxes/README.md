@@ -2,6 +2,8 @@
 
 ## Overview
 
+Mailbox connection, inspection, and sync observability operations.
+
 ### Available Operations
 
 * [createConnectSession](#createconnectsession) - Create a mailbox connect session
@@ -15,7 +17,7 @@ Create a mailbox connect session
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="postV1MailboxesConnectSessions" method="post" path="/v1/mailboxes/connect-sessions" -->
+<!-- UsageSnippet language="typescript" operationID="mailboxes_create_connect_session" method="post" path="/v1/mailboxes/connect-sessions" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -28,7 +30,7 @@ async function run() {
     provider: "gmail",
     tenantExternalId: "<id>",
     mailboxExternalId: "<id>",
-    redirectUrl: "https://firm-pharmacopoeia.com",
+    redirectUrl: "https://courteous-valley.name",
   });
 
   console.log(result);
@@ -56,7 +58,7 @@ async function run() {
     provider: "gmail",
     tenantExternalId: "<id>",
     mailboxExternalId: "<id>",
-    redirectUrl: "https://firm-pharmacopoeia.com",
+    redirectUrl: "https://courteous-valley.name",
   });
   if (res.ok) {
     const { value: result } = res;
@@ -73,20 +75,20 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.PostV1MailboxesConnectSessionsRequest](../../models/operations/post-v1-mailboxes-connect-sessions-request.md)                                                      | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [models.CreateConnectSessionRequest](../../models/create-connect-session-request.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.PostV1MailboxesConnectSessionsResponse](../../models/operations/post-v1-mailboxes-connect-sessions-response.md)\>**
+**Promise\<[models.ConnectSession](../../models/connect-session.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400                        | application/json           |
+| errors.ProblemDetailsError | 400                        | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getById
@@ -95,7 +97,7 @@ Get a mailbox
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getV1MailboxesByMailboxId" method="get" path="/v1/mailboxes/{mailboxId}" -->
+<!-- UsageSnippet language="typescript" operationID="mailboxes_get" method="get" path="/v1/mailboxes/{mailboxId}" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -147,20 +149,20 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetV1MailboxesByMailboxIdRequest](../../models/operations/get-v1-mailboxes-by-mailbox-id-request.md)                                                               | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [operations.MailboxesGetRequest](../../models/operations/mailboxes-get-request.md)                                                                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.GetV1MailboxesByMailboxIdResponse](../../models/operations/get-v1-mailboxes-by-mailbox-id-response.md)\>**
+**Promise\<[models.Mailbox](../../models/mailbox.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400, 404                   | application/json           |
+| errors.ProblemDetailsError | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## listSyncRuns
@@ -169,7 +171,7 @@ List mailbox sync runs
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getV1MailboxesByMailboxIdSyncRuns" method="get" path="/v1/mailboxes/{mailboxId}/sync-runs" -->
+<!-- UsageSnippet language="typescript" operationID="mailboxes_list_sync_runs" method="get" path="/v1/mailboxes/{mailboxId}/sync-runs" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -182,7 +184,9 @@ async function run() {
     mailboxId: "<id>",
   });
 
-  console.log(result);
+  for await (const page of result) {
+    console.log(page);
+  }
 }
 
 run();
@@ -208,7 +212,9 @@ async function run() {
   });
   if (res.ok) {
     const { value: result } = res;
-    console.log(result);
+    for await (const page of result) {
+    console.log(page);
+  }
   } else {
     console.log("mailboxesListSyncRuns failed:", res.error);
   }
@@ -221,20 +227,20 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetV1MailboxesByMailboxIdSyncRunsRequest](../../models/operations/get-v1-mailboxes-by-mailbox-id-sync-runs-request.md)                                             | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [operations.MailboxesListSyncRunsRequest](../../models/operations/mailboxes-list-sync-runs-request.md)                                                                         | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.GetV1MailboxesByMailboxIdSyncRunsResponse](../../models/operations/get-v1-mailboxes-by-mailbox-id-sync-runs-response.md)\>**
+**Promise\<[operations.MailboxesListSyncRunsResponse](../../models/operations/mailboxes-list-sync-runs-response.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400                        | application/json           |
+| errors.ProblemDetailsError | 400                        | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
 
 ## getObservability
@@ -243,7 +249,7 @@ Get mailbox observability
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getV1MailboxesByMailboxIdObservability" method="get" path="/v1/mailboxes/{mailboxId}/observability" -->
+<!-- UsageSnippet language="typescript" operationID="mailboxes_get_observability" method="get" path="/v1/mailboxes/{mailboxId}/observability" -->
 ```typescript
 import { Mailmon } from "@mailmon.dev/sdk";
 
@@ -295,18 +301,18 @@ run();
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetV1MailboxesByMailboxIdObservabilityRequest](../../models/operations/get-v1-mailboxes-by-mailbox-id-observability-request.md)                                    | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `request`                                                                                                                                                                      | [operations.MailboxesGetObservabilityRequest](../../models/operations/mailboxes-get-observability-request.md)                                                                  | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[operations.GetV1MailboxesByMailboxIdObservabilityResponse](../../models/operations/get-v1-mailboxes-by-mailbox-id-observability-response.md)\>**
+**Promise\<[models.MailboxObservability](../../models/mailbox-observability.md)\>**
 
 ### Errors
 
 | Error Type                 | Status Code                | Content Type               |
 | -------------------------- | -------------------------- | -------------------------- |
-| errors.ErrorT              | 400, 404                   | application/json           |
+| errors.ProblemDetailsError | 400, 404                   | application/json           |
 | errors.MailmonDefaultError | 4XX, 5XX                   | \*/\*                      |
