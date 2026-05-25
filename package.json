@@ -1,6 +1,6 @@
 {
   "name": "@mailmon.dev/sdk",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": "Speakeasy",
   "description": "TypeScript SDK for the Mailmon API.",
   "license": "Apache-2.0",
