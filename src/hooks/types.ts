@@ -16,7 +16,6 @@ export type HookContext = {
   retryConfig: RetryConfig;
   resolvedSecurity: SecurityState | null;
   options: SDKOptions;
-  timeoutMs?: number;
 };
 
 export type Awaitable<T> = T | Promise<T>;
