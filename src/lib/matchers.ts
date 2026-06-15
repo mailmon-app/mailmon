@@ -7,7 +7,7 @@ import { MailmonDefaultError } from "../models/errors/mailmon-default-error.js";
 import { ResponseValidationError } from "../models/errors/response-validation-error.js";
 import { ERR, OK, Result } from "../types/fp.js";
 import { matchResponse, matchStatusCode, StatusCodePredicate } from "./http.js";
-import { isPlainObject } from "./primitives.js";
+import { isPlainObject } from "./is-plain-object.js";
 
 export type Encoding =
   | "jsonl"
