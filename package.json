@@ -1,6 +1,6 @@
 {
   "name": "@mailmon.dev/sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "Speakeasy",
   "description": "TypeScript SDK for the Mailmon API.",
   "license": "Apache-2.0",
@@ -8,8 +8,8 @@
     "access": "public"
   },
   "repository": {
-    "type": "git",
-    "url": "https://github.com/mailmon-app/mailmon"
+    "url": "https://github.com/mailmon-app/mailmon",
+    "type": "git"
   },
   "type": "module",
   "main": "./esm/index.js",
@@ -52,6 +52,11 @@
     }
   },
   "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mailmon-app/mailmon.git",
+    "directory": "sdks/typescript"
+  },
   "scripts": {
     "lint": "oxlint --max-warnings=0 --deny-warnings src/**/*.ts src/**/*.tsx",
     "build": "tsgo",
